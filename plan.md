@@ -24,15 +24,15 @@
 - [x] **SetResponse** record (`String key`, `boolean success`) + validation
 - [x] **MessagePayloadSerializationTest** demonstrating type-safe messaging patterns
 
-### ⏳ **REMAINING**
-- [ ] **VersionedValue** record (`byte[] value`, `long timestamp`)
-- [ ] **Replica** class (basic properties: `String name`, `NetworkAddress`, `List<NetworkAddress> peers`)
+### ✅ **RECENTLY COMPLETED**
+- [x] **VersionedValue** record (`byte[] value`, `long timestamp`) + null validation & proper byte[] equality
+- [x] **Replica** class (basic properties: `String name`, `NetworkAddress`, `List<NetworkAddress> peers`) + tick() method
 
-**Test Coverage:** 34/34 tests passing ✅
+**Phase 1 Complete! Test Coverage:** 53/53 tests passing ✅
 
 ---
 
-## Phase 2: Network Layer ⏳
+## Phase 2: Network Layer ⏳ **← NEXT UP!**
 
 - [ ] **Network** interface (`send()`, `register()`, `tick()`)
 - [ ] **SimulatedNetwork** implementation with:
@@ -107,19 +107,24 @@
 
 ### 📁 **Project Structure**
 ```
-src/main/java/replicated/messaging/
-├── NetworkAddress.java         ✅ (with port validation)
-├── MessageType.java           ✅ (7 message types)  
-├── Message.java              ✅ (with null validation & proper equals)
-├── MessageCodec.java         ✅ (interface)
-├── JsonMessageCodec.java     ✅ (simplified, no custom serializers)
-├── GetRequest.java           ✅ (client request)
-├── SetRequest.java           ✅ (client request)  
-├── GetResponse.java          ✅ (server response)
-└── SetResponse.java          ✅ (server response)
+src/main/java/replicated/
+├── messaging/
+│   ├── NetworkAddress.java         ✅ (with port validation)
+│   ├── MessageType.java           ✅ (7 message types)  
+│   ├── Message.java              ✅ (with null validation & proper equals)
+│   ├── MessageCodec.java         ✅ (interface)
+│   ├── JsonMessageCodec.java     ✅ (simplified, no custom serializers)
+│   ├── GetRequest.java           ✅ (client request)
+│   ├── SetRequest.java           ✅ (client request)  
+│   ├── GetResponse.java          ✅ (server response)
+│   └── SetResponse.java          ✅ (server response)
+├── storage/
+│   └── VersionedValue.java       ✅ (value + timestamp with proper byte[] equality)
+└── replica/
+    └── Replica.java              ✅ (name, address, peers + tick method)
 ```
 
-### 🧪 **Test Coverage: 34/34 Passing**
+### 🧪 **Test Coverage: 53/53 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
@@ -129,12 +134,14 @@ src/main/java/replicated/messaging/
 - GetResponse: 4 tests (creation, equality, validation)  
 - SetResponse: 3 tests (creation, equality, validation)
 - MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
+- **VersionedValue: 8 tests (creation, equality, validation, byte[] handling)**
+- **Replica: 7 tests (creation, equality, validation, tick method)**
 
 ### 🚀 **Next Recommended Steps**
-1. Complete Phase 1: **VersionedValue** record 
-2. Complete Phase 1: **Replica** class basic properties
-3. Move to Phase 2: **Network Layer** for simulation infrastructure
-4. Implement **ListenableFuture** (Phase 5) early since it's needed by Storage
+1. **Phase 2: Network Layer** - Implement Network interface and SimulatedNetwork for message passing infrastructure
+2. **Phase 2: Message routing** - Enable Replicas to communicate through simulated network with tick-based event loop  
+3. **Phase 5: ListenableFuture** - Implement early since it's needed by Storage layer
+4. **Phase 3: MessageBus Layer** - Higher-level message routing and codec integration
 
 ---
 
