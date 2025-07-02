@@ -1,0 +1,11 @@
+package replicated.messaging;
+
+public enum MessageType {
+    CLIENT_GET_REQUEST,
+    CLIENT_SET_REQUEST,
+    CLIENT_RESPONSE,
+    INTERNAL_GET_REQUEST,
+    INTERNAL_GET_RESPONSE,
+    INTERNAL_SET_REQUEST,
+    INTERNAL_SET_RESPONSE
+} 
