@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-class MessageRecordIntegrationTest {
+class MessagePayloadSerializationTest {
 
     private final MessageCodec messageCodec = new JsonMessageCodec();
     private final ObjectMapper jsonMapper = JsonMessageCodec.createConfiguredObjectMapper();
