@@ -16,13 +16,23 @@ public final class JsonMessageCodec implements MessageCodec {
     private final ObjectMapper objectMapper;
     
     public JsonMessageCodec() {
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = createConfiguredObjectMapper();
+    }
+    
+    /**
+     * Creates an ObjectMapper configured to handle byte[] fields as Base64.
+     * This can be used for serializing payload records consistently.
+     */
+    public static ObjectMapper createConfiguredObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
         
         // Configure ObjectMapper to handle byte[] as Base64
         SimpleModule module = new SimpleModule();
         module.addSerializer(byte[].class, new ByteArraySerializer());
         module.addDeserializer(byte[].class, new ByteArrayDeserializer());
-        objectMapper.registerModule(module);
+        mapper.registerModule(module);
+        
+        return mapper;
     }
     
     @Override
