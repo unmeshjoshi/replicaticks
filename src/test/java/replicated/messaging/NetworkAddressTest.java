@@ -31,4 +31,45 @@ class NetworkAddressTest {
         assertNotEquals(address1, address3);
         assertEquals(address1.hashCode(), address2.hashCode());
     }
+    
+    @Test
+    void shouldRejectNegativePortNumbers() {
+        // Given
+        String ipAddress = "192.168.1.1";
+        int invalidPort = -1;
+        
+        // When & Then
+        assertThrows(IllegalArgumentException.class, () -> 
+            new NetworkAddress(ipAddress, invalidPort));
+    }
+    
+    @Test
+    void shouldRejectPortZero() {
+        // Given
+        String ipAddress = "192.168.1.1";
+        int invalidPort = 0;
+        
+        // When & Then
+        assertThrows(IllegalArgumentException.class, () -> 
+            new NetworkAddress(ipAddress, invalidPort));
+    }
+    
+    @Test
+    void shouldRejectPortNumbersAbove65535() {
+        // Given
+        String ipAddress = "192.168.1.1";
+        int invalidPort = 65536;
+        
+        // When & Then
+        assertThrows(IllegalArgumentException.class, () -> 
+            new NetworkAddress(ipAddress, invalidPort));
+    }
+    
+    @Test
+    void shouldAcceptValidPortRange() {
+        // Given & When & Then - should not throw
+        assertDoesNotThrow(() -> new NetworkAddress("192.168.1.1", 1));
+        assertDoesNotThrow(() -> new NetworkAddress("192.168.1.1", 8080));
+        assertDoesNotThrow(() -> new NetworkAddress("192.168.1.1", 65535));
+    }
 } 
