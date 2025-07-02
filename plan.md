@@ -1,12 +1,20 @@
 # Deterministic Simulation Project - Development Plan
 
-## Core Design Principles 🎯
+## Project Overview & Rationale 🎯
 
-* **Single-Threaded Event Loop:** Driven by master thread calling `tick()` methods in specific order
-* **Determinism:** Achieved through single-threaded execution, simulated I/O, and seeded random generators  
-* **Asynchronous, Non-Blocking I/O:** All operations return `ListenableFuture<T>`, no blocking calls
+This project implements a **deterministic simulation** of a distributed key-value store with quorum-based consensus. The system simulates network failures, storage delays, and other real-world conditions in a completely deterministic and reproducible manner.
 
----
+### **Core Design Principles**
+
+The entire codebase is built on these fundamental principles that drive all architectural decisions:
+
+* **Single-Threaded Event Loop:** The system is driven by a single master thread that calls `tick()` methods in a specific order. This eliminates the need for locks and prevents race conditions. All callbacks must be executed sequentially.
+
+* **Determinism:** The goal is a deterministic simulation. This is achieved by single-threaded execution, simulated I/O, and the use of a seeded random number generator. Every run with the same seed produces identical behavior.
+
+* **Asynchronous, Non-Blocking I/O:** All I/O operations (network and storage) are asynchronous and must not block the event loop. We use a custom `ListenableFuture` for this, ensuring the simulation remains deterministic and efficient.  We can not use Java CompletableFuture because it provides a blocking get method and also has methods like supplyAsync which use a separate thread pool.
+
+
 
 ## Phase 1: Foundational Models & Codecs
 
