@@ -1,7 +1,15 @@
 package replicated.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.SerializerProvider;
 import java.util.Base64;
+import java.io.IOException;
 
 public final class JsonMessageCodec implements MessageCodec {
     
@@ -9,25 +17,21 @@ public final class JsonMessageCodec implements MessageCodec {
     
     public JsonMessageCodec() {
         this.objectMapper = new ObjectMapper();
+        
+        // Configure ObjectMapper to handle byte[] as Base64
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(byte[].class, new ByteArraySerializer());
+        module.addDeserializer(byte[].class, new ByteArrayDeserializer());
+        objectMapper.registerModule(module);
     }
     
     @Override
     public byte[] encode(Message message) {
+        if (message == null) {
+            throw new RuntimeException("Cannot encode null message");
+        }
         try {
-            // Convert payload to Base64 for JSON compatibility
-            String base64Payload = Base64.getEncoder().encodeToString(message.payload());
-            
-            // Create a JSON-friendly representation
-            MessageDto dto = new MessageDto(
-                message.source().ipAddress(),
-                message.source().port(),
-                message.destination().ipAddress(),
-                message.destination().port(),
-                message.messageType().name(),
-                base64Payload
-            );
-            
-            return objectMapper.writeValueAsBytes(dto);
+            return objectMapper.writeValueAsBytes(message);
         } catch (Exception e) {
             throw new RuntimeException("Failed to encode message", e);
         }
@@ -36,26 +40,27 @@ public final class JsonMessageCodec implements MessageCodec {
     @Override
     public Message decode(byte[] data) {
         try {
-            MessageDto dto = objectMapper.readValue(data, MessageDto.class);
-            
-            NetworkAddress source = new NetworkAddress(dto.sourceIp(), dto.sourcePort());
-            NetworkAddress destination = new NetworkAddress(dto.destinationIp(), dto.destinationPort());
-            MessageType messageType = MessageType.valueOf(dto.messageType());
-            byte[] payload = Base64.getDecoder().decode(dto.payload());
-            
-            return new Message(source, destination, messageType, payload);
+            return objectMapper.readValue(data, Message.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to decode message", e);
         }
     }
     
-    // Internal DTO for JSON serialization
-    private record MessageDto(
-        String sourceIp,
-        int sourcePort,
-        String destinationIp,
-        int destinationPort,
-        String messageType,
-        String payload
-    ) {}
+    // Custom serializer for byte[] to Base64
+    private static class ByteArraySerializer extends JsonSerializer<byte[]> {
+        @Override
+        public void serialize(byte[] value, JsonGenerator gen, SerializerProvider serializers) 
+                throws IOException {
+            gen.writeString(Base64.getEncoder().encodeToString(value));
+        }
+    }
+    
+    // Custom deserializer for byte[] from Base64
+    private static class ByteArrayDeserializer extends JsonDeserializer<byte[]> {
+        @Override
+        public byte[] deserialize(JsonParser p, DeserializationContext ctxt) 
+                throws IOException {
+            return Base64.getDecoder().decode(p.getValueAsString());
+        }
+    }
 } 

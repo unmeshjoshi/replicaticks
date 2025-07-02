@@ -83,4 +83,27 @@ class MessageCodecTest {
         // When & Then
         assertThrows(RuntimeException.class, () -> codec.encode(null));
     }
+    
+    @Test
+    void shouldProduceReadableJsonOutput() {
+        // Given
+        MessageCodec codec = new JsonMessageCodec();
+        NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
+        NetworkAddress destination = new NetworkAddress("192.168.1.2", 8081);
+        MessageType messageType = MessageType.CLIENT_GET_REQUEST;
+        byte[] payload = "hello".getBytes();
+        Message message = new Message(source, destination, messageType, payload);
+        
+        // When
+        byte[] encoded = codec.encode(message);
+        String json = new String(encoded);
+        
+        // Then
+        assertNotNull(json);
+        assertTrue(json.contains("192.168.1.1"));
+        assertTrue(json.contains("8080"));
+        assertTrue(json.contains("CLIENT_GET_REQUEST"));
+        // Base64 encoding of "hello" is "aGVsbG8="
+        assertTrue(json.contains("aGVsbG8="));
+    }
 } 
