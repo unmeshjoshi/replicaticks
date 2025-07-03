@@ -135,6 +135,24 @@ public class MessageBus {
     }
     
     /**
+     * Establishes a connection to the destination and returns the actual local address
+     * assigned by the network layer. This delegates to the network implementation.
+     * 
+     * Implementation behavior:
+     * - SimulatedNetwork: Returns localhost with simulated ephemeral port
+     * - NioNetwork: Establishes actual socket connection and returns OS-assigned local address
+     * 
+     * @param destination the destination address to connect to
+     * @return the actual local address assigned for this connection
+     */
+    public NetworkAddress establishConnection(NetworkAddress destination) {
+        // Delegate to the network layer to establish the actual connection
+        // This allows different network implementations to handle connection establishment
+        // appropriately (simulated vs. real socket connections)
+        return network.establishConnection(destination);
+    }
+    
+    /**
      * Advances the simulation and routes received messages to registered handlers.
      * This method implements the reactive Service Layer tick() pattern by:
      * 1. Calling network.tick() to process pending network operations

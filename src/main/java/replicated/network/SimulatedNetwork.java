@@ -30,6 +30,9 @@ public class SimulatedNetwork implements Network {
     private final Map<NetworkLink, Integer> linkDelays = new HashMap<>();
     private final Map<NetworkLink, Double> linkPacketLoss = new HashMap<>();
     
+    // Connection establishment state
+    private int nextEphemeralPort = 50000; // Start ephemeral ports at 50000
+    
     /**
      * Creates a SimulatedNetwork with no delays and no packet loss.
      * 
@@ -223,6 +226,24 @@ public class SimulatedNetwork implements Network {
         }
         
         linkPacketLoss.put(new NetworkLink(source, destination), lossRate);
+    }
+    
+    @Override
+    public NetworkAddress establishConnection(NetworkAddress destination) {
+        if (destination == null) {
+            throw new IllegalArgumentException("Destination address cannot be null");
+        }
+        
+        // Simulate OS assigning an ephemeral port for this connection
+        // In SimulatedNetwork, we return localhost with a simulated ephemeral port
+        NetworkAddress ephemeralAddress = new NetworkAddress("127.0.0.1", nextEphemeralPort++);
+        
+        // In a real implementation, we would establish the actual connection here
+        // For simulation purposes, we just return the ephemeral address
+        // The connection is "established" conceptually but all actual communication
+        // goes through the send/receive methods
+        
+        return ephemeralAddress;
     }
     
     /**

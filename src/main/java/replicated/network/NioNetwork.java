@@ -542,6 +542,52 @@ public class NioNetwork implements Network {
         linkPacketLoss.put(linkKey(source, destination), lossRate);
     }
     
+    @Override
+    public NetworkAddress establishConnection(NetworkAddress destination) {
+        if (destination == null) {
+            throw new IllegalArgumentException("Destination address cannot be null");
+        }
+        
+        try {
+            // Create a new socket channel for this connection
+            SocketChannel channel = SocketChannel.open();
+            
+            // Temporarily use blocking mode for connection establishment
+            // This ensures we get the actual local address assigned by the OS
+            channel.configureBlocking(true);
+            
+            // Connect to destination (this will block until connected)
+            InetSocketAddress destinationAddress = new InetSocketAddress(
+                destination.ipAddress(), destination.port());
+            boolean connected = channel.connect(destinationAddress);
+            
+            if (!connected) {
+                throw new IOException("Failed to connect to " + destination);
+            }
+            
+            // Get the actual local address assigned by the OS
+            InetSocketAddress localAddress = (InetSocketAddress) channel.getLocalAddress();
+            
+            // Convert to NetworkAddress
+            NetworkAddress actualClientAddress = new NetworkAddress(
+                localAddress.getAddress().getHostAddress(), localAddress.getPort());
+            
+            // Now switch back to non-blocking mode for ongoing operations
+            channel.configureBlocking(false);
+            
+            // Register the channel for read events (connection is already established)
+            channel.register(selector, SelectionKey.OP_READ);
+            
+            // Store the channel for future use
+            clientChannels.put(destination, channel);
+            
+            return actualClientAddress;
+            
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to establish connection to " + destination, e);
+        }
+    }
+    
     private String linkKey(NetworkAddress source, NetworkAddress destination) {
         return source.toString() + "->" + destination.toString();
     }

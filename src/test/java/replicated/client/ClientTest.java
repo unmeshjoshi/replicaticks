@@ -24,8 +24,9 @@ class ClientTest {
         // Setup message bus with test network
         messageBus = new MessageBus(new TestNetwork(), new JsonMessageCodec());
         
-        // Create client (address will be auto-assigned)
-        client = new Client(messageBus);
+        // Create client with bootstrap replicas (new API)
+        List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
+        client = new Client(messageBus, bootstrapReplicas);
     }
     
     @Test
@@ -163,7 +164,8 @@ class ClientTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - client with short timeout
-        client = new Client(messageBus, 3); // 3 tick timeout
+        List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
+        client = new Client(messageBus, bootstrapReplicas, 3); // 3 tick timeout
         
         String key = "user:123";
         ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
@@ -220,7 +222,8 @@ class ClientTest {
     void shouldSupportConfigurableTimeout() {
         // Given - client with custom timeout
         int customTimeout = 10;
-        Client customClient = new Client(messageBus, customTimeout);
+        List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
+        Client customClient = new Client(messageBus, bootstrapReplicas, customTimeout);
         
         // When - send request
         ListenableFuture<VersionedValue> future = customClient.sendGetRequest("key", replicaAddress);
@@ -248,6 +251,8 @@ class ClientTest {
     
     // Simple test network implementation
     private static class TestNetwork implements Network {
+        private int nextPort = 60000;
+        
         @Override
         public void send(Message message) {
             // No-op for testing
@@ -261,6 +266,12 @@ class ClientTest {
         @Override
         public void tick() {
             // No-op for testing
+        }
+        
+        @Override
+        public NetworkAddress establishConnection(NetworkAddress destination) {
+            // Return a test ephemeral address
+            return new NetworkAddress("127.0.0.1", nextPort++);
         }
         
         @Override

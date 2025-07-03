@@ -238,6 +238,8 @@ class QuorumBasedReplicaTest {
     
     // Simple test network implementation
     private static class TestNetwork implements replicated.network.Network {
+        private int nextPort = 60000;
+        
         @Override
         public void send(Message message) {
             // No-op for testing
@@ -251,6 +253,12 @@ class QuorumBasedReplicaTest {
         @Override
         public void tick() {
             // No-op for testing
+        }
+        
+        @Override
+        public NetworkAddress establishConnection(NetworkAddress destination) {
+            // Return a test ephemeral address
+            return new NetworkAddress("127.0.0.1", nextPort++);
         }
         
         @Override

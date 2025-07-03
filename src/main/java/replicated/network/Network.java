@@ -43,6 +43,20 @@ public interface Network {
      */
     void tick();
     
+    /**
+     * Establishes a connection to the destination and returns the actual local address
+     * assigned by the network layer. This simulates the OS assigning an ephemeral port.
+     * 
+     * Implementation behavior:
+     * - SimulatedNetwork: Returns a localhost address with simulated ephemeral port
+     * - NioNetwork: Establishes actual socket connection and returns OS-assigned local address
+     * 
+     * @param destination the destination address to connect to
+     * @return the actual local address assigned for this connection
+     * @throws IllegalArgumentException if destination is null
+     */
+    NetworkAddress establishConnection(NetworkAddress destination);
+    
     // Network Partitioning Methods
     
     /**
