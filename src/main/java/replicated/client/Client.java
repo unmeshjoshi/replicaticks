@@ -8,35 +8,36 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class Client implements MessageHandler {
     
-    private final NetworkAddress address;
     private final MessageBus messageBus;
     private final int requestTimeoutTicks;
+    private final String clientId;
     
     // Request tracking
     private final AtomicLong correlationIdGenerator = new AtomicLong(0);
     private final Map<String, PendingRequest> pendingRequests = new HashMap<>();
     
     // Default constructor with 10 tick timeout
-    public Client(NetworkAddress address, MessageBus messageBus) {
-        this(address, messageBus, 10);
+    public Client(MessageBus messageBus) {
+        this(messageBus, 10);
     }
     
     // Full constructor with configurable timeout
-    public Client(NetworkAddress address, MessageBus messageBus, int requestTimeoutTicks) {
-        if (address == null) {
-            throw new IllegalArgumentException("Address cannot be null");
-        }
+    public Client(MessageBus messageBus, int requestTimeoutTicks) {
         if (messageBus == null) {
             throw new IllegalArgumentException("MessageBus cannot be null");
         }
         
-        this.address = address;
         this.messageBus = messageBus;
         this.requestTimeoutTicks = requestTimeoutTicks;
+        this.clientId = "client-" + UUID.randomUUID().toString().substring(0, 8);
+        
+        // Register with MessageBus to get an address assigned upfront
+        // This ensures we can receive responses even before sending our first message
+        messageBus.registerClient(this);
     }
     
-    public NetworkAddress getAddress() {
-        return address;
+    public String getClientId() {
+        return clientId;
     }
     
     /**
@@ -52,13 +53,10 @@ public final class Client implements MessageHandler {
         );
         pendingRequests.put(correlationId, pendingRequest);
         
-        // Send the request
+        // Send the request - let MessageBus determine source address
         GetRequest request = new GetRequest(key);
-        Message message = new Message(
-            address, replicaAddress, MessageType.CLIENT_GET_REQUEST,
-            serializePayload(request)
-        );
-        messageBus.sendMessage(message);
+        messageBus.sendClientMessage(replicaAddress, MessageType.CLIENT_GET_REQUEST, 
+                                   serializePayload(request), this);
         
         return future;
     }
@@ -76,13 +74,10 @@ public final class Client implements MessageHandler {
         );
         pendingRequests.put(correlationId, pendingRequest);
         
-        // Send the request
+        // Send the request - let MessageBus determine source address
         SetRequest request = new SetRequest(key, value);
-        Message message = new Message(
-            address, replicaAddress, MessageType.CLIENT_SET_REQUEST,
-            serializePayload(request)
-        );
-        messageBus.sendMessage(message);
+        messageBus.sendClientMessage(replicaAddress, MessageType.CLIENT_SET_REQUEST, 
+                                   serializePayload(request), this);
         
         return future;
     }
@@ -196,7 +191,7 @@ public final class Client implements MessageHandler {
     }
     
     private String generateCorrelationId() {
-        return "client-" + address.ipAddress() + "-" + address.port() + "-" + correlationIdGenerator.incrementAndGet();
+        return clientId + "-" + correlationIdGenerator.incrementAndGet();
     }
     
     private long getCurrentTick() {
@@ -245,18 +240,18 @@ public final class Client implements MessageHandler {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         Client client = (Client) obj;
-        return Objects.equals(address, client.address);
+        return Objects.equals(clientId, client.clientId);
     }
     
     @Override
     public int hashCode() {
-        return Objects.hash(address);
+        return Objects.hash(clientId);
     }
     
     @Override
     public String toString() {
         return "Client{" +
-                "address=" + address +
+                "clientId='" + clientId + '\'' +
                 ", pendingRequests=" + pendingRequests.size() +
                 '}';
     }

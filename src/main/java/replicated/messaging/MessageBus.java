@@ -4,6 +4,7 @@ import replicated.network.Network;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * MessageBus provides a higher-level messaging abstraction over the Network layer.
@@ -14,6 +15,8 @@ public class MessageBus {
     private final Network network;
     private final MessageCodec messageCodec;
     private final Map<NetworkAddress, MessageHandler> registeredHandlers;
+    private final Map<Object, NetworkAddress> clientAddresses;
+    private final AtomicInteger clientPortCounter;
     
     /**
      * Creates a MessageBus with the given network and codec dependencies.
@@ -33,6 +36,8 @@ public class MessageBus {
         this.network = network;
         this.messageCodec = messageCodec;
         this.registeredHandlers = new HashMap<>();
+        this.clientAddresses = new HashMap<>();
+        this.clientPortCounter = new AtomicInteger(9000); // Start client ports at 9000
     }
     
     /**
@@ -47,6 +52,46 @@ public class MessageBus {
         }
         
         network.send(message);
+    }
+    
+    /**
+     * Sends a message from a client, automatically assigning a source address.
+     * The client's address is automatically determined and managed by the MessageBus.
+     * 
+     * @param destination the destination address for the message
+     * @param messageType the type of message to send
+     * @param payload the message payload
+     * @param clientHandler the client handler (used to determine/assign client address)
+     */
+    public void sendClientMessage(NetworkAddress destination, MessageType messageType, 
+                                 byte[] payload, MessageHandler clientHandler) {
+        NetworkAddress clientAddress = getOrAssignClientAddress(clientHandler);
+        Message message = new Message(clientAddress, destination, messageType, payload);
+        sendMessage(message);
+    }
+    
+    /**
+     * Registers a client handler and assigns it a network address.
+     * This ensures the client can receive responses even before sending its first message.
+     * 
+     * @param clientHandler the client handler to register
+     * @return the assigned network address for the client
+     */
+    public NetworkAddress registerClient(MessageHandler clientHandler) {
+        return getOrAssignClientAddress(clientHandler);
+    }
+    
+    /**
+     * Gets the existing client address or assigns a new one.
+     * This simulates how real networks assign ephemeral ports to clients.
+     */
+    private NetworkAddress getOrAssignClientAddress(MessageHandler clientHandler) {
+        return clientAddresses.computeIfAbsent(clientHandler, handler -> {
+            NetworkAddress clientAddress = new NetworkAddress("127.0.0.1", clientPortCounter.getAndIncrement());
+            // Also register the handler for this address to receive responses
+            registerHandler(clientAddress, clientHandler);
+            return clientAddress;
+        });
     }
     
     /**

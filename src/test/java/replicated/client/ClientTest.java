@@ -13,21 +13,19 @@ import java.util.concurrent.atomic.AtomicReference;
 class ClientTest {
     
     private MessageBus messageBus;
-    private NetworkAddress clientAddress;
     private NetworkAddress replicaAddress;
     private Client client;
     
     @BeforeEach
     void setUp() {
         // Setup addresses
-        clientAddress = new NetworkAddress("192.168.1.100", 9000);
         replicaAddress = new NetworkAddress("192.168.1.1", 8080);
         
         // Setup message bus with test network
         messageBus = new MessageBus(new TestNetwork(), new JsonMessageCodec());
         
-        // Create client
-        client = new Client(clientAddress, messageBus);
+        // Create client (address will be auto-assigned)
+        client = new Client(messageBus);
     }
     
     @Test
@@ -35,21 +33,15 @@ class ClientTest {
         // Given dependencies are provided in setUp()
         // Then client should be created successfully
         assertNotNull(client);
-        assertEquals(clientAddress, client.getAddress());
-    }
-    
-    @Test
-    void shouldThrowExceptionForNullAddress() {
-        // When & Then
-        assertThrows(IllegalArgumentException.class, 
-            () -> new Client(null, messageBus));
+        assertNotNull(client.getClientId());
+        assertTrue(client.getClientId().startsWith("client-"));
     }
     
     @Test
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new Client(clientAddress, null));
+            () -> new Client(null));
     }
     
     @Test
@@ -117,8 +109,8 @@ class ClientTest {
         VersionedValue expectedValue = new VersionedValue("John Doe".getBytes(), 1L);
         GetResponse response = new GetResponse(key, expectedValue);
         
-        // Create a message as if from replica
-        Message responseMessage = createMessage(replicaAddress, clientAddress, 
+        // Create a message as if from replica (source address doesn't matter for response handling)
+        Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
         client.onMessageReceived(responseMessage);
@@ -140,7 +132,7 @@ class ClientTest {
         
         // When - receive a response
         SetResponse response = new SetResponse(key, true);
-        Message responseMessage = createMessage(replicaAddress, clientAddress, 
+        Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
         client.onMessageReceived(responseMessage);
@@ -171,7 +163,7 @@ class ClientTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - client with short timeout
-        client = new Client(clientAddress, messageBus, 3); // 3 tick timeout
+        client = new Client(messageBus, 3); // 3 tick timeout
         
         String key = "user:123";
         ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
@@ -195,7 +187,7 @@ class ClientTest {
         
         // When - receive unexpected response
         GetResponse response = new GetResponse("unknown-key", null);
-        Message responseMessage = createMessage(replicaAddress, clientAddress, 
+        Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
         // Then - should not throw exception
@@ -211,7 +203,7 @@ class ClientTest {
         // When - complete the request and tick
         VersionedValue value = new VersionedValue("data".getBytes(), 1L);
         GetResponse response = new GetResponse(key, value);
-        Message responseMessage = createMessage(replicaAddress, clientAddress, 
+        Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
         client.onMessageReceived(responseMessage);
@@ -228,7 +220,7 @@ class ClientTest {
     void shouldSupportConfigurableTimeout() {
         // Given - client with custom timeout
         int customTimeout = 10;
-        Client customClient = new Client(clientAddress, messageBus, customTimeout);
+        Client customClient = new Client(messageBus, customTimeout);
         
         // When - send request
         ListenableFuture<VersionedValue> future = customClient.sendGetRequest("key", replicaAddress);

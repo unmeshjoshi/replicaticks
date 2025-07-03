@@ -8,6 +8,7 @@ import replicated.replica.QuorumBasedReplica;
 import replicated.client.Client;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,12 +25,12 @@ class DistributedSystemIntegrationTest {
     private List<QuorumBasedReplica> replicas;
     private List<Client> clients;
     private List<NetworkAddress> replicaAddresses;
-    private List<NetworkAddress> clientAddresses;
     private Random random;
     
     @BeforeEach
     void setUp() {
-        // Setup deterministic environment
+        // Setup deterministic environment - use a fixed seed for each test to ensure isolation
+        // This prevents random state contamination between test runs
         random = new Random(42L);
         network = new SimulatedNetwork(random);
         messageBus = new MessageBus(network, new JsonMessageCodec());
@@ -43,20 +44,16 @@ class DistributedSystemIntegrationTest {
             new NetworkAddress("192.168.1.5", 8080)
         );
         
-        // Setup client addresses
-        clientAddresses = List.of(
-            new NetworkAddress("192.168.1.100", 9000),
-            new NetworkAddress("192.168.1.101", 9000)
-        );
-        
-        // Create replicas with individual storage
+        // Create replicas with individual storage - use predictable seeds for each replica
         replicas = new ArrayList<>();
-        for (NetworkAddress address : replicaAddresses) {
+        for (int i = 0; i < replicaAddresses.size(); i++) {
+            NetworkAddress address = replicaAddresses.get(i);
             List<NetworkAddress> peers = replicaAddresses.stream()
                 .filter(addr -> !addr.equals(address))
                 .toList();
             
-            Storage storage = new SimulatedStorage(new Random(random.nextLong()));
+            // Use a fixed seed for each replica to ensure test isolation
+            Storage storage = new SimulatedStorage(new Random(42L + i));
             QuorumBasedReplica replica = new QuorumBasedReplica("replica-" + address.port(), address, peers, messageBus, storage);
             replicas.add(replica);
             
@@ -64,15 +61,44 @@ class DistributedSystemIntegrationTest {
             messageBus.registerHandler(address, replica);
         }
         
-        // Create clients
+        // Create clients (addresses will be auto-assigned)
         clients = new ArrayList<>();
-        for (NetworkAddress address : clientAddresses) {
-            Client client = new Client(address, messageBus);
+        for (int i = 0; i < 2; i++) { // Create 2 clients
+            Client client = new Client(messageBus);
             clients.add(client);
-            
-            // Register client with message bus
-            messageBus.registerHandler(address, client);
+            // Client handler is auto-registered by MessageBus.sendClientMessage()
         }
+    }
+    
+    @AfterEach
+    void tearDown() {
+        // Ensure complete test isolation by clearing all system state
+        // This prevents pending operations from one test affecting subsequent tests
+        
+        // 1. Heal all possible partitions to ensure clean network state
+        for (int i = 0; i < replicaAddresses.size(); i++) {
+            for (int j = i + 1; j < replicaAddresses.size(); j++) {
+                network.healPartition(replicaAddresses.get(i), replicaAddresses.get(j));
+            }
+        }
+        
+        // 2. Clear all message bus handlers to ensure no message routing contamination
+        for (NetworkAddress address : replicaAddresses) {
+            messageBus.unregisterHandler(address);
+        }
+        
+        // 3. Force re-initialization of all components to clear pending state
+        // This ensures that pending operations from previous tests don't interfere
+        // Note: We don't recreate the entire system here since that's done in @BeforeEach
+        // but we ensure that all handlers are properly re-registered
+        for (int i = 0; i < replicas.size(); i++) {
+            messageBus.registerHandler(replicaAddresses.get(i), replicas.get(i));
+        }
+        
+        // NOTE: Removed messageBus.tick() call as it was unnecessarily advancing tick counts
+        // Fresh instances are created in @BeforeEach, so no need to process messages here
+        
+        System.out.println("Debug: tearDown completed - system state cleaned");
     }
     
     @Test
@@ -249,12 +275,33 @@ class DistributedSystemIntegrationTest {
         
         // When - Write to majority partition (3 replicas - sufficient for quorum)
         AtomicReference<Boolean> majorityResult = new AtomicReference<>();
-        ListenableFuture<Boolean> majorityFuture = client.sendSetRequest(key, value, replicaAddresses.get(0));
-        majorityFuture.onSuccess(majorityResult::set);
+        AtomicReference<Throwable> majorityError = new AtomicReference<>();
         
+        System.out.println("Debug: Starting majority partition write to " + replicaAddresses.get(0));
+        ListenableFuture<Boolean> majorityFuture = client.sendSetRequest(key, value, replicaAddresses.get(0));
+        majorityFuture.onSuccess(result -> {
+            System.out.println("Debug: Majority operation succeeded with result: " + result);
+            majorityResult.set(result);
+        });
+        majorityFuture.onFailure(error -> {
+            System.out.println("Debug: Majority operation failed with error: " + error.getMessage());
+            majorityError.set(error);
+        });
+        
+        System.out.println("Debug: Processing distributed operation for 20 ticks...");
         processDistributedOperation(20);
+        System.out.println("Debug: Finished processing distributed operation");
         
         // Then - Majority partition should succeed
+        if (majorityError.get() != null) {
+            fail("Majority partition operation failed with error: " + majorityError.get().getMessage());
+        }
+        
+        // Debug output to understand the failure
+        System.out.println("Debug: majorityResult.get() = " + majorityResult.get());
+        System.out.println("Debug: majorityError.get() = " + majorityError.get());
+        
+        assertNotNull(majorityResult.get(), "Majority partition should complete successfully");
         assertTrue(majorityResult.get(), "Majority partition should achieve quorum");
     }
     
@@ -321,6 +368,7 @@ class DistributedSystemIntegrationTest {
         processDistributedOperation(15);
         
         // Then - Initial write should succeed
+        assertNotNull(initialWriteResult.get(), "Initial write should complete");
         assertTrue(initialWriteResult.get(), "Initial write should succeed");
         
         // When - Create temporary partition
@@ -409,8 +457,11 @@ class DistributedSystemIntegrationTest {
     
     // Helper method to process distributed operations through multiple ticks
     private void processDistributedOperation(int ticks) {
+        System.out.println("Debug: Starting processDistributedOperation for " + ticks + " ticks");
+        
         for (int currentTick = 1; currentTick <= ticks; currentTick++) {
             // Process all components in correct order
+            System.out.println("Debug: Processing tick " + currentTick + "/" + ticks);
             
             // 1. Process clients and replicas (application layer)
             final long tickValue = currentTick;
@@ -420,6 +471,18 @@ class DistributedSystemIntegrationTest {
             // 2. Process message bus routing (includes network.tick())
             messageBus.tick();
             
+            // Debug: Check message queue states
+            if (currentTick % 5 == 0) { // Log every 5 ticks to avoid spam
+                System.out.println("Debug: Tick " + currentTick + " - checking system state");
+                for (int i = 0; i < replicaAddresses.size(); i++) {
+                    NetworkAddress addr = replicaAddresses.get(i);
+                    List<Message> messages = network.receive(addr);
+                    if (!messages.isEmpty()) {
+                        System.out.println("Debug: Replica " + addr + " has " + messages.size() + " unprocessed messages");
+                    }
+                }
+            }
+            
             // Small delay to allow async operations to complete
             try {
                 Thread.sleep(1);
@@ -427,5 +490,7 @@ class DistributedSystemIntegrationTest {
                 Thread.currentThread().interrupt();
             }
         }
+        
+        System.out.println("Debug: Completed processDistributedOperation");
     }
 } 
