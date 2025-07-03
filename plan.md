@@ -143,15 +143,22 @@ Our design achieves determinism by systematically eliminating the primary source
 ## Phase 6: Replica Quorum Logic ✅ **COMPLETED**
 
 - [x] Enhance **Replica** class:
-  - [x] Add Storage reference and quorum tracking (`Map<RequestId, QuorumState>`)
+  - [x] Add Storage reference and quorum tracking (`Map<CorrelationId, QuorumState>`)
   - [x] `onMessageReceived()` router method implementing MessageHandler interface
   - [x] CLIENT_GET_REQUEST & CLIENT_SET_REQUEST handlers (coordinator role)
   - [x] INTERNAL_GET_REQUEST & INTERNAL_SET_REQUEST handlers (participant role) 
   - [x] INTERNAL_GET_RESPONSE & INTERNAL_SET_RESPONSE handlers (coordinator role)
   - [x] `tick()` method for request timeouts and cleanup
-  - [x] Request ID generation and unique tracking across distributed operations
+  - [x] Correlation ID generation and unique tracking across distributed operations
   - [x] Quorum calculation (majority) and response aggregation logic
   - [x] Timeout handling with configurable timeout ticks
+
+### ✅ **MAJOR ARCHITECTURAL IMPROVEMENT: Clean Message API Separation**
+- [x] **Client API Messages**: GetRequest/SetRequest/GetResponse/SetResponse (clean, no internal concerns)
+- [x] **Internal API Messages**: Internal* versions with explicit `correlationId` fields for distributed tracking
+- [x] **Type Safety**: Prevents mixing client-facing and internal distributed system messages
+- [x] **Separation of Concerns**: Client API stays simple while internal API handles distributed complexity
+- [x] **19 additional tests** ensuring comprehensive coverage of both API layers
 
 ---
 
@@ -205,15 +212,21 @@ src/main/java/replicated/
     └── Replica.java              ✅ (name, address, peers + tick method)
 ```
 
-### 🧪 **Test Coverage: 135/135 Passing**
+### 🧪 **Test Coverage: 154/154 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
 - MessageCodec: 8 tests (encoding, decoding, error handling)
-- GetRequest: 3 tests (creation, equality, validation)
-- SetRequest: 4 tests (creation, equality, validation)
-- GetResponse: 5 tests (creation, equality, validation, requestId support)  
-- SetResponse: 3 tests (creation, equality, validation)
+- **Client API Messages:**
+  - GetRequest: 3 tests (clean client API, no correlation IDs)
+  - SetRequest: 4 tests (clean client API, no internal fields)
+  - GetResponse: 5 tests (VersionedValue support, clean client responses)  
+  - SetResponse: 3 tests (simple success/failure responses)
+- **Internal API Messages:**
+  - InternalGetRequest: 4 tests (correlation ID tracking)
+  - InternalSetRequest: 5 tests (correlation ID + timestamp)
+  - InternalGetResponse: 5 tests (correlation ID + VersionedValue)
+  - InternalSetResponse: 5 tests (correlation ID + success tracking)
 - MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
 - **MessageBus: 14 tests (component registration, message routing, broadcast, handler management, tick coordination)**
 - **ListenableFuture: 20 tests (states, callbacks, error handling, multiple handlers, validation)**
