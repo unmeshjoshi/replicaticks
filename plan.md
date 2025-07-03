@@ -103,16 +103,19 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ---
 
-## Phase 3: MessageBus Layer ⏳ **← CURRENT**
+## Phase 3: MessageBus Layer ✅ **COMPLETED**
 
-- [ ] **MessageBus** class:
-  - [ ] Constructor (Network, MessageCodec dependencies)
-  - [ ] `sendMessage(Message)` method
-  - [ ] `onPacketReceived()` callback routing
+- [x] **MessageBus** class:
+  - [x] Constructor (Network, MessageCodec dependencies)
+  - [x] `sendMessage(Message)` method  
+  - [x] `registerHandler()/unregisterHandler()` for component registration
+  - [x] `tick()` method with automatic message routing to registered handlers
+  - [x] `broadcast()` method for multicast messaging
+  - [x] Complete message routing and handler management system
 
 ---
 
-## Phase 4: Storage Layer ⏳
+## Phase 4: Storage Layer ⏳ **← CURRENT**
 
 - [ ] **Storage** interface (`ListenableFuture<VersionedValue> get()`, `ListenableFuture<Boolean> set()`, `tick()`)
 - [ ] **BytesKey** record (wraps `byte[]` with proper equals/hashCode for Map keys)
@@ -174,6 +177,8 @@ src/main/java/replicated/
 │   ├── Message.java              ✅ (with null validation & proper equals)
 │   ├── MessageCodec.java         ✅ (interface)
 │   ├── JsonMessageCodec.java     ✅ (simplified, no custom serializers)
+│   ├── MessageHandler.java       ✅ (interface for message recipients)
+│   ├── MessageBus.java           ✅ (higher-level messaging with routing & broadcast)
 │   ├── GetRequest.java           ✅ (client request)
 │   ├── SetRequest.java           ✅ (client request)  
 │   ├── GetResponse.java          ✅ (server response)
@@ -187,7 +192,7 @@ src/main/java/replicated/
     └── Replica.java              ✅ (name, address, peers + tick method)
 ```
 
-### 🧪 **Test Coverage: 67/67 Passing**
+### 🧪 **Test Coverage: 81/81 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
@@ -197,6 +202,7 @@ src/main/java/replicated/
 - GetResponse: 4 tests (creation, equality, validation)  
 - SetResponse: 3 tests (creation, equality, validation)
 - MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
+- **MessageBus: 14 tests (component registration, message routing, broadcast, handler management, tick coordination)**
 - VersionedValue: 8 tests (creation, equality, validation, byte[] handling)
 - Replica: 7 tests (creation, equality, validation, tick method)
 - **SimulatedNetwork: 14 tests (send/receive, delays, packet loss, deterministic behavior, partitioning, per-link config)**
@@ -204,11 +210,10 @@ src/main/java/replicated/
   - **PERFORMANCE**: Upgraded to PriorityQueue for O(log n) message processing efficiency
 
 ### 🚀 **Next Recommended Steps**
-1. **Phase 3: MessageBus Layer** - Higher-level message routing combining Network and MessageCodec  
-2. **Phase 5: ListenableFuture** - Implement early since it's needed by Storage layer (asynchronous operations)
-3. **Phase 4: Storage Layer** - SimulatedStorage with BytesKey for deterministic data persistence
-4. **Phase 6: Enhanced Replica** - Add message handling and quorum logic using Network + Storage
-5. **Phase 7: Client Implementation** - Request/response handling with timeouts
+1. **Phase 5: ListenableFuture** - Implement early since it's needed by Storage layer (asynchronous operations)
+2. **Phase 4: Storage Layer** - SimulatedStorage with BytesKey for deterministic data persistence
+3. **Phase 6: Enhanced Replica** - Add message handling and quorum logic using MessageBus + Storage
+4. **Phase 7: Client** - Implement client requests using MessageBus for communication
 
 ---
 
