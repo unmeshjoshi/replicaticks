@@ -115,27 +115,32 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ---
 
-## Phase 4: Storage Layer ⏳ **← CURRENT**
+## Phase 4: Storage Layer ✅ **COMPLETED**
 
-- [ ] **Storage** interface (`ListenableFuture<VersionedValue> get()`, `ListenableFuture<Boolean> set()`, `tick()`)
-- [ ] **BytesKey** record (wraps `byte[]` with proper equals/hashCode for Map keys)
-- [ ] **SimulatedStorage** implementation:
-  - [ ] Constructor (fault config, seeded Random)
-  - [ ] Async `get()`/`set()` methods returning futures
-  - [ ] `tick()` method completing queued operations + failure simulation
-
----
-
-## Phase 5: ListenableFuture Implementation ⏳
-
-- [ ] **ListenableFuture<T>** class:
-  - [ ] Single-threaded safe design (no blocking/external threads)
-  - [ ] States: PENDING, SUCCEEDED, FAILED
-  - [ ] `complete(T)`, `fail(Throwable)`, `onSuccess(Consumer<T>)` methods
+- [x] **Storage** interface (`ListenableFuture<VersionedValue> get()`, `ListenableFuture<Boolean> set()`, `tick()`)
+- [x] **BytesKey** record (wraps `byte[]` with proper equals/hashCode for Map keys + defensive copying)
+- [x] **SimulatedStorage** implementation:
+  - [x] Constructor (fault config, seeded Random)
+  - [x] Async `get()`/`set()` methods returning futures
+  - [x] `tick()` method completing queued operations + failure simulation
+  - [x] PriorityQueue for efficient operation ordering by completion time
+  - [x] Configurable delays and failure injection for testing
 
 ---
 
-## Phase 6: Replica Quorum Logic ⏳  
+## Phase 5: ListenableFuture Implementation ✅ **COMPLETED**
+
+- [x] **ListenableFuture<T>** class:
+  - [x] Single-threaded safe design (no blocking/external threads)
+  - [x] States: PENDING, SUCCEEDED, FAILED
+  - [x] `complete(T)`, `fail(Throwable)`, `onSuccess(Consumer<T>)` methods
+  - [x] `onFailure(Consumer<Throwable>)` method for error handling
+  - [x] Multiple callback support with immediate execution if already completed
+  - [x] Proper state transition validation and error handling
+
+---
+
+## Phase 6: Replica Quorum Logic ⏳ **← CURRENT**
 
 - [ ] Enhance **Replica** class:
   - [ ] Add Storage reference and quorum tracking (`Map<RequestId, QuorumState>`)
@@ -187,12 +192,17 @@ src/main/java/replicated/
 │   ├── Network.java              ✅ (interface with comprehensive documentation + partitioning methods)
 │   └── SimulatedNetwork.java     ✅ (PriorityQueue, domain-driven refactoring, partitioning, per-link config)
 ├── storage/
-│   └── VersionedValue.java       ✅ (value + timestamp with proper byte[] equality)
+│   ├── VersionedValue.java       ✅ (value + timestamp with proper byte[] equality)
+│   ├── Storage.java              ✅ (async interface with ListenableFuture)
+│   ├── BytesKey.java             ✅ (byte[] wrapper with defensive copying + proper Map key behavior)
+│   └── SimulatedStorage.java     ✅ (async storage with delays, failures, PriorityQueue)
+├── future/
+│   └── ListenableFuture.java     ✅ (single-threaded async with callbacks, states, multiple handlers)
 └── replica/
     └── Replica.java              ✅ (name, address, peers + tick method)
 ```
 
-### 🧪 **Test Coverage: 81/81 Passing**
+### 🧪 **Test Coverage: 122/122 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
@@ -203,6 +213,8 @@ src/main/java/replicated/
 - SetResponse: 3 tests (creation, equality, validation)
 - MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
 - **MessageBus: 14 tests (component registration, message routing, broadcast, handler management, tick coordination)**
+- **ListenableFuture: 20 tests (states, callbacks, error handling, multiple handlers, validation)**
+- **Storage & BytesKey: 21 tests (async operations, defensive copying, Map key behavior, fault injection)**
 - VersionedValue: 8 tests (creation, equality, validation, byte[] handling)
 - Replica: 7 tests (creation, equality, validation, tick method)
 - **SimulatedNetwork: 14 tests (send/receive, delays, packet loss, deterministic behavior, partitioning, per-link config)**
@@ -210,10 +222,10 @@ src/main/java/replicated/
   - **PERFORMANCE**: Upgraded to PriorityQueue for O(log n) message processing efficiency
 
 ### 🚀 **Next Recommended Steps**
-1. **Phase 5: ListenableFuture** - Implement early since it's needed by Storage layer (asynchronous operations)
-2. **Phase 4: Storage Layer** - SimulatedStorage with BytesKey for deterministic data persistence
-3. **Phase 6: Enhanced Replica** - Add message handling and quorum logic using MessageBus + Storage
-4. **Phase 7: Client** - Implement client requests using MessageBus for communication
+1. **Phase 6: Enhanced Replica** - Add message handling and quorum logic using MessageBus + Storage + ListenableFuture
+2. **Phase 7: Client** - Implement client requests using MessageBus for communication
+3. **Phase 8: Simulation Driver** - Integrate all components with proper tick() ordering
+4. **End-to-End Testing** - Full distributed system scenarios with partitions and failures
 
 ---
 
