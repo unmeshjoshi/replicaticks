@@ -139,22 +139,23 @@ public final class Replica implements MessageHandler {
     // Message handler methods
     
     private void handleClientGetRequest(Message message) {
-        String requestId = generateRequestId();
+        String correlationId = generateRequestId();
+        GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         
         QuorumState quorumState = new QuorumState(
-            requestId, message.source(), QuorumState.Operation.GET, 
-            extractKey(message), null, timestamp, getCurrentTick()
+            correlationId, message.source(), QuorumState.Operation.GET, 
+            clientRequest.key(), null, timestamp, getCurrentTick()
         );
         
-        pendingRequests.put(requestId, quorumState);
+        pendingRequests.put(correlationId, quorumState);
         
         // Send INTERNAL_GET_REQUEST to all peers (including self)
         List<NetworkAddress> allNodes = new ArrayList<>(peers);
         allNodes.add(networkAddress);
         
         for (NetworkAddress node : allNodes) {
-            GetRequest internalRequest = new GetRequest(extractKey(message), requestId);
+            InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), correlationId);
             messageBus.sendMessage(new Message(
                 networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
                 serializePayload(internalRequest)
@@ -163,24 +164,25 @@ public final class Replica implements MessageHandler {
     }
     
     private void handleClientSetRequest(Message message) {
-        String requestId = generateRequestId();
-        SetRequest setRequest = deserializePayload(message.payload(), SetRequest.class);
-        VersionedValue value = new VersionedValue(setRequest.value(), setRequest.timestamp());
+        String correlationId = generateRequestId();
+        SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
+        long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
+        VersionedValue value = new VersionedValue(clientRequest.value(), timestamp);
         
         QuorumState quorumState = new QuorumState(
-            requestId, message.source(), QuorumState.Operation.SET,
-            setRequest.key(), value, setRequest.timestamp(), getCurrentTick()
+            correlationId, message.source(), QuorumState.Operation.SET,
+            clientRequest.key(), value, timestamp, getCurrentTick()
         );
         
-        pendingRequests.put(requestId, quorumState);
+        pendingRequests.put(correlationId, quorumState);
         
         // Send INTERNAL_SET_REQUEST to all peers (including self)
         List<NetworkAddress> allNodes = new ArrayList<>(peers);
         allNodes.add(networkAddress);
         
         for (NetworkAddress node : allNodes) {
-            SetRequest internalRequest = new SetRequest(
-                setRequest.key(), setRequest.value(), setRequest.timestamp(), requestId
+            InternalSetRequest internalRequest = new InternalSetRequest(
+                clientRequest.key(), clientRequest.value(), timestamp, correlationId
             );
             messageBus.sendMessage(new Message(
                 networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
@@ -190,19 +192,19 @@ public final class Replica implements MessageHandler {
     }
     
     private void handleInternalGetRequest(Message message) {
-        GetRequest getRequest = deserializePayload(message.payload(), GetRequest.class);
+        InternalGetRequest getRequest = deserializePayload(message.payload(), InternalGetRequest.class);
         
         // Perform local storage operation
         ListenableFuture<VersionedValue> future = storage.get(getRequest.key().getBytes());
         
         future.onSuccess(value -> {
-            GetResponse response = new GetResponse(getRequest.key(), value, getRequest.requestId());
+            InternalGetResponse response = new InternalGetResponse(getRequest.key(), value, getRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
                 serializePayload(response)
             ));
         }).onFailure(error -> {
-            GetResponse response = new GetResponse(getRequest.key(), null, getRequest.requestId());
+            InternalGetResponse response = new InternalGetResponse(getRequest.key(), null, getRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
                 serializePayload(response)
@@ -211,20 +213,20 @@ public final class Replica implements MessageHandler {
     }
     
     private void handleInternalSetRequest(Message message) {
-        SetRequest setRequest = deserializePayload(message.payload(), SetRequest.class);
+        InternalSetRequest setRequest = deserializePayload(message.payload(), InternalSetRequest.class);
         VersionedValue value = new VersionedValue(setRequest.value(), setRequest.timestamp());
         
         // Perform local storage operation
         ListenableFuture<Boolean> future = storage.set(setRequest.key().getBytes(), value);
         
         future.onSuccess(success -> {
-            SetResponse response = new SetResponse(setRequest.key(), success, setRequest.requestId());
+            InternalSetResponse response = new InternalSetResponse(setRequest.key(), success, setRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
                 serializePayload(response)
             ));
         }).onFailure(error -> {
-            SetResponse response = new SetResponse(setRequest.key(), false, setRequest.requestId());
+            InternalSetResponse response = new InternalSetResponse(setRequest.key(), false, setRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
                 serializePayload(response)
@@ -233,8 +235,8 @@ public final class Replica implements MessageHandler {
     }
     
     private void handleInternalGetResponse(Message message) {
-        GetResponse response = deserializePayload(message.payload(), GetResponse.class);
-        QuorumState state = pendingRequests.get(response.requestId());
+        InternalGetResponse response = deserializePayload(message.payload(), InternalGetResponse.class);
+        QuorumState state = pendingRequests.get(response.correlationId());
         
         if (state != null && state.operation == QuorumState.Operation.GET) {
             state.addResponse(message.source(), response.value());
@@ -242,21 +244,21 @@ public final class Replica implements MessageHandler {
             if (state.hasQuorum(calculateQuorumSize())) {
                 // Send response to client with latest value
                 VersionedValue latestValue = state.getLatestValue();
-                GetResponse clientResponse = new GetResponse(state.key, latestValue, null);
+                GetResponse clientResponse = new GetResponse(state.key, latestValue);
                 
                 messageBus.sendMessage(new Message(
                     networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(clientResponse)
                 ));
                 
-                pendingRequests.remove(response.requestId());
+                pendingRequests.remove(response.correlationId());
             }
         }
     }
     
     private void handleInternalSetResponse(Message message) {
-        SetResponse response = deserializePayload(message.payload(), SetResponse.class);
-        QuorumState state = pendingRequests.get(response.requestId());
+        InternalSetResponse response = deserializePayload(message.payload(), InternalSetResponse.class);
+        QuorumState state = pendingRequests.get(response.correlationId());
         
         if (state != null && state.operation == QuorumState.Operation.SET) {
             state.addResponse(message.source(), response.success());
@@ -264,14 +266,14 @@ public final class Replica implements MessageHandler {
             if (state.hasQuorum(calculateQuorumSize())) {
                 // Send response to client
                 boolean success = state.getSuccessCount() >= calculateQuorumSize();
-                SetResponse clientResponse = new SetResponse(state.key, success, null);
+                SetResponse clientResponse = new SetResponse(state.key, success);
                 
                 messageBus.sendMessage(new Message(
                     networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(clientResponse)
                 ));
                 
-                pendingRequests.remove(response.requestId());
+                pendingRequests.remove(response.correlationId());
             }
         }
     }
@@ -292,30 +294,17 @@ public final class Replica implements MessageHandler {
         return System.currentTimeMillis() / 1000; // Simple tick approximation
     }
     
-    private String extractKey(Message message) {
-        try {
-            if (message.messageType() == MessageType.CLIENT_GET_REQUEST) {
-                GetRequest request = deserializePayload(message.payload(), GetRequest.class);
-                return request.key();
-            } else if (message.messageType() == MessageType.CLIENT_SET_REQUEST) {
-                SetRequest request = deserializePayload(message.payload(), SetRequest.class);
-                return request.key();
-            }
-        } catch (Exception e) {
-            // Handle deserialization errors
-        }
-        return "unknown";
-    }
+    // extractKey method no longer needed - we deserialize the full request objects
     
     private void sendTimeoutResponse(QuorumState state) {
         if (state.operation == QuorumState.Operation.GET) {
-            GetResponse timeoutResponse = new GetResponse(state.key, null, null);
+            GetResponse timeoutResponse = new GetResponse(state.key, null);
             messageBus.sendMessage(new Message(
                 networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
                 serializePayload(timeoutResponse)
             ));
         } else if (state.operation == QuorumState.Operation.SET) {
-            SetResponse timeoutResponse = new SetResponse(state.key, false, null);
+            SetResponse timeoutResponse = new SetResponse(state.key, false);
             messageBus.sendMessage(new Message(
                 networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
                 serializePayload(timeoutResponse)

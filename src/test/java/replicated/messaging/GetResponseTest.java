@@ -35,30 +35,28 @@ class GetResponseTest {
     }
     
     @Test
-    void shouldCreateResponseWithRequestId() {
+    void shouldCreateResponseWithNullValue() {
         // Given
         String key = "user:123";
-        VersionedValue value = new VersionedValue("John Doe".getBytes(), 1L);
-        String requestId = "req-123";
         
         // When
-        GetResponse response = new GetResponse(key, value, requestId);
+        GetResponse response = new GetResponse(key, null);
         
         // Then
         assertEquals(key, response.key());
-        assertEquals(value, response.value());
-        assertEquals(requestId, response.requestId());
+        assertNull(response.value());
     }
     
     @Test
     void shouldProvideEqualityBasedOnAllFields() {
         // Given
         String key = "user:123";
-        VersionedValue value = new VersionedValue("John Doe".getBytes(), 1L);
+        VersionedValue value1 = new VersionedValue("John Doe".getBytes(), 1L);
+        VersionedValue value2 = new VersionedValue("Jane Doe".getBytes(), 2L);
         
-        GetResponse response1 = new GetResponse(key, value, "req-1");
-        GetResponse response2 = new GetResponse(key, value, "req-1");
-        GetResponse response3 = new GetResponse(key, value, "req-2");
+        GetResponse response1 = new GetResponse(key, value1);
+        GetResponse response2 = new GetResponse(key, value1);
+        GetResponse response3 = new GetResponse(key, value2);
         
         // When & Then
         assertEquals(response1, response2);

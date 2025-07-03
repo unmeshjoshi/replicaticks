@@ -85,7 +85,7 @@ class EnhancedReplicaTest {
     void shouldHandleClientSetRequest() {
         // Given
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
-        SetRequest setRequest = new SetRequest("test-key", "test-value".getBytes(), 1L);
+        SetRequest setRequest = new SetRequest("test-key", "test-value".getBytes());
         Message clientMessage = createMessage(clientAddress, replicaAddress, 
             MessageType.CLIENT_SET_REQUEST, setRequest);
         
@@ -106,7 +106,7 @@ class EnhancedReplicaTest {
         
         // When - receive internal get request
         NetworkAddress coordinatorAddress = peers.get(0);
-        GetRequest getRequest = new GetRequest(key);
+        InternalGetRequest getRequest = new InternalGetRequest(key, "corr-123");
         Message internalMessage = createMessage(coordinatorAddress, replicaAddress, 
             MessageType.INTERNAL_GET_REQUEST, getRequest);
         
@@ -125,7 +125,7 @@ class EnhancedReplicaTest {
         NetworkAddress coordinatorAddress = peers.get(0);
         String key = "test-key";
         VersionedValue value = new VersionedValue("test-value".getBytes(), 1L);
-        SetRequest setRequest = new SetRequest(key, value.value(), value.timestamp());
+        InternalSetRequest setRequest = new InternalSetRequest(key, value.value(), value.timestamp(), "corr-123");
         Message internalMessage = createMessage(coordinatorAddress, replicaAddress, 
             MessageType.INTERNAL_SET_REQUEST, setRequest);
         
