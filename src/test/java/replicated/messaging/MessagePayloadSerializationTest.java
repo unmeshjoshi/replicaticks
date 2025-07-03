@@ -1,5 +1,6 @@
 package replicated.messaging;
 
+import replicated.storage.VersionedValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,7 +54,8 @@ class MessagePayloadSerializationTest {
     @Test
     void shouldSerializeGetResponseAsMessagePayload() throws Exception {
         // Given
-        GetResponse getResponse = new GetResponse("user:123", "John Doe".getBytes(), true);
+        VersionedValue value = new VersionedValue("John Doe".getBytes(), 1L);
+        GetResponse getResponse = new GetResponse("user:123", value);
         byte[] payload = jsonMapper.writeValueAsBytes(getResponse);
         Message message = new Message(replica, client, MessageType.CLIENT_RESPONSE, payload);
         
@@ -67,8 +69,8 @@ class MessagePayloadSerializationTest {
         assertEquals(message, decodedMessage);
         assertEquals(getResponse, decodedResponse);
         assertEquals("user:123", decodedResponse.key());
-        assertArrayEquals("John Doe".getBytes(), decodedResponse.value());
-        assertTrue(decodedResponse.found());
+        assertEquals(value, decodedResponse.value());
+        assertNotNull(decodedResponse.value());
     }
     
     @Test

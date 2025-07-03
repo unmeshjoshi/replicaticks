@@ -1,12 +1,18 @@
 package replicated.messaging;
 
-import java.util.Arrays;
+import replicated.storage.VersionedValue;
 import java.util.Objects;
 
-public record GetResponse(String key, byte[] value, boolean found) {
+public record GetResponse(String key, VersionedValue value, String requestId) {
+    
+    // Constructor for client responses (no requestId)
+    public GetResponse(String key, VersionedValue value) {
+        this(key, value, null);
+    }
+    
     public GetResponse {
         Objects.requireNonNull(key, "Key cannot be null");
-        // value can be null when not found
+        // value and requestId can be null
     }
     
     @Override
@@ -14,13 +20,13 @@ public record GetResponse(String key, byte[] value, boolean found) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         GetResponse that = (GetResponse) obj;
-        return found == that.found &&
-               Objects.equals(key, that.key) &&
-               Arrays.equals(value, that.value);
+        return Objects.equals(key, that.key) &&
+               Objects.equals(value, that.value) &&
+               Objects.equals(requestId, that.requestId);
     }
     
     @Override
     public int hashCode() {
-        return Objects.hash(key, Arrays.hashCode(value), found);
+        return Objects.hash(key, value, requestId);
     }
 } 

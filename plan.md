@@ -140,19 +140,22 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ---
 
-## Phase 6: Replica Quorum Logic ⏳ **← CURRENT**
+## Phase 6: Replica Quorum Logic ✅ **COMPLETED**
 
-- [ ] Enhance **Replica** class:
-  - [ ] Add Storage reference and quorum tracking (`Map<RequestId, QuorumState>`)
-  - [ ] `onMessageReceived()` router method
-  - [ ] CLIENT_REQUEST handler (coordinator role)
-  - [ ] INTERNAL_REQUEST handler (participant role) 
-  - [ ] INTERNAL_RESPONSE handler (coordinator role)
-  - [ ] `tick()` method for heartbeats/timeouts
+- [x] Enhance **Replica** class:
+  - [x] Add Storage reference and quorum tracking (`Map<RequestId, QuorumState>`)
+  - [x] `onMessageReceived()` router method implementing MessageHandler interface
+  - [x] CLIENT_GET_REQUEST & CLIENT_SET_REQUEST handlers (coordinator role)
+  - [x] INTERNAL_GET_REQUEST & INTERNAL_SET_REQUEST handlers (participant role) 
+  - [x] INTERNAL_GET_RESPONSE & INTERNAL_SET_RESPONSE handlers (coordinator role)
+  - [x] `tick()` method for request timeouts and cleanup
+  - [x] Request ID generation and unique tracking across distributed operations
+  - [x] Quorum calculation (majority) and response aggregation logic
+  - [x] Timeout handling with configurable timeout ticks
 
 ---
 
-## Phase 7: Client Implementation ⏳
+## Phase 7: Client Implementation ⏳ **← CURRENT**
 
 - [ ] **Client** class:
   - [ ] Pending requests tracking (`Map<CorrelationId, ListenableFuture>`)
@@ -202,14 +205,14 @@ src/main/java/replicated/
     └── Replica.java              ✅ (name, address, peers + tick method)
 ```
 
-### 🧪 **Test Coverage: 122/122 Passing**
+### 🧪 **Test Coverage: 135/135 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
 - MessageCodec: 8 tests (encoding, decoding, error handling)
 - GetRequest: 3 tests (creation, equality, validation)
 - SetRequest: 4 tests (creation, equality, validation)
-- GetResponse: 4 tests (creation, equality, validation)  
+- GetResponse: 5 tests (creation, equality, validation, requestId support)  
 - SetResponse: 3 tests (creation, equality, validation)
 - MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
 - **MessageBus: 14 tests (component registration, message routing, broadcast, handler management, tick coordination)**
@@ -217,15 +220,16 @@ src/main/java/replicated/
 - **Storage & BytesKey: 21 tests (async operations, defensive copying, Map key behavior, fault injection)**
 - VersionedValue: 8 tests (creation, equality, validation, byte[] handling)
 - Replica: 7 tests (creation, equality, validation, tick method)
+- **EnhancedReplica: 13 tests (quorum logic, distributed consensus, message routing, request tracking, timeout handling)**
 - **SimulatedNetwork: 14 tests (send/receive, delays, packet loss, deterministic behavior, partitioning, per-link config)**
   - **ENHANCED**: Advanced network simulation with partitioning, asymmetric conditions, and domain-driven refactoring
   - **PERFORMANCE**: Upgraded to PriorityQueue for O(log n) message processing efficiency
 
 ### 🚀 **Next Recommended Steps**
-1. **Phase 6: Enhanced Replica** - Add message handling and quorum logic using MessageBus + Storage + ListenableFuture
-2. **Phase 7: Client** - Implement client requests using MessageBus for communication
-3. **Phase 8: Simulation Driver** - Integrate all components with proper tick() ordering
-4. **End-to-End Testing** - Full distributed system scenarios with partitions and failures
+1. **Phase 7: Client** - Implement client requests using MessageBus for communication with replicas
+2. **Phase 8: Simulation Driver** - Integrate all components with proper tick() ordering
+3. **End-to-End Testing** - Full distributed system scenarios with partitions and failures
+4. **Advanced Features** - Leader election, read/write quorums, conflict resolution
 
 ---
 
