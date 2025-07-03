@@ -4,7 +4,7 @@ import replicated.messaging.*;
 import replicated.network.*;
 import replicated.storage.*;
 import replicated.future.ListenableFuture;
-import replicated.replica.Replica;
+import replicated.replica.QuorumBasedReplica;
 import replicated.client.Client;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +21,7 @@ class DistributedSystemIntegrationTest {
     
     private Network network;
     private MessageBus messageBus;
-    private List<Replica> replicas;
+    private List<QuorumBasedReplica> replicas;
     private List<Client> clients;
     private List<NetworkAddress> replicaAddresses;
     private List<NetworkAddress> clientAddresses;
@@ -57,7 +57,7 @@ class DistributedSystemIntegrationTest {
                 .toList();
             
             Storage storage = new SimulatedStorage(new Random(random.nextLong()));
-            Replica replica = new Replica("replica-" + address.port(), address, peers, messageBus, storage);
+            QuorumBasedReplica replica = new QuorumBasedReplica("replica-" + address.port(), address, peers, messageBus, storage);
             replicas.add(replica);
             
             // Register replica with message bus

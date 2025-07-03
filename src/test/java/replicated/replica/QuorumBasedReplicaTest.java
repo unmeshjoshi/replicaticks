@@ -10,11 +10,11 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
-class EnhancedReplicaTest {
+class QuorumBasedReplicaTest {
     
     private MessageBus messageBus;
     private Storage storage;
-    private Replica replica;
+    private QuorumBasedReplica replica;
     private NetworkAddress replicaAddress;
     private List<NetworkAddress> peers;
     
@@ -31,7 +31,7 @@ class EnhancedReplicaTest {
         peers = List.of(peer1, peer2);
         
         // Create enhanced replica
-        replica = new Replica("replica1", replicaAddress, peers, messageBus, storage);
+        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, messageBus, storage);
     }
     
     @Test
@@ -48,14 +48,14 @@ class EnhancedReplicaTest {
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new Replica("test", replicaAddress, peers, null, storage));
+            () -> new QuorumBasedReplica("test", replicaAddress, peers, null, storage));
     }
     
     @Test
     void shouldThrowExceptionForNullStorage() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new Replica("test", replicaAddress, peers, messageBus, null));
+            () -> new QuorumBasedReplica("test", replicaAddress, peers, messageBus, null));
     }
     
     @Test
@@ -184,7 +184,7 @@ class EnhancedReplicaTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - replica with timeout configuration
-        replica = new Replica("replica1", replicaAddress, peers, messageBus, storage, 5); // 5 tick timeout
+        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, messageBus, storage, 5); // 5 tick timeout
         
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
         GetRequest getRequest = new GetRequest("test-key");
@@ -245,7 +245,7 @@ class EnhancedReplicaTest {
         
         @Override
         public List<Message> receive(NetworkAddress address) {
-            return List.of();
+            return List.of(); // Return empty list for testing
         }
         
         @Override

@@ -1,38 +1,44 @@
 package replicated.replica;
 
 import replicated.messaging.*;
-import replicated.storage.*;
+import replicated.storage.Storage;
 import replicated.future.ListenableFuture;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
-public final class Replica implements MessageHandler {
+/**
+ * Base class for all replica implementations containing common building blocks.
+ * This class provides the foundation for different replication algorithms like
+ * Quorum-based, Raft, Chain Replication, etc.
+ */
+public abstract class Replica implements MessageHandler {
     
-    private final String name;
-    private final NetworkAddress networkAddress;
-    private final List<NetworkAddress> peers;
-    private final MessageBus messageBus;
-    private final Storage storage;
-    private final int requestTimeoutTicks;
+    // Core replica identity
+    protected final String name;
+    protected final NetworkAddress networkAddress;
+    protected final List<NetworkAddress> peers;
     
-    // Request tracking
-    private final AtomicLong requestIdGenerator = new AtomicLong(0);
-    private final Map<String, QuorumState> pendingRequests = new HashMap<>();
+    // Infrastructure dependencies
+    protected final MessageBus messageBus;
+    protected final Storage storage;
+    protected final int requestTimeoutTicks;
     
-    // Legacy constructor for backward compatibility
-    public Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers) {
-        this(name, networkAddress, peers, null, null, 10); // 10 tick default timeout
-    }
+    // Request tracking infrastructure
+    protected final AtomicLong requestIdGenerator = new AtomicLong(0);
+    protected final Map<String, PendingRequest> pendingRequests = new HashMap<>();
     
-    // Enhanced constructor for distributed functionality
-    public Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers, 
-                  MessageBus messageBus, Storage storage) {
-        this(name, networkAddress, peers, messageBus, storage, 10); // 10 tick default timeout
-    }
-    
-    // Full constructor with timeout configuration
-    public Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                  MessageBus messageBus, Storage storage, int requestTimeoutTicks) {
+    /**
+     * Base constructor for all replica implementations.
+     * 
+     * @param name unique replica name
+     * @param networkAddress network address of this replica
+     * @param peers list of peer replica addresses
+     * @param messageBus message bus for communication
+     * @param storage storage layer for persistence
+     * @param requestTimeoutTicks timeout for requests in ticks
+     */
+    protected Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+                     MessageBus messageBus, Storage storage, int requestTimeoutTicks) {
         if (name == null) {
             throw new IllegalArgumentException("Name cannot be null");
         }
@@ -50,7 +56,7 @@ public final class Replica implements MessageHandler {
         this.storage = storage;
         this.requestTimeoutTicks = requestTimeoutTicks;
         
-        // Validate dependencies for enhanced functionality
+        // Validate dependencies
         if (messageBus != null && storage == null) {
             throw new IllegalArgumentException("Storage cannot be null when MessageBus is provided");
         }
@@ -59,6 +65,7 @@ public final class Replica implements MessageHandler {
         }
     }
     
+    // Getters for common properties
     public String getName() {
         return name;
     }
@@ -71,32 +78,17 @@ public final class Replica implements MessageHandler {
         return peers;
     }
     
+    /**
+     * Message routing dispatcher - delegates to specific handlers.
+     * Subclasses should implement this to route messages to appropriate handlers.
+     */
     @Override
-    public void onMessageReceived(Message message) {
-        if (messageBus == null || storage == null) {
-            // Skip message processing if not fully configured
-            return;
-        }
-        
-        switch (message.messageType()) {
-            case CLIENT_GET_REQUEST -> handleClientGetRequest(message);
-            case CLIENT_SET_REQUEST -> handleClientSetRequest(message);
-            case INTERNAL_GET_REQUEST -> handleInternalGetRequest(message);
-            case INTERNAL_SET_REQUEST -> handleInternalSetRequest(message);
-            case INTERNAL_GET_RESPONSE -> handleInternalGetResponse(message);
-            case INTERNAL_SET_RESPONSE -> handleInternalSetResponse(message);
-            default -> {
-                // Unknown message type, ignore
-            }
-        }
-    }
+    public abstract void onMessageReceived(Message message);
     
     /**
-     * Called by the simulation loop for each tick.
-     * This is where the replica can perform proactive work like
-     * sending heartbeats, timing out requests, etc.
-     * 
-     * @param currentTick the current simulation tick
+     * Common tick() processing for all replica types.
+     * This handles infrastructure concerns like storage ticks and timeouts.
+     * Subclasses can override to add specific logic.
      */
     public void tick(long currentTick) {
         if (messageBus == null || storage == null) {
@@ -107,20 +99,83 @@ public final class Replica implements MessageHandler {
         storage.tick();
         
         // Handle request timeouts
+        handleRequestTimeouts(currentTick);
+        
+        // Allow subclasses to perform additional tick processing
+        onTick(currentTick);
+    }
+    
+    /**
+     * Hook method for subclasses to perform additional tick processing.
+     * This is called after common timeout handling.
+     */
+    protected void onTick(long currentTick) {
+        // Default implementation does nothing
+    }
+    
+    /**
+     * Handles request timeouts for all pending requests.
+     * Subclasses should implement sendTimeoutResponse() to handle specific timeouts.
+     */
+    protected void handleRequestTimeouts(long currentTick) {
         List<String> timedOutRequests = new ArrayList<>();
-        for (Map.Entry<String, QuorumState> entry : pendingRequests.entrySet()) {
-            QuorumState state = entry.getValue();
-            if (currentTick - state.startTick >= requestTimeoutTicks) {
+        
+        for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
+            PendingRequest request = entry.getValue();
+            if (currentTick - request.startTick >= requestTimeoutTicks) {
                 timedOutRequests.add(entry.getKey());
                 
                 // Send timeout response to client
-                sendTimeoutResponse(state);
+                sendTimeoutResponse(request);
             }
         }
         
         // Clean up timed out requests
         for (String requestId : timedOutRequests) {
             pendingRequests.remove(requestId);
+        }
+    }
+    
+    /**
+     * Sends a timeout response to the client.
+     * Subclasses must implement this to handle specific timeout scenarios.
+     */
+    protected abstract void sendTimeoutResponse(PendingRequest request);
+    
+    /**
+     * Generates a unique request ID for this replica.
+     */
+    protected String generateRequestId() {
+        return name + "-" + requestIdGenerator.incrementAndGet();
+    }
+    
+    /**
+     * Gets the current tick for timestamp purposes.
+     * In a real implementation, this would come from the simulation.
+     */
+    protected long getCurrentTick() {
+        return System.currentTimeMillis() / 1000; // Simple tick approximation
+    }
+    
+    /**
+     * Serializes a payload object to bytes.
+     */
+    protected byte[] serializePayload(Object payload) {
+        try {
+            return JsonMessageCodec.createConfiguredObjectMapper().writeValueAsBytes(payload);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize payload", e);
+        }
+    }
+    
+    /**
+     * Deserializes bytes to a payload object.
+     */
+    protected <T> T deserializePayload(byte[] data, Class<T> type) {
+        try {
+            return JsonMessageCodec.createConfiguredObjectMapper().readValue(data, type);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deserialize payload", e);
         }
     }
     
@@ -139,261 +194,30 @@ public final class Replica implements MessageHandler {
         return Objects.hash(name, networkAddress);
     }
     
-    // Message handler methods
-    
-    private void handleClientGetRequest(Message message) {
-        String correlationId = generateRequestId();
-        GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
-        long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
-        
-        QuorumState quorumState = new QuorumState(
-            correlationId, message.source(), QuorumState.Operation.GET, 
-            clientRequest.key(), null, timestamp, getCurrentTick()
-        );
-        
-        pendingRequests.put(correlationId, quorumState);
-        
-        // Send INTERNAL_GET_REQUEST to all peers (including self)
-        List<NetworkAddress> allNodes = new ArrayList<>(peers);
-        allNodes.add(networkAddress);
-        
-        for (NetworkAddress node : allNodes) {
-            InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), correlationId);
-            messageBus.sendMessage(new Message(
-                networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
-                serializePayload(internalRequest)
-            ));
-        }
-    }
-    
-    private void handleClientSetRequest(Message message) {
-        String correlationId = generateRequestId();
-        SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
-        long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
-        VersionedValue value = new VersionedValue(clientRequest.value(), timestamp);
-        
-        QuorumState quorumState = new QuorumState(
-            correlationId, message.source(), QuorumState.Operation.SET,
-            clientRequest.key(), value, timestamp, getCurrentTick()
-        );
-        
-        pendingRequests.put(correlationId, quorumState);
-        
-        // Send INTERNAL_SET_REQUEST to all peers (including self)
-        List<NetworkAddress> allNodes = new ArrayList<>(peers);
-        allNodes.add(networkAddress);
-        
-        for (NetworkAddress node : allNodes) {
-            InternalSetRequest internalRequest = new InternalSetRequest(
-                clientRequest.key(), clientRequest.value(), timestamp, correlationId
-            );
-            messageBus.sendMessage(new Message(
-                networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
-                serializePayload(internalRequest)
-            ));
-        }
-    }
-    
-    private void handleInternalGetRequest(Message message) {
-        InternalGetRequest getRequest = deserializePayload(message.payload(), InternalGetRequest.class);
-        
-        // Perform local storage operation
-        ListenableFuture<VersionedValue> future = storage.get(getRequest.key().getBytes());
-        
-        future.onSuccess(value -> {
-            InternalGetResponse response = new InternalGetResponse(getRequest.key(), value, getRequest.correlationId());
-            messageBus.sendMessage(new Message(
-                networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
-                serializePayload(response)
-            ));
-        }).onFailure(error -> {
-            InternalGetResponse response = new InternalGetResponse(getRequest.key(), null, getRequest.correlationId());
-            messageBus.sendMessage(new Message(
-                networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
-                serializePayload(response)
-            ));
-        });
-    }
-    
-    private void handleInternalSetRequest(Message message) {
-        InternalSetRequest setRequest = deserializePayload(message.payload(), InternalSetRequest.class);
-        VersionedValue value = new VersionedValue(setRequest.value(), setRequest.timestamp());
-        
-        // Perform local storage operation
-        ListenableFuture<Boolean> future = storage.set(setRequest.key().getBytes(), value);
-        
-        future.onSuccess(success -> {
-            InternalSetResponse response = new InternalSetResponse(setRequest.key(), success, setRequest.correlationId());
-            messageBus.sendMessage(new Message(
-                networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
-                serializePayload(response)
-            ));
-        }).onFailure(error -> {
-            InternalSetResponse response = new InternalSetResponse(setRequest.key(), false, setRequest.correlationId());
-            messageBus.sendMessage(new Message(
-                networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
-                serializePayload(response)
-            ));
-        });
-    }
-    
-    private void handleInternalGetResponse(Message message) {
-        InternalGetResponse response = deserializePayload(message.payload(), InternalGetResponse.class);
-        QuorumState state = pendingRequests.get(response.correlationId());
-        
-        if (state != null && state.operation == QuorumState.Operation.GET) {
-            state.addResponse(message.source(), response.value());
-            
-            if (state.hasQuorum(calculateQuorumSize())) {
-                // Send response to client with latest value
-                VersionedValue latestValue = state.getLatestValue();
-                GetResponse clientResponse = new GetResponse(state.key, latestValue);
-                
-                messageBus.sendMessage(new Message(
-                    networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse)
-                ));
-                
-                pendingRequests.remove(response.correlationId());
-            }
-        }
-    }
-    
-    private void handleInternalSetResponse(Message message) {
-        InternalSetResponse response = deserializePayload(message.payload(), InternalSetResponse.class);
-        QuorumState state = pendingRequests.get(response.correlationId());
-        
-        if (state != null && state.operation == QuorumState.Operation.SET) {
-            state.addResponse(message.source(), response.success());
-            
-            if (state.hasQuorum(calculateQuorumSize())) {
-                // Send response to client
-                boolean success = state.getSuccessCount() >= calculateQuorumSize();
-                SetResponse clientResponse = new SetResponse(state.key, success);
-                
-                messageBus.sendMessage(new Message(
-                    networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse)
-                ));
-                
-                pendingRequests.remove(response.correlationId());
-            }
-        }
-    }
-    
-    // Helper methods
-    
-    private String generateRequestId() {
-        return name + "-" + requestIdGenerator.incrementAndGet();
-    }
-    
-    private int calculateQuorumSize() {
-        int totalNodes = peers.size() + 1; // peers + this replica
-        return (totalNodes / 2) + 1; // majority
-    }
-    
-    private long getCurrentTick() {
-        // In a real implementation, this would come from the simulation
-        return System.currentTimeMillis() / 1000; // Simple tick approximation
-    }
-    
-    // extractKey method no longer needed - we deserialize the full request objects
-    
-    private void sendTimeoutResponse(QuorumState state) {
-        if (state.operation == QuorumState.Operation.GET) {
-            GetResponse timeoutResponse = new GetResponse(state.key, null);
-            messageBus.sendMessage(new Message(
-                networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
-                serializePayload(timeoutResponse)
-            ));
-        } else if (state.operation == QuorumState.Operation.SET) {
-            SetResponse timeoutResponse = new SetResponse(state.key, false);
-            messageBus.sendMessage(new Message(
-                networkAddress, state.clientAddress, MessageType.CLIENT_RESPONSE,
-                serializePayload(timeoutResponse)
-            ));
-        }
-    }
-    
-    private byte[] serializePayload(Object payload) {
-        try {
-            return JsonMessageCodec.createConfiguredObjectMapper().writeValueAsBytes(payload);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize payload", e);
-        }
-    }
-    
-    private <T> T deserializePayload(byte[] data, Class<T> type) {
-        try {
-            return JsonMessageCodec.createConfiguredObjectMapper().readValue(data, type);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize payload", e);
-        }
-    }
-    
-    // QuorumState class for tracking pending requests
-    
-    private static class QuorumState {
-        enum Operation { GET, SET }
-        
-        final String requestId;
-        final NetworkAddress clientAddress;
-        final Operation operation;
-        final String key;
-        final VersionedValue setValue; // For SET operations
-        final long timestamp;
-        final long startTick;
-        
-        private final Map<NetworkAddress, Object> responses = new HashMap<>();
-        
-        QuorumState(String requestId, NetworkAddress clientAddress, Operation operation,
-                   String key, VersionedValue setValue, long timestamp, long startTick) {
-            this.requestId = requestId;
-            this.clientAddress = clientAddress;
-            this.operation = operation;
-            this.key = key;
-            this.setValue = setValue;
-            this.timestamp = timestamp;
-            this.startTick = startTick;
-        }
-        
-        void addResponse(NetworkAddress source, Object response) {
-            responses.put(source, response);
-        }
-        
-        boolean hasQuorum(int quorumSize) {
-            return responses.size() >= quorumSize;
-        }
-        
-        VersionedValue getLatestValue() {
-            VersionedValue latest = null;
-            for (Object response : responses.values()) {
-                if (response instanceof VersionedValue value) {
-                    if (latest == null || value.timestamp() > latest.timestamp()) {
-                        latest = value;
-                    }
-                }
-            }
-            return latest;
-        }
-        
-        int getSuccessCount() {
-            int count = 0;
-            for (Object response : responses.values()) {
-                if (response instanceof Boolean success && success) {
-                    count++;
-                }
-            }
-            return count;
-        }
-    }
-    
     @Override
     public String toString() {
-        return "Replica{" +
+        return getClass().getSimpleName() + "{" +
                 "name='" + name + '\'' +
                 ", networkAddress=" + networkAddress +
-                ", peers=" + peers.size() + " peers" +
+                ", peers=" + peers +
                 '}';
+    }
+    
+    /**
+     * Abstract base class for tracking pending requests.
+     * Subclasses can extend this to add algorithm-specific state.
+     */
+    protected static abstract class PendingRequest {
+        public final String requestId;
+        public final NetworkAddress clientAddress;
+        public final String key;
+        public final long startTick;
+        
+        protected PendingRequest(String requestId, NetworkAddress clientAddress, String key, long startTick) {
+            this.requestId = requestId;
+            this.clientAddress = clientAddress;
+            this.key = key;
+            this.startTick = startTick;
+        }
     }
 } 

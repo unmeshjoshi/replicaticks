@@ -207,7 +207,44 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ---
 
-## Phase 9: Simulation Driver ⏳ **← NEXT**
+## Phase 9: Clean Architecture - Common Building Blocks ✅ **COMPLETED**
+
+### ✅ **ARCHITECTURAL INSIGHT: Separation of Common vs Algorithm-Specific Logic**
+**Problem**: The original `Replica` class contained both common building blocks (shared across all replication algorithms) and quorum-specific logic (only relevant to quorum-based consensus).
+
+**Solution**: Extracted common building blocks into a reusable architecture that supports multiple replication algorithms (Raft, Chain Replication, Byzantine Fault Tolerance, etc.).
+
+### ✅ **ARCHITECTURAL REFACTORING COMPLETED**
+- [x] **`Replica` (Abstract Base Class)**:
+  - [x] Common building blocks: replica identity, request ID generation, timeout management
+  - [x] Message routing dispatcher (`onMessageReceived()`)
+  - [x] Storage and MessageBus integration
+  - [x] Serialization/deserialization utilities
+  - [x] Basic `tick()` lifecycle management
+  - [x] Abstract `PendingRequest` base class for request tracking
+
+- [x] **`QuorumBasedReplica extends Replica`**:
+  - [x] Quorum-specific consensus logic (QuorumState, majority calculation)
+  - [x] Coordinator/participant role handling
+  - [x] Quorum response aggregation and conflict resolution
+  - [x] Timestamp-based ordering for distributed consistency
+  - [x] All existing quorum functionality preserved
+
+- [x] **Clean Test Architecture**:
+  - [x] `ReplicaBaseTest` - Tests common building blocks (12 tests)
+  - [x] `QuorumBasedReplicaTest` - Tests quorum-specific logic (renamed from `EnhancedReplicaTest`)
+  - [x] `ReplicaTest` - Tests basic abstract replica functionality
+
+### ✅ **ARCHITECTURAL BENEFITS ACHIEVED**
+- [x] **Reusability**: Common building blocks can be shared across different replication algorithms
+- [x] **Maintainability**: Clear separation of concerns between infrastructure and algorithm logic
+- [x] **Extensibility**: Easy to implement new replication algorithms (Raft, Chain Replication, etc.)
+- [x] **Backward Compatibility**: Existing code continues to work without changes
+- [x] **Type Safety**: Proper inheritance hierarchy with abstract base classes
+
+---
+
+## Phase 10: Simulation Driver ⏳ **← NEXT**
 
 - [ ] **SimulationDriver** class:
   - [ ] `main()` method with complete setup
@@ -232,7 +269,11 @@ src/main/java/replicated/
 │   ├── GetRequest.java           ✅ (client request)
 │   ├── SetRequest.java           ✅ (client request)  
 │   ├── GetResponse.java          ✅ (server response)
-│   └── SetResponse.java          ✅ (server response)
+│   ├── SetResponse.java          ✅ (server response)
+│   ├── InternalGetRequest.java   ✅ (internal distributed request)
+│   ├── InternalSetRequest.java   ✅ (internal distributed request)
+│   ├── InternalGetResponse.java  ✅ (internal distributed response)
+│   └── InternalSetResponse.java  ✅ (internal distributed response)
 ├── network/
 │   ├── Network.java              ✅ (interface with comprehensive documentation + partitioning methods)
 │   └── SimulatedNetwork.java     ✅ (PriorityQueue, domain-driven refactoring, partitioning, per-link config)
@@ -244,7 +285,8 @@ src/main/java/replicated/
 ├── future/
 │   └── ListenableFuture.java     ✅ (single-threaded async with callbacks, states, multiple handlers)
 ├── replica/
-│   └── Replica.java              ✅ (enhanced with quorum logic, message handling, storage integration)
+│   ├── Replica.java              ✅ (abstract base class with common building blocks)
+│   └── QuorumBasedReplica.java   ✅ (quorum-specific consensus extending Replica)
 └── client/
     └── Client.java               ✅ (async requests, response handling, timeout management, correlation tracking)
 
@@ -252,7 +294,7 @@ src/test/java/replicated/integration/
 └── DistributedSystemIntegrationTest.java ✅ (comprehensive real-world distributed scenarios)
 ```
 
-### 🧪 **Test Coverage: 176/176 Passing**
+### 🧪 **Test Coverage: 188/188 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
@@ -272,8 +314,10 @@ src/test/java/replicated/integration/
 - **ListenableFuture: 20 tests (states, callbacks, error handling, multiple handlers, validation)**
 - **Storage & BytesKey: 21 tests (async operations, defensive copying, Map key behavior, fault injection)**
 - VersionedValue: 8 tests (creation, equality, validation, byte[] handling)
-- Replica: 7 tests (creation, equality, validation, tick method)
-- **EnhancedReplica: 13 tests (quorum logic, distributed consensus, message routing, request tracking, timeout handling)**
+- **Replica Architecture Tests:**
+  - ReplicaBaseTest: 12 tests (common building blocks, timeout handling, request ID generation)
+  - QuorumBasedReplicaTest: 13 tests (quorum logic, distributed consensus, message routing)
+  - ReplicaTest: 7 tests (basic abstract replica functionality)
 - **Client: 14 tests (async requests, response handling, timeout management, correlation tracking, clean API)**
 - **SimulatedNetwork: 14 tests (send/receive, delays, packet loss, deterministic behavior, partitioning, per-link config)**
   - **ENHANCED**: Advanced network simulation with partitioning, asymmetric conditions, and domain-driven refactoring
@@ -288,11 +332,13 @@ src/test/java/replicated/integration/
   - **Eventual Consistency**: Convergence demonstration, anti-entropy
   - **Read Repair**: Stale data detection, background synchronization
 
-### 🚀 **Current Status: Production-Ready Distributed System**
-- **Phases 1-8 Complete**: Full distributed system with advanced fault tolerance
-- **Real-World Scenarios**: Network partitions, replica failures, quorum consensus, conflict resolution
-- **Deterministic Testing**: All scenarios reproducible with consistent results
-- **Next**: Phase 9 - Simulation Driver for complete system orchestration
+### 🚀 **Current Status: Clean Architecture with Extensible Replica Framework**
+- **Phases 1-9 Complete**: Full distributed system with clean architecture and extensible replica framework
+- **Common Building Blocks**: Reusable foundation for multiple replication algorithms
+- **Production-Ready**: Network partitions, replica failures, quorum consensus, conflict resolution
+- [x] **Deterministic Testing**: All scenarios reproducible with consistent results
+- **Architecture Ready**: Easy to implement Raft, Chain Replication, Byzantine Fault Tolerance, etc.
+- **Next**: Phase 10 - Simulation Driver for complete system orchestration
 
 ---
 
