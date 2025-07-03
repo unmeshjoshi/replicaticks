@@ -42,4 +42,61 @@ public interface Network {
      * Should be called by the simulation loop to advance network state.
      */
     void tick();
+    
+    // Network Partitioning Methods
+    
+    /**
+     * Creates a bidirectional partition between two network addresses.
+     * After partitioning, messages in both directions (source↔destination) will be dropped.
+     * 
+     * @param source first network address in the partition
+     * @param destination second network address in the partition
+     * @throws IllegalArgumentException if either address is null
+     */
+    void partition(NetworkAddress source, NetworkAddress destination);
+    
+    /**
+     * Creates a unidirectional partition from source to destination.
+     * Messages from source to destination will be dropped, but messages from
+     * destination to source will continue to work normally.
+     * 
+     * @param source the network address that cannot send to destination
+     * @param destination the network address that source cannot reach
+     * @throws IllegalArgumentException if either address is null
+     */
+    void partitionOneWay(NetworkAddress source, NetworkAddress destination);
+    
+    /**
+     * Heals any partition between two network addresses, restoring connectivity.
+     * This heals both bidirectional and unidirectional partitions.
+     * 
+     * @param source first network address
+     * @param destination second network address  
+     * @throws IllegalArgumentException if either address is null
+     */
+    void healPartition(NetworkAddress source, NetworkAddress destination);
+    
+    // Per-Link Configuration Methods
+    
+    /**
+     * Sets a specific delay for messages from source to destination.
+     * This overrides any global delay settings for this specific link.
+     * 
+     * @param source the sending network address
+     * @param destination the receiving network address
+     * @param delayTicks number of ticks to delay messages on this link
+     * @throws IllegalArgumentException if either address is null or delayTicks is negative
+     */
+    void setDelay(NetworkAddress source, NetworkAddress destination, int delayTicks);
+    
+    /**
+     * Sets a specific packet loss rate for messages from source to destination.
+     * This overrides any global packet loss settings for this specific link.
+     * 
+     * @param source the sending network address
+     * @param destination the receiving network address
+     * @param lossRate probability [0.0-1.0] that messages on this link will be lost
+     * @throws IllegalArgumentException if either address is null or lossRate is not in [0.0, 1.0]
+     */
+    void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate);
 } 

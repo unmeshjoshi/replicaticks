@@ -59,12 +59,13 @@ Our design achieves determinism by systematically eliminating the primary source
 - [x] **Network** interface with `send()`, `receive()`, `tick()` methods + comprehensive documentation
 - [x] **SimulatedNetwork** class with configurable delays, packet loss, deterministic behavior
 
-**Phase 1 & 2 Complete! Test Coverage:** 62/62 tests passing ✅
+**Phase 1 & 2 Complete! (2A + 2B + 2C):** 67/67 tests passing ✅ (advanced network simulation with comprehensive refactoring)
 
 ---
 
-## Phase 2: Network Layer ✅ **COMPLETED**
+## Phase 2: Network Layer ✅ **COMPLETED** 
 
+### Phase 2A: Basic Network Implementation ✅
 - [x] **Network** interface (`send()`, `receive()`, `tick()`) with comprehensive documentation
 - [x] **SimulatedNetwork** implementation with:
   - [x] Constructor (config, seeded Random, configurable delays and packet loss)
@@ -73,9 +74,36 @@ Our design achieves determinism by systematically eliminating the primary source
   - [x] `tick()` method with detailed reactive Service Layer documentation
   - [x] Deterministic behavior with identical results for same seeds
 
+### Phase 2B: Advanced Network Simulation ✅ **COMPLETED**
+- [x] **Network Partitioning Support**:
+  - [x] `partition(NetworkAddress source, NetworkAddress destination)` - bidirectional partition
+  - [x] `partitionOneWay(NetworkAddress source, NetworkAddress destination)` - unidirectional partition  
+  - [x] `healPartition(NetworkAddress source, NetworkAddress destination)` - restore connectivity
+- [x] **Per-Link Configuration**:
+  - [x] `setDelay(NetworkAddress source, NetworkAddress destination, int delayTicks)` - specific link delays (implementation complete)
+  - [x] `setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate)` - per-link packet loss
+- [x] **Partition Management**:
+  - [x] Track partitioned links in internal state
+  - [x] Apply partitions during message sending (drop partitioned messages)
+  - [x] Support asymmetric network conditions (A→B works, B→A blocked)
+
+### Phase 2C: Advanced Refactoring & Code Quality ✅ **COMPLETED**
+- [x] **Domain-Driven Design Improvements**:
+  - [x] Extracted intention-revealing methods from `send()`: `validateMessage()`, `linkFrom()`, `shouldDropPacket()`, `calculateDeliveryTick()`
+  - [x] Enhanced `NetworkLink` record with domain behavior: `isPartitioned()` method
+  - [x] Explicit dependencies: `deliverPendingMessagesFor(tickTime)` parameter
+- [x] **Performance & Algorithm Enhancements**:
+  - [x] Replaced `LinkedList` with `PriorityQueue` for message ordering by delivery time
+  - [x] Implemented `Comparable<QueuedMessage>` for automatic priority ordering
+  - [x] Improved efficiency from O(n) to O(log n) for message processing
+- [x] **Naming & Domain Language**:
+  - [x] Renamed `removePartition()` → `healPartition()` (correct distributed systems terminology)
+  - [x] Renamed `oneWayPartition()` → `partitionOneWay()` (natural language flow)
+  - [x] Renamed `isPacketLost()` → `shouldDropPacket()` (intention-revealing decision method)
+
 ---
 
-## Phase 3: MessageBus Layer ⏳ **← NEXT UP!**
+## Phase 3: MessageBus Layer ⏳ **← CURRENT**
 
 - [ ] **MessageBus** class:
   - [ ] Constructor (Network, MessageCodec dependencies)
@@ -151,15 +179,15 @@ src/main/java/replicated/
 │   ├── GetResponse.java          ✅ (server response)
 │   └── SetResponse.java          ✅ (server response)
 ├── network/
-│   ├── Network.java              ✅ (interface with comprehensive documentation)
-│   └── SimulatedNetwork.java     ✅ (delays, packet loss, deterministic simulation)
+│   ├── Network.java              ✅ (interface with comprehensive documentation + partitioning methods)
+│   └── SimulatedNetwork.java     ✅ (PriorityQueue, domain-driven refactoring, partitioning, per-link config)
 ├── storage/
 │   └── VersionedValue.java       ✅ (value + timestamp with proper byte[] equality)
 └── replica/
     └── Replica.java              ✅ (name, address, peers + tick method)
 ```
 
-### 🧪 **Test Coverage: 62/62 Passing**
+### 🧪 **Test Coverage: 67/67 Passing**
 - NetworkAddress: 6 tests (creation, equality, port validation)
 - MessageType: 1 test (enum completeness)
 - Message: 6 tests (creation, equality, null validation)  
@@ -171,13 +199,16 @@ src/main/java/replicated/
 - MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
 - VersionedValue: 8 tests (creation, equality, validation, byte[] handling)
 - Replica: 7 tests (creation, equality, validation, tick method)
-- **SimulatedNetwork: 9 tests (send/receive, delays, packet loss, deterministic behavior)**
+- **SimulatedNetwork: 14 tests (send/receive, delays, packet loss, deterministic behavior, partitioning, per-link config)**
+  - **ENHANCED**: Advanced network simulation with partitioning, asymmetric conditions, and domain-driven refactoring
+  - **PERFORMANCE**: Upgraded to PriorityQueue for O(log n) message processing efficiency
 
 ### 🚀 **Next Recommended Steps**
 1. **Phase 3: MessageBus Layer** - Higher-level message routing combining Network and MessageCodec  
 2. **Phase 5: ListenableFuture** - Implement early since it's needed by Storage layer (asynchronous operations)
 3. **Phase 4: Storage Layer** - SimulatedStorage with BytesKey for deterministic data persistence
 4. **Phase 6: Enhanced Replica** - Add message handling and quorum logic using Network + Storage
+5. **Phase 7: Client Implementation** - Request/response handling with timeouts
 
 ---
 

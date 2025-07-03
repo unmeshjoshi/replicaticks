@@ -16,12 +16,19 @@ import java.util.*;
 public class SimulatedNetwork implements Network {
     
     private final Random random;
-    private final int delayTicks;
-    private final double packetLossRate;
+    private final int defaultDelayTicks;
+    private final double defaultPacketLossRate;
     
-    private final Queue<QueuedMessage> pendingMessages = new LinkedList<>();
+    private final PriorityQueue<QueuedMessage> pendingMessages = new PriorityQueue<>();
     private final Map<NetworkAddress, List<Message>> deliveredMessages = new HashMap<>();
     private long currentTick = 0;
+    
+    // Network partitioning state
+    private final Set<NetworkLink> partitionedLinks = new HashSet<>();
+    
+    // Per-link configuration
+    private final Map<NetworkLink, Integer> linkDelays = new HashMap<>();
+    private final Map<NetworkLink, Double> linkPacketLoss = new HashMap<>();
     
     /**
      * Creates a SimulatedNetwork with no delays and no packet loss.
@@ -51,24 +58,26 @@ public class SimulatedNetwork implements Network {
         }
         
         this.random = random;
-        this.delayTicks = delayTicks;
-        this.packetLossRate = packetLossRate;
+        this.defaultDelayTicks = delayTicks;
+        this.defaultPacketLossRate = packetLossRate;
     }
     
     @Override
     public void send(Message message) {
-        if (message == null) {
-            throw new IllegalArgumentException("Message cannot be null");
+        validateMessage(message);
+        
+        NetworkLink link = linkFrom(message);
+        
+        if (link.isPartitioned(partitionedLinks)) {
+            return; // Message dropped due to partition
         }
         
-        // Check for packet loss before queuing
-        if (packetLossRate > 0.0 && random.nextDouble() < packetLossRate) {
-            // Message is lost - don't queue it
-            return;
+        if (shouldDropPacket(link)) {
+            return; // Message lost due to packet loss
         }
         
-        long deliveryTick = currentTick + delayTicks;
-        pendingMessages.offer(new QueuedMessage(message, deliveryTick));
+        long deliveryTick = calculateDeliveryTick(link);
+        queueForDelivery(message, deliveryTick);
     }
     
     @Override
@@ -113,21 +122,137 @@ public class SimulatedNetwork implements Network {
     @Override
     public void tick() {
         currentTick++;
-        
+        deliverPendingMessagesFor(currentTick);
+    }
+    
+    // Domain-focused helper methods for message sending
+    
+    private void validateMessage(Message message) {
+        if (message == null) {
+            throw new IllegalArgumentException("Message cannot be null");
+        }
+    }
+    
+    private NetworkLink linkFrom(Message message) {
+        return new NetworkLink(message.source(), message.destination());
+    }
+    
+    private boolean shouldDropPacket(NetworkLink link) {
+        double effectivePacketLoss = linkPacketLoss.getOrDefault(link, defaultPacketLossRate);
+        return effectivePacketLoss > 0.0 && random.nextDouble() < effectivePacketLoss;
+    }
+    
+    private long calculateDeliveryTick(NetworkLink link) {
+        int effectiveDelay = linkDelays.getOrDefault(link, defaultDelayTicks);
+        return currentTick + effectiveDelay;
+    }
+    
+    private void queueForDelivery(Message message, long deliveryTick) {
+        pendingMessages.offer(new QueuedMessage(message, deliveryTick));
+    }
+    
+    private void deliverPendingMessagesFor(long tickTime) {
         // Process messages whose delivery time has now arrived
+        // PriorityQueue ensures we process in delivery time order
         while (!pendingMessages.isEmpty() && 
-               pendingMessages.peek().deliveryTick <= currentTick) {
+               pendingMessages.peek().deliveryTick <= tickTime) {
             
             QueuedMessage queuedMessage = pendingMessages.poll();
-            Message message = queuedMessage.message;
-            NetworkAddress destination = message.destination();
-            
-            deliveredMessages.computeIfAbsent(destination, k -> new ArrayList<>()).add(message);
+            deliverMessage(queuedMessage.message);
         }
+    }
+    
+    private void deliverMessage(Message message) {
+        NetworkAddress destination = message.destination();
+        deliveredMessages.computeIfAbsent(destination, k -> new ArrayList<>()).add(message);
+    }
+    
+    // Network Partitioning Implementation
+    
+    @Override
+    public void partition(NetworkAddress source, NetworkAddress destination) {
+        if (source == null || destination == null) {
+            throw new IllegalArgumentException("Source and destination addresses cannot be null");
+        }
+        
+        // Add both directions of the link
+        partitionedLinks.add(new NetworkLink(source, destination));
+        partitionedLinks.add(new NetworkLink(destination, source));
+    }
+    
+    @Override
+    public void partitionOneWay(NetworkAddress source, NetworkAddress destination) {
+        if (source == null || destination == null) {
+            throw new IllegalArgumentException("Source and destination addresses cannot be null");
+        }
+        
+        // Add only the specified direction
+        partitionedLinks.add(new NetworkLink(source, destination));
+    }
+    
+    @Override
+    public void healPartition(NetworkAddress source, NetworkAddress destination) {
+        if (source == null || destination == null) {
+            throw new IllegalArgumentException("Source and destination addresses cannot be null");
+        }
+        
+        // Remove both directions
+        partitionedLinks.remove(new NetworkLink(source, destination));
+        partitionedLinks.remove(new NetworkLink(destination, source));
+    }
+    
+    @Override
+    public void setDelay(NetworkAddress source, NetworkAddress destination, int delayTicks) {
+        if (source == null || destination == null) {
+            throw new IllegalArgumentException("Source and destination addresses cannot be null");
+        }
+        if (delayTicks < 0) {
+            throw new IllegalArgumentException("Delay ticks cannot be negative");
+        }
+        
+        linkDelays.put(new NetworkLink(source, destination), delayTicks);
+    }
+    
+    @Override
+    public void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate) {
+        if (source == null || destination == null) {
+            throw new IllegalArgumentException("Source and destination addresses cannot be null");
+        }
+        if (lossRate < 0.0 || lossRate > 1.0) {
+            throw new IllegalArgumentException("Packet loss rate must be between 0.0 and 1.0");
+        }
+        
+        linkPacketLoss.put(new NetworkLink(source, destination), lossRate);
     }
     
     /**
      * Internal record to track messages with their delivery timing.
+     * Implements Comparable to allow PriorityQueue ordering by delivery time.
      */
-    private record QueuedMessage(Message message, long deliveryTick) {}
+    private record QueuedMessage(Message message, long deliveryTick) 
+            implements Comparable<QueuedMessage> {
+        
+        @Override
+        public int compareTo(QueuedMessage other) {
+            return Long.compare(this.deliveryTick, other.deliveryTick);
+        }
+    }
+    
+    /**
+     * Internal record to represent a directed network link between two addresses.
+     * Used as a key for tracking partitions and per-link configurations.
+     */
+    private record NetworkLink(NetworkAddress source, NetworkAddress destination) {
+        
+        /**
+         * Checks if this link is partitioned (blocked).
+         * A link is partitioned if it exists in the partitioned links set.
+         * 
+         * @param partitionedLinks the set of currently partitioned links
+         * @return true if this link is partitioned, false otherwise
+         */
+        boolean isPartitioned(Set<NetworkLink> partitionedLinks) {
+            return partitionedLinks.contains(this);
+        }
+    }
 } 
