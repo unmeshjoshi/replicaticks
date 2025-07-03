@@ -103,6 +103,9 @@ public final class Replica implements MessageHandler {
             return;
         }
         
+        // Process storage operations first
+        storage.tick();
+        
         // Handle request timeouts
         List<String> timedOutRequests = new ArrayList<>();
         for (Map.Entry<String, QuorumState> entry : pendingRequests.entrySet()) {
