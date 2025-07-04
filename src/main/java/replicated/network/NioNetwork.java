@@ -32,10 +32,10 @@ public class NioNetwork implements Network {
     private final Map<NetworkAddress, ServerSocketChannel> serverChannels = new ConcurrentHashMap<>();
     
     // Client connections to other nodes (outbound connections we initiate)
-    private final Map<NetworkAddress, SocketChannel> clientChannels = new ConcurrentHashMap<>();
+    private final Map<NetworkAddress, SocketChannel> outboundConnections = new ConcurrentHashMap<>();
     
-    // Accepted client connections (inbound connections from clients to us as server)
-    private final Map<NetworkAddress, SocketChannel> acceptedClientChannels = new ConcurrentHashMap<>();
+    // Accepted client connections with full metadata (inbound connections from clients to us as server)
+    private final Map<SocketChannel, ConnectionInfo> inboundConnections = new ConcurrentHashMap<>();
     
     // Message queues for each address
     private final Map<NetworkAddress, Queue<Message>> messageQueues = new ConcurrentHashMap<>();
@@ -51,9 +51,8 @@ public class NioNetwork implements Network {
     private final Map<String, Double> linkPacketLoss = new HashMap<>();
     private final Map<String, Integer> linkDelays = new HashMap<>();
     
-    // Buffers for reading/writing
-    private final ByteBuffer readBuffer = ByteBuffer.allocate(8192);
-    private final ByteBuffer writeBuffer = ByteBuffer.allocate(8192);
+    // Per-channel state management (replaces shared buffers to prevent data corruption)
+    private final Map<SocketChannel, ChannelState> channelStates = new ConcurrentHashMap<>();
     
     private final Random random = new Random();
     
@@ -212,15 +211,35 @@ public class NioNetwork implements Network {
             
             // Get the client's address from the accepted connection
             InetSocketAddress clientAddress = (InetSocketAddress) clientChannel.getRemoteAddress();
+            InetSocketAddress localAddress = (InetSocketAddress) clientChannel.getLocalAddress();
+            
             NetworkAddress clientNetworkAddress = new NetworkAddress(
                 clientAddress.getAddress().getHostAddress(), 
                 clientAddress.getPort()
             );
             
-            // Store the accepted client channel for sending responses back
-            acceptedClientChannels.put(clientNetworkAddress, clientChannel);
+            NetworkAddress localNetworkAddress = new NetworkAddress(
+                localAddress.getAddress().getHostAddress(),
+                localAddress.getPort()
+            );
             
-            System.out.println("NIO: Accepted connection from client: " + clientNetworkAddress);
+            // Create connection info with proper metadata
+            ConnectionInfo connectionInfo = new ConnectionInfo(
+                clientChannel, 
+                clientNetworkAddress, 
+                localNetworkAddress, 
+                ConnectionInfo.ConnectionType.INBOUND
+            );
+            connectionInfo.setState(ConnectionInfo.ConnectionState.CONNECTED);
+            
+            // Store the accepted client channel with full metadata
+            inboundConnections.put(clientChannel, connectionInfo);
+            
+            // Create channel state for the new connection
+            channelStates.put(clientChannel, new ChannelState());
+            
+            System.out.println("NIO: Accepted connection from client: " + clientNetworkAddress + 
+                              " -> " + localNetworkAddress + " (connection info: " + connectionInfo + ")");
         }
     }
     
@@ -255,21 +274,28 @@ public class NioNetwork implements Network {
     
     private void handleRead(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
+        
+        // Get or create channel state for this specific channel (prevents data corruption)
+        ChannelState channelState = channelStates.computeIfAbsent(channel, k -> new ChannelState());
+        ByteBuffer readBuffer = channelState.getReadBuffer();
         readBuffer.clear();
         
         int bytesRead = channel.read(readBuffer);
         System.out.println("NIO: handleRead - read " + bytesRead + " bytes from channel");
         
         if (bytesRead == -1) {
-            // Connection closed
-            System.out.println("NIO: Connection closed, canceling key");
-            key.cancel();
-            channel.close();
+            // Connection closed - comprehensive cleanup
+            System.out.println("NIO: Connection closed, performing cleanup");
+            cleanupConnection(channel);
             return;
         }
         
         if (bytesRead > 0) {
+            channelState.updateActivity();
             readBuffer.flip();
+            
+            // Get source address for message context
+            NetworkAddress sourceAddress = getChannelSourceAddress(channel);
             
             // Handle multiple messages in a single buffer
             int messagesDecoded = 0;
@@ -285,14 +311,11 @@ public class NioNetwork implements Network {
                     System.out.println("NIO: Decoded message #" + messagesDecoded + " from " + message.source() + " to " + message.destination() + 
                                       " type=" + message.messageType());
                     
-                    Queue<Message> queue = messageQueues.get(message.destination());
-                    if (queue != null) {
-                        queue.offer(message);
-                        System.out.println("NIO: Message added to receive queue for " + message.destination() + 
-                                          ", queue size: " + queue.size());
-                    } else {
-                        System.out.println("NIO: No receive queue found for " + message.destination());
-                    }
+                    // Create message context to preserve source channel information
+                    MessageContext messageContext = new MessageContext(message, channel, sourceAddress);
+                    
+                    // Route message with context
+                    routeInboundMessage(messageContext);
                     
                     // If we successfully decoded a message, calculate how many bytes it consumed
                     // and advance the buffer position accordingly
@@ -316,10 +339,20 @@ public class NioNetwork implements Network {
     private void handleWrite(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
         
+        // Get channel state for this specific channel
+        ChannelState channelState = channelStates.get(channel);
+        if (channelState == null) {
+            System.err.println("NIO: No channel state found for write operation");
+            return;
+        }
+        
         // Get pending data from attachment
         ByteBuffer buffer = (ByteBuffer) key.attachment();
         if (buffer != null) {
-            channel.write(buffer);
+            int bytesWritten = channel.write(buffer);
+            channelState.updateActivity();
+            
+            System.out.println("NIO: handleWrite - wrote " + bytesWritten + " bytes, remaining: " + buffer.remaining());
             
             if (!buffer.hasRemaining()) {
                 // Finished writing, switch back to read mode
@@ -330,6 +363,25 @@ public class NioNetwork implements Network {
                 NetworkAddress destination = findDestinationForChannel(channel);
                 if (destination != null) {
                     sendQueuedMessages(destination, channel);
+                }
+            }
+        } else {
+            // Check if there are pending writes in the channel state
+            if (channelState.hasPendingWrites()) {
+                ByteBuffer pendingBuffer = channelState.getPendingWrites().poll();
+                if (pendingBuffer != null) {
+                    int bytesWritten = channel.write(pendingBuffer);
+                    channelState.updateActivity();
+                    
+                    System.out.println("NIO: handleWrite - wrote pending " + bytesWritten + " bytes, remaining: " + pendingBuffer.remaining());
+                    
+                    if (pendingBuffer.hasRemaining()) {
+                        // Still have data to write, keep it for next time
+                        key.attach(pendingBuffer);
+                    } else if (!channelState.hasPendingWrites()) {
+                        // No more pending writes, switch back to read mode
+                        key.interestOps(SelectionKey.OP_READ);
+                    }
                 }
             }
         }
@@ -362,7 +414,7 @@ public class NioNetwork implements Network {
             
             if (!queue.isEmpty()) {
                 System.out.println("NIO: Found " + queue.size() + " pending messages for " + destination);
-                SocketChannel channel = clientChannels.get(destination);
+                SocketChannel channel = outboundConnections.get(destination);
                 if (channel != null && channel.isConnected()) {
                     System.out.println("NIO: Channel connected, sending queued messages to " + destination);
                     try {
@@ -383,16 +435,16 @@ public class NioNetwork implements Network {
         NetworkAddress destination = message.destination();
         SocketChannel channel = null;
         
-        // First, check if we have an accepted client channel for this destination
+        // First, check if we have an inbound connection for this destination
         // This is used when the server (replica) sends responses back to clients
-        channel = acceptedClientChannels.get(destination);
+        channel = findInboundChannelForDestination(destination);
         if (channel != null && channel.isConnected()) {
-            System.out.println("NIO: Using accepted client channel for " + destination);
+            System.out.println("NIO: Using inbound connection for " + destination);
         } else {
-            // No accepted channel, create/use outbound client channel
+            // No inbound connection, create/use outbound connection
             // This is used when the client sends requests to servers
             channel = getOrCreateClientChannel(destination);
-            System.out.println("NIO: Using outbound client channel for " + destination);
+            System.out.println("NIO: Using outbound connection for " + destination);
         }
         
         System.out.println("NIO: sendMessageDirectly to " + destination + 
@@ -426,7 +478,7 @@ public class NioNetwork implements Network {
     }
     
     private SocketChannel getOrCreateClientChannel(NetworkAddress address) throws IOException {
-        SocketChannel channel = clientChannels.get(address);
+        SocketChannel channel = outboundConnections.get(address);
         
         System.out.println("NIO: getOrCreateClientChannel for " + address + 
                           " (existing channel=" + channel + 
@@ -454,8 +506,12 @@ public class NioNetwork implements Network {
                 channel.register(selector, SelectionKey.OP_READ);
             }
             
-            clientChannels.put(address, channel);
-            System.out.println("NIO: Stored new channel in clientChannels map");
+            outboundConnections.put(address, channel);
+            
+            // Create channel state for the new outbound connection
+            channelStates.put(channel, new ChannelState());
+            
+            System.out.println("NIO: Stored new channel in outboundConnections map");
         } else {
             System.out.println("NIO: Using existing channel (connected=" + channel.isConnected() + ")");
         }
@@ -465,23 +521,35 @@ public class NioNetwork implements Network {
     
     /**
      * Finds the NetworkAddress destination for a given SocketChannel.
-     * Searches both outbound client channels and accepted client channels.
+     * Searches both outbound connections and inbound connections.
      */
     private NetworkAddress findDestinationForChannel(SocketChannel channel) {
-        // First check outbound client channels
-        for (Map.Entry<NetworkAddress, SocketChannel> entry : clientChannels.entrySet()) {
+        // First check outbound connections (client-side)
+        for (Map.Entry<NetworkAddress, SocketChannel> entry : outboundConnections.entrySet()) {
             if (entry.getValue() == channel) {
                 return entry.getKey();
             }
         }
         
-        // Then check accepted client channels
-        for (Map.Entry<NetworkAddress, SocketChannel> entry : acceptedClientChannels.entrySet()) {
-            if (entry.getValue() == channel) {
-                return entry.getKey();
-            }
+        // Then check inbound connections (server-side) - return the remote address
+        ConnectionInfo connectionInfo = inboundConnections.get(channel);
+        if (connectionInfo != null) {
+            return connectionInfo.getRemoteAddress();
         }
         
+        return null;
+    }
+    
+    /**
+     * Finds an inbound SocketChannel for a given destination address.
+     * This is used when the server needs to send responses back to a client.
+     */
+    private SocketChannel findInboundChannelForDestination(NetworkAddress destination) {
+        for (ConnectionInfo connectionInfo : inboundConnections.values()) {
+            if (connectionInfo.getRemoteAddress().equals(destination)) {
+                return connectionInfo.getChannel();
+            }
+        }
         return null;
     }
     
@@ -616,7 +684,7 @@ public class NioNetwork implements Network {
             channel.register(selector, SelectionKey.OP_READ);
             
             // Store the channel for future use
-            clientChannels.put(destination, channel);
+            outboundConnections.put(destination, channel);
             
             return actualClientAddress;
             
@@ -630,16 +698,110 @@ public class NioNetwork implements Network {
     }
     
     /**
+     * Comprehensive connection cleanup to prevent resource leaks.
+     * This follows production patterns for proper connection lifecycle management.
+     */
+    private void cleanupConnection(SocketChannel channel) {
+        try {
+            // Remove from all tracking maps
+            inboundConnections.remove(channel);
+            outboundConnections.values().remove(channel);
+            
+            // Clean up channel state
+            ChannelState state = channelStates.remove(channel);
+            if (state != null) {
+                state.cleanup();
+            }
+            
+            // Cancel selection key
+            SelectionKey key = channel.keyFor(selector);
+            if (key != null) {
+                key.cancel();
+            }
+            
+            // Close channel
+            if (channel.isOpen()) {
+                channel.close();
+            }
+            
+            System.out.println("NIO: Connection cleanup completed for channel");
+            
+        } catch (IOException e) {
+            System.err.println("NIO: Error during connection cleanup: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Gets the source address for a channel based on connection type.
+     */
+    private NetworkAddress getChannelSourceAddress(SocketChannel channel) {
+        // Check if it's an inbound connection
+        ConnectionInfo connectionInfo = inboundConnections.get(channel);
+        if (connectionInfo != null) {
+            return connectionInfo.getRemoteAddress();
+        }
+        
+        // Check if it's an outbound connection
+        for (Map.Entry<NetworkAddress, SocketChannel> entry : outboundConnections.entrySet()) {
+            if (entry.getValue() == channel) {
+                try {
+                    InetSocketAddress remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
+                    return new NetworkAddress(remoteAddress.getAddress().getHostAddress(), remoteAddress.getPort());
+                } catch (IOException e) {
+                    return entry.getKey(); // Fallback to destination address
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Routes inbound messages with preserved context information.
+     * This enables proper response routing back to the source channel.
+     */
+    private void routeInboundMessage(MessageContext messageContext) {
+        Message message = messageContext.getMessage();
+        
+        // Add to destination queue for processing
+        Queue<Message> queue = messageQueues.get(message.destination());
+        if (queue != null) {
+            queue.offer(message);
+            System.out.println("NIO: Message added to receive queue for " + message.destination() + 
+                              ", queue size: " + queue.size() + ", context: " + messageContext);
+        } else {
+            System.out.println("NIO: No receive queue found for " + message.destination() + 
+                              ", context: " + messageContext);
+        }
+        
+        // TODO: Store message context for response correlation (Phase 2)
+        // This will enable proper response routing back via the source channel
+    }
+    
+    /**
      * Closes all network resources.
      */
     public void close() {
         try {
-            // Close all client channels
-            for (SocketChannel channel : clientChannels.values()) {
+            // Close all outbound connections
+            for (SocketChannel channel : outboundConnections.values()) {
                 try {
                     channel.close();
                 } catch (IOException ignored) {}
             }
+            
+            // Close all inbound connections
+            for (ConnectionInfo connectionInfo : inboundConnections.values()) {
+                try {
+                    connectionInfo.getChannel().close();
+                } catch (IOException ignored) {}
+            }
+            
+            // Clean up all channel states
+            for (ChannelState state : channelStates.values()) {
+                state.cleanup();
+            }
+            channelStates.clear();
             
             // Close all server channels
             for (ServerSocketChannel channel : serverChannels.values()) {

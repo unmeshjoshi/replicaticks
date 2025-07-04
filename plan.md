@@ -315,7 +315,80 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ---
 
-## Phase 11: Simulation Driver ⏳ **← NEXT**
+## Phase 11: NIONetwork Critical Client-Server Connection Fixes ⏳ **← NEXT**
+
+### 🚨 **CRITICAL ISSUE: Broken Client-Server Request-Response Flow**
+**Problem**: NIONetwork has fundamental architectural flaws in handling client-server communication patterns that cause data corruption and broken request-response flows.
+
+**Root Cause Analysis**:
+- [ ] **🔥 DATA CORRUPTION**: Shared `readBuffer` across all channels causes data corruption and lost messages
+- [ ] **🔥 CONNECTION DIRECTION CONFUSION**: `sendMessageDirectly()` has backwards logic for client requests vs server responses
+- [ ] **🔥 MESSAGE CONTEXT LOSS**: No way to associate responses with the original request channel, breaking server responses
+- [ ] **🔥 RESOURCE LEAKS**: Incomplete connection cleanup in error scenarios and connection close events
+- [ ] **🔥 NO REQUEST-RESPONSE CORRELATION**: Missing correlation between inbound requests and outbound responses
+- [ ] **🔥 BROKEN RESPONSE ROUTING**: Server responses create new outbound connections instead of using existing inbound channels
+
+**Industry Comparison**:
+- [ ] **Kafka Pattern**: Per-channel buffers, context-aware message routing, proper request-response correlation
+- [ ] **Cassandra Pattern**: Channel state management, connection lifecycle tracking, response routing via original channel
+- [ ] **TigerBeetle Pattern**: Minimal connection state, efficient buffer management, clear request/response semantics
+- [ ] **YugabyteDB Pattern**: Connection pooling, proper cleanup, message correlation tracking
+
+### 🔧 **Critical Fixes Required (Phase 1: Data Corruption Prevention)**
+- [ ] **Fix 1: Per-Channel Buffer Management**:
+  - [ ] Replace shared `readBuffer`/`writeBuffer` with per-channel buffers
+  - [ ] `Map<SocketChannel, ChannelState>` with individual read/write buffers
+  - [ ] Prevent data corruption from concurrent channel access
+- [ ] **Fix 2: Message Context Preservation**:
+  - [ ] Create `MessageContext` class to track source channel and message metadata
+  - [ ] Modify `handleRead()` to preserve channel context with decoded messages
+  - [ ] Enable proper response routing back to original channel
+
+### 🔧 **Critical Fixes Required (Phase 2: Connection Flow Correction)**
+- [ ] **Fix 3: Request-Response Correlation**:
+  - [ ] Add correlation ID tracking between requests and responses
+  - [ ] Map correlation IDs to source channels for response routing
+  - [ ] Implement context-aware message routing logic
+- [ ] **Fix 4: Connection Direction Logic**:
+  - [ ] Fix `sendMessageDirectly()` to distinguish client requests vs server responses
+  - [ ] Route responses via original inbound channel, not new outbound connections
+  - [ ] Separate outbound (client→server) and response (server→client) flows
+
+### 🔧 **Critical Fixes Required (Phase 3: Resource Management)**
+- [ ] **Fix 5: Connection Cleanup**:
+  - [ ] Comprehensive cleanup in `handleRead()` when connection closes
+  - [ ] Remove channels from all tracking maps and clean up resources
+  - [ ] Implement proper connection lifecycle management
+- [ ] **Fix 6: Error Handling**:
+  - [ ] Add proper error handling in all connection operations
+  - [ ] Implement connection recovery and retry logic
+  - [ ] Add connection health monitoring and timeout detection
+
+### 🎯 **Implementation Strategy**
+- [ ] **Phase 1: Critical Data Corruption Fixes** (Immediate - prevents data loss):
+  - [ ] Create `ChannelState` class for per-channel buffer management
+  - [ ] Replace shared buffers with per-channel buffers in `handleRead()/handleWrite()`
+  - [ ] Create `MessageContext` class to preserve source channel information
+  - [ ] Validate all tests still pass with structural changes
+- [ ] **Phase 2: Request-Response Flow Fixes** (High Priority - enables proper communication):
+  - [ ] Add correlation tracking infrastructure (`correlationId → SocketChannel` mapping)
+  - [ ] Fix `sendMessageDirectly()` routing logic for requests vs responses
+  - [ ] Implement context-aware message routing in `processOutboundMessages()`
+  - [ ] Add response routing via original inbound channels
+- [ ] **Phase 3: Resource Management & Cleanup** (Medium Priority - prevents leaks):
+  - [ ] Comprehensive connection cleanup in error scenarios
+  - [ ] Proper channel removal from all tracking maps
+  - [ ] Connection lifecycle state management
+  - [ ] Enhanced error handling and recovery mechanisms
+- [ ] **Phase 4: Production Validation & Testing**:
+  - [ ] All existing tests must continue to pass
+  - [ ] Add specific tests for client-server request-response flows
+  - [ ] Performance testing for buffer management overhead
+  - [ ] Validate against production distributed system patterns
+
+---
+
+## Phase 12: Simulation Driver ⏳ **FUTURE**
 
 - [ ] **SimulationDriver** class:
   - [ ] `main()` method with complete setup
