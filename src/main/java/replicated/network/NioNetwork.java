@@ -31,8 +31,11 @@ public class NioNetwork implements Network {
     // Server sockets bound to specific addresses
     private final Map<NetworkAddress, ServerSocketChannel> serverChannels = new ConcurrentHashMap<>();
     
-    // Client connections to other nodes
+    // Client connections to other nodes (outbound connections we initiate)
     private final Map<NetworkAddress, SocketChannel> clientChannels = new ConcurrentHashMap<>();
+    
+    // Accepted client connections (inbound connections from clients to us as server)
+    private final Map<NetworkAddress, SocketChannel> acceptedClientChannels = new ConcurrentHashMap<>();
     
     // Message queues for each address
     private final Map<NetworkAddress, Queue<Message>> messageQueues = new ConcurrentHashMap<>();
@@ -206,6 +209,18 @@ public class NioNetwork implements Network {
         if (clientChannel != null) {
             clientChannel.configureBlocking(false);
             clientChannel.register(selector, SelectionKey.OP_READ);
+            
+            // Get the client's address from the accepted connection
+            InetSocketAddress clientAddress = (InetSocketAddress) clientChannel.getRemoteAddress();
+            NetworkAddress clientNetworkAddress = new NetworkAddress(
+                clientAddress.getAddress().getHostAddress(), 
+                clientAddress.getPort()
+            );
+            
+            // Store the accepted client channel for sending responses back
+            acceptedClientChannels.put(clientNetworkAddress, clientChannel);
+            
+            System.out.println("NIO: Accepted connection from client: " + clientNetworkAddress);
         }
     }
     
@@ -366,7 +381,19 @@ public class NioNetwork implements Network {
     
     private void sendMessageDirectly(Message message) throws IOException {
         NetworkAddress destination = message.destination();
-        SocketChannel channel = getOrCreateClientChannel(destination);
+        SocketChannel channel = null;
+        
+        // First, check if we have an accepted client channel for this destination
+        // This is used when the server (replica) sends responses back to clients
+        channel = acceptedClientChannels.get(destination);
+        if (channel != null && channel.isConnected()) {
+            System.out.println("NIO: Using accepted client channel for " + destination);
+        } else {
+            // No accepted channel, create/use outbound client channel
+            // This is used when the client sends requests to servers
+            channel = getOrCreateClientChannel(destination);
+            System.out.println("NIO: Using outbound client channel for " + destination);
+        }
         
         System.out.println("NIO: sendMessageDirectly to " + destination + 
                           " (channel=" + channel + ", connected=" + 
@@ -438,13 +465,23 @@ public class NioNetwork implements Network {
     
     /**
      * Finds the NetworkAddress destination for a given SocketChannel.
+     * Searches both outbound client channels and accepted client channels.
      */
     private NetworkAddress findDestinationForChannel(SocketChannel channel) {
+        // First check outbound client channels
         for (Map.Entry<NetworkAddress, SocketChannel> entry : clientChannels.entrySet()) {
             if (entry.getValue() == channel) {
                 return entry.getKey();
             }
         }
+        
+        // Then check accepted client channels
+        for (Map.Entry<NetworkAddress, SocketChannel> entry : acceptedClientChannels.entrySet()) {
+            if (entry.getValue() == channel) {
+                return entry.getKey();
+            }
+        }
+        
         return null;
     }
     
