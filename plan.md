@@ -271,7 +271,51 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ---
 
-## Phase 10: Simulation Driver ⏳ **← NEXT**
+## Phase 10: Critical Production Architecture Fixes ✅ **COMPLETED**
+
+### ✅ **MAJOR FIX: Client Connection Architecture**
+**Problem**: Client was registering against IP addresses upfront instead of establishing connections per request, violating real-world distributed system patterns.
+
+**Solution**: Implemented industry-standard bootstrap discovery pattern inspired by Kafka and TigerBeetle:
+- [x] **Bootstrap Replicas Pattern**: Client constructor now accepts `List<NetworkAddress> bootstrapReplicas`
+- [x] **Dynamic Connection Establishment**: `establishConnectionAndSend()` method connects per request
+- [x] **Network Layer Abstraction**: Added `establishConnection()` method to Network interface
+- [x] **SimulatedNetwork Implementation**: Uses localhost with ephemeral ports for deterministic testing
+- [x] **NioNetwork Implementation**: Real socket connections with OS-assigned addresses after blocking connect
+- [x] **Failover Support**: Client iterates through bootstrap replicas for automatic failover
+- [x] **Connection Pooling Ready**: Architecture supports future connection reuse optimizations
+
+### ✅ **CRITICAL FIX: NIONetwork Bidirectional Communication**
+**Problem**: NIONetwork was not properly handling client-side vs server-side connections, causing response delivery issues.
+
+**Solution**: Implemented proper channel management following production networking patterns:
+- [x] **Accepted Client Channels**: Added `acceptedClientChannels` map to track server-side connections
+- [x] **Enhanced handleAccept()**: Properly stores accepted client connections with remote address keys
+- [x] **Updated sendMessageDirectly()**: Checks accepted channels first for sending responses back to clients
+- [x] **Extended findDestinationForChannel()**: Searches both outbound and accepted channel types
+- [x] **Structural vs Behavioral Separation**: Followed TDD and Tidy First principles
+- [x] **Test Validation**: All 220+ tests continue to pass after structural changes
+
+### ✅ **KNOWLEDGE ARTIFACT: "Growing a Language" Article**
+**Achievement**: Created comprehensive article demonstrating Guy Steele's "Growing a Language" concept using our development session.
+
+**Content Includes**:
+- [x] **7 Architectural Layers**: Foundation → Network → Storage → Messaging → Consensus → Client → Testing
+- [x] **Language Evolution**: From raw Java networking to domain-specific distributed systems vocabulary
+- [x] **AI as Language Growth Catalyst**: Pattern recognition, architectural guidance, refactoring direction
+- [x] **Complex Algorithm Enablement**: How grown language enables LLM implementation of Paxos, Raft, PBFT
+- [x] **Industry Pattern Integration**: Real-world examples from Kafka, TigerBeetle, distributed systems
+
+### ✅ **ARCHITECTURAL IMPROVEMENTS**
+- [x] **Connection Management**: Proper separation of client/server connection lifecycle
+- [x] **Bootstrap Discovery**: Industry-standard cluster discovery and failover patterns
+- [x] **Network Abstraction**: Clean interface supporting both simulation and production
+- [x] **Production Readiness**: Real networking with proper connection establishment
+- [x] **Testing Determinism**: Maintained simulation capabilities for reproducible testing
+
+---
+
+## Phase 11: Simulation Driver ⏳ **← NEXT**
 
 - [ ] **SimulationDriver** class:
   - [ ] `main()` method with complete setup
@@ -317,7 +361,7 @@ src/main/java/replicated/
 │   ├── Replica.java              ✅ (abstract base class with common building blocks)
 │   └── QuorumBasedReplica.java   ✅ (quorum-specific consensus extending Replica)
 └── client/
-    └── Client.java               ✅ (async requests, response handling, timeout management, correlation tracking)
+    └── Client.java               ✅ (bootstrap discovery, async requests, response handling, timeout management, correlation tracking)
 
 src/test/java/replicated/integration/
 ├── DistributedSystemIntegrationTest.java ✅ (comprehensive real-world distributed scenarios)
@@ -373,14 +417,16 @@ src/test/java/replicated/integration/
   - **ProductionQuorumIntegrationTest**: Full production stack with NIO + RocksDB + Quorum consensus
 
 ### 🚀 **Current Status: Complete Production-Ready Distributed System**
-- **Phases 1-9 Complete**: Full distributed system with clean architecture and extensible replica framework
+- **Phases 1-10 Complete**: Full distributed system with clean architecture, extensible replica framework, and critical production fixes
 - **Dual Implementation Strategy**: Both simulation (deterministic testing) and production (real networking) versions
 - **Production Stack**: NIO networking + RocksDB persistence + Quorum consensus working reliably
-- **Comprehensive Bug Fixes**: Message queuing, TCP framing, test isolation all resolved
-- **Advanced Features**: Network partitions, replica failures, quorum consensus, conflict resolution
+- **Comprehensive Bug Fixes**: Message queuing, TCP framing, test isolation, client connection architecture, NIO bidirectional communication all resolved
+- **Advanced Features**: Network partitions, replica failures, quorum consensus, conflict resolution, bootstrap discovery, failover support
 - **Deterministic Testing**: All scenarios reproducible with consistent results
+- **Industry Standards**: Kafka/TigerBeetle-inspired connection patterns, proper client/server channel management
 - **Architecture Ready**: Easy to implement Raft, Chain Replication, Byzantine Fault Tolerance, etc.
-- **Next**: Phase 10 - Simulation Driver for complete system orchestration
+- **Knowledge Artifact**: "Growing a Language" article documenting the development methodology
+- **Next**: Phase 11 - Simulation Driver for complete system orchestration
 
 ---
 
