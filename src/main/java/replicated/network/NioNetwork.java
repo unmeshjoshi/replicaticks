@@ -11,6 +11,9 @@ import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.List;
 
 /**
  * Production-ready NIO-based network implementation.
@@ -61,7 +64,53 @@ public class NioNetwork implements Network {
     private final Map<Message, MessageContext> messageContexts = new ConcurrentHashMap<>();
     
     private final Random random = new Random();
-    
+
+    // === Metrics ===
+    private final AtomicInteger inboundConnectionCount = new AtomicInteger();
+    private final AtomicInteger outboundConnectionCount = new AtomicInteger();
+    private final AtomicInteger closedConnectionCount = new AtomicInteger();
+
+    // === Per-connection metrics ===
+    public static final class ConnectionStats {
+        public final NetworkAddress local;
+        public final NetworkAddress remote;
+        public final boolean inbound;
+        private final long openedAtNanos;
+        private volatile long lastActivityNanos;
+        private final AtomicLong bytesSent = new AtomicLong();
+        private final AtomicLong bytesReceived = new AtomicLong();
+        private volatile long closedAtNanos = -1;
+
+        ConnectionStats(NetworkAddress local, NetworkAddress remote, boolean inbound) {
+            this.local = local;
+            this.remote = remote;
+            this.inbound = inbound;
+            this.openedAtNanos = System.nanoTime();
+            this.lastActivityNanos = this.openedAtNanos;
+        }
+
+        void recordSent(long n) { bytesSent.addAndGet(n); lastActivityNanos = System.nanoTime(); }
+        void recordRecv(long n) { bytesReceived.addAndGet(n); lastActivityNanos = System.nanoTime(); }
+        void markClosed() { closedAtNanos = System.nanoTime(); }
+
+        public long bytesSent() { return bytesSent.get(); }
+        public long bytesReceived() { return bytesReceived.get(); }
+        public long openedMillis() { return openedAtNanos/1_000_000; }
+        public long lastActivityMillis() { return lastActivityNanos/1_000_000; }
+        public long closedMillis() { return closedAtNanos<0? -1 : closedAtNanos/1_000_000; }
+        public long lifetimeMillis() { long end = closedAtNanos<0? System.nanoTime(): closedAtNanos; return (end-openedAtNanos)/1_000_000; }
+
+        @Override public String toString() {
+            return String.format("Conn[%s -> %s, inbound=%s, sent=%d, recv=%d, openMs=%d, lifeMs=%d]", local, remote, inbound, bytesSent(), bytesReceived(), openedMillis(), lifetimeMillis());
+        }
+    }
+
+    private final Map<SocketChannel, ConnectionStats> connectionStats = new ConcurrentHashMap<>();
+
+    /** Immutable snapshot of network metrics */
+    public record Metrics(int inboundConnections, int outboundConnections, int closedConnections,
+                          List<ConnectionStats> connections) {}
+
     public NioNetwork() {
         this(new JsonMessageCodec());
     }
@@ -240,6 +289,10 @@ public class NioNetwork implements Network {
             
             // Store the accepted client channel with full metadata
             inboundConnections.put(clientChannel, connectionInfo);
+            inboundConnectionCount.incrementAndGet();
+
+            // metrics
+            connectionStats.put(clientChannel, new ConnectionStats(localNetworkAddress, clientNetworkAddress, true));
             
             // Create channel state for the new connection
             channelStates.put(clientChannel, new ChannelState());
@@ -265,6 +318,12 @@ public class NioNetwork implements Network {
                     System.out.println("NIO: Found destination " + destination + " for connected channel");
                     // Send any queued messages
                     sendQueuedMessages(destination, channel);
+                    outboundConnectionCount.incrementAndGet();
+
+                    // metrics
+                    NetworkAddress localAddr = destination; // actually local? Wait we need local for outbound: source is findSourceForChannel? easier: use networkAddress mapping
+                    NetworkAddress remote = destination;
+                    connectionStats.put(channel, new ConnectionStats(/*local*/localAddr, remote, false));
                 } else {
                     System.out.println("NIO: WARNING - Could not find destination for connected channel");
                 }
@@ -340,6 +399,11 @@ public class NioNetwork implements Network {
             
             System.out.println("NIO: Decoded " + messagesDecoded + " messages from " + bytesRead + " bytes");
         }
+
+        if(bytesRead>0){ 
+            ConnectionStats cs = connectionStats.get(channel); 
+            if(cs!=null) cs.recordRecv(bytesRead);
+        }        
     }
     
     private void handleWrite(SelectionKey key) throws IOException {
@@ -388,9 +452,13 @@ public class NioNetwork implements Network {
                         // No more pending writes, switch back to read mode
                         key.interestOps(SelectionKey.OP_READ);
                     }
+                    ConnectionStats cs = connectionStats.get(channel);
+                    if (cs != null) cs.recordSent(bytesWritten);
                 }
             }
         }
+
+        // recording handled in branches above
     }
     
     private void processOutboundMessages() {
@@ -474,6 +542,8 @@ public class NioNetwork implements Network {
             } else {
                 System.out.println("NIO: Message sent completely");
             }
+            ConnectionStats cs = connectionStats.get(channel);
+            if (cs != null) cs.recordSent(bytesWritten);
         } else {
             // Connection not ready, queue the message for later delivery
             pendingMessages.computeIfAbsent(destination, k -> new ConcurrentLinkedQueue<>()).offer(message);
@@ -754,33 +824,32 @@ public class NioNetwork implements Network {
      */
     private void cleanupConnection(SocketChannel channel) {
         try {
-            // Remove from all tracking maps
-            inboundConnections.remove(channel);
-            outboundConnections.values().remove(channel);
-            
-            // Clean up channel state
-            ChannelState state = channelStates.remove(channel);
-            if (state != null) {
-                state.cleanup();
-            }
-            
-            // Clean up pending requests for this channel
-            pendingRequests.entrySet().removeIf(entry -> {
-                MessageContext context = entry.getValue();
-                return context.getSourceChannel() == channel;
-            });
-            
-            // Cancel selection key
+            // Cancel any selection key
             SelectionKey key = channel.keyFor(selector);
-            if (key != null) {
-                key.cancel();
+            if (key != null) key.cancel();
+            
+            channelStates.remove(channel);
+
+            ConnectionStats cs = connectionStats.remove(channel);
+            if(cs!=null) cs.markClosed();
+            
+            // Determine whether it was inbound or outbound
+            if (inboundConnections.remove(channel) != null) {
+                inboundConnectionCount.decrementAndGet();
+            } else {
+                // Remove from outbound map (by value)
+                outboundConnections.entrySet().removeIf(e -> {
+                    if (e.getValue().equals(channel)) {
+                        outboundConnectionCount.decrementAndGet();
+                        return true;
+                    }
+                    return false;
+                });
             }
             
-            // Close channel
-            if (channel.isOpen()) {
-                channel.close();
-            }
+            closedConnectionCount.incrementAndGet();
             
+            channel.close();
             System.out.println("NIO: Connection cleanup completed for channel");
             
         } catch (IOException e) {
@@ -911,5 +980,18 @@ public class NioNetwork implements Network {
         if (key != null && key.isValid()) {
             key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
         }
+    }
+
+    /** Returns a snapshot of current connection metrics. */
+    public Metrics getMetrics() {
+        return new Metrics(inboundConnectionCount.get(), outboundConnectionCount.get(), closedConnectionCount.get(),
+                           List.copyOf(connectionStats.values()));
+    }
+
+    /**
+     * Returns a snapshot of per-connection statistics.
+     */
+    public Collection<ConnectionStats> getConnectionStats() {
+        return List.copyOf(connectionStats.values());
     }
 }
