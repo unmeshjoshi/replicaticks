@@ -317,195 +317,20 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ## Phase 11: NIONetwork Critical Client-Server Connection Fixes ⏳ **← NEXT**
 
-### 🚨 **CRITICAL ISSUE: Broken Client-Server Request-Response Flow**
-**Problem**: NIONetwork has fundamental architectural flaws in handling client-server communication patterns that cause data corruption and broken request-response flows.
+### 🆕 Phase 11A: Direct-Channel Responses (in progress)
 
-**Root Cause Analysis**:
-- [ ] **🔥 DATA CORRUPTION**: Shared `readBuffer` across all channels causes data corruption and lost messages
-- [ ] **🔥 CONNECTION DIRECTION CONFUSION**: `sendMessageDirectly()` has backwards logic for client requests vs server responses
-- [ ] **🔥 MESSAGE CONTEXT LOSS**: No way to associate responses with the original request channel, breaking server responses
-- [ ] **🔥 RESOURCE LEAKS**: Incomplete connection cleanup in error scenarios and connection close events
-- [ ] **🔥 NO REQUEST-RESPONSE CORRELATION**: Missing correlation between inbound requests and outbound responses
-- [ ] **🔥 BROKEN RESPONSE ROUTING**: Server responses create new outbound connections instead of using existing inbound channels
+### Scope
+Implement ability for replicas to send a response back on the exact `SocketChannel` that carried the request – first by plumbing support in the network layer.
 
-**Industry Comparison**:
-- [ ] **Kafka Pattern**: Per-channel buffers, context-aware message routing, proper request-response correlation
-- [ ] **Cassandra Pattern**: Channel state management, connection lifecycle tracking, response routing via original channel
-- [ ] **TigerBeetle Pattern**: Minimal connection state, efficient buffer management, clear request/response semantics
-- [ ] **YugabyteDB Pattern**: Connection pooling, proper cleanup, message correlation tracking
+### ✅ Step 1 – Network API surface
+- Added `sendOnChannel(SocketChannel, Message)` default method to `Network` interface.
+- Implemented concrete logic in `NioNetwork` that:
+  1. Encodes message via `codec`.
+  2. Queues bytes in `ChannelState.pendingWrites`.
+  3. Registers `OP_WRITE` on selector key so data flushes next tick.
 
-### 🔧 **Critical Fixes Required (Phase 1: Data Corruption Prevention)**
-- [ ] **Fix 1: Per-Channel Buffer Management**:
-  - [ ] Replace shared `readBuffer`/`writeBuffer` with per-channel buffers
-  - [ ] `Map<SocketChannel, ChannelState>` with individual read/write buffers
-  - [ ] Prevent data corruption from concurrent channel access
-- [ ] **Fix 2: Message Context Preservation**:
-  - [ ] Create `MessageContext` class to track source channel and message metadata
-  - [ ] Modify `handleRead()` to preserve channel context with decoded messages
-  - [ ] Enable proper response routing back to original channel
-
-### 🔧 **Critical Fixes Required (Phase 2: Connection Flow Correction)**
-- [ ] **Fix 3: Request-Response Correlation**:
-  - [ ] Add correlation ID tracking between requests and responses
-  - [ ] Map correlation IDs to source channels for response routing
-  - [ ] Implement context-aware message routing logic
-- [ ] **Fix 4: Connection Direction Logic**:
-  - [ ] Fix `sendMessageDirectly()` to distinguish client requests vs server responses
-  - [ ] Route responses via original inbound channel, not new outbound connections
-  - [ ] Separate outbound (client→server) and response (server→client) flows
-
-### 🔧 **Critical Fixes Required (Phase 3: Resource Management)**
-- [ ] **Fix 5: Connection Cleanup**:
-  - [ ] Comprehensive cleanup in `handleRead()` when connection closes
-  - [ ] Remove channels from all tracking maps and clean up resources
-  - [ ] Implement proper connection lifecycle management
-- [ ] **Fix 6: Error Handling**:
-  - [ ] Add proper error handling in all connection operations
-  - [ ] Implement connection recovery and retry logic
-  - [ ] Add connection health monitoring and timeout detection
-
-### 🎯 **Implementation Strategy**
-- [ ] **Phase 1: Critical Data Corruption Fixes** (Immediate - prevents data loss):
-  - [ ] Create `ChannelState` class for per-channel buffer management
-  - [ ] Replace shared buffers with per-channel buffers in `handleRead()/handleWrite()`
-  - [ ] Create `MessageContext` class to preserve source channel information
-  - [ ] Validate all tests still pass with structural changes
-- [ ] **Phase 2: Request-Response Flow Fixes** (High Priority - enables proper communication):
-  - [ ] Add correlation tracking infrastructure (`correlationId → SocketChannel` mapping)
-  - [ ] Fix `sendMessageDirectly()` routing logic for requests vs responses
-  - [ ] Implement context-aware message routing in `processOutboundMessages()`
-  - [ ] Add response routing via original inbound channels
-- [ ] **Phase 3: Resource Management & Cleanup** (Medium Priority - prevents leaks):
-  - [ ] Comprehensive connection cleanup in error scenarios
-  - [ ] Proper channel removal from all tracking maps
-  - [ ] Connection lifecycle state management
-  - [ ] Enhanced error handling and recovery mechanisms
-- [ ] **Phase 4: Production Validation & Testing**:
-  - [ ] All existing tests must continue to pass
-  - [ ] Add specific tests for client-server request-response flows
-  - [ ] Performance testing for buffer management overhead
-  - [ ] Validate against production distributed system patterns
-
----
-
-## Phase 12: Simulation Driver ⏳ **FUTURE**
-
-- [ ] **SimulationDriver** class:
-  - [ ] `main()` method with complete setup
-  - [ ] Dependency injection (Random, Network, Storage, MessageBus, Replicas, Clients)
-  - [ ] Simulation loop with correct tick() ordering
-
----
-
-## Current Implementation Status
-
-### 📁 **Project Structure**
-```
-src/main/java/replicated/
-├── messaging/
-│   ├── NetworkAddress.java         ✅ (with port validation)
-│   ├── MessageType.java           ✅ (7 message types)  
-│   ├── Message.java              ✅ (with null validation & proper equals)
-│   ├── MessageCodec.java         ✅ (interface)
-│   ├── JsonMessageCodec.java     ✅ (simplified, no custom serializers)
-│   ├── MessageHandler.java       ✅ (interface for message recipients)
-│   ├── MessageBus.java           ✅ (higher-level messaging with routing & broadcast)
-│   ├── GetRequest.java           ✅ (client request)
-│   ├── SetRequest.java           ✅ (client request)  
-│   ├── GetResponse.java          ✅ (server response)
-│   ├── SetResponse.java          ✅ (server response)
-│   ├── InternalGetRequest.java   ✅ (internal distributed request)
-│   ├── InternalSetRequest.java   ✅ (internal distributed request)
-│   ├── InternalGetResponse.java  ✅ (internal distributed response)
-│   └── InternalSetResponse.java  ✅ (internal distributed response)
-├── network/
-│   ├── Network.java              ✅ (interface with comprehensive documentation + partitioning methods)
-│   ├── SimulatedNetwork.java     ✅ (PriorityQueue, domain-driven refactoring, partitioning, per-link config)
-│   └── NioNetwork.java           ✅ (production NIO implementation with bug fixes)
-├── storage/
-│   ├── VersionedValue.java       ✅ (value + timestamp with proper byte[] equality)
-│   ├── Storage.java              ✅ (async interface with ListenableFuture)
-│   ├── BytesKey.java             ✅ (byte[] wrapper with defensive copying + proper Map key behavior)
-│   ├── SimulatedStorage.java     ✅ (async storage with delays, failures, PriorityQueue)
-│   └── RocksDbStorage.java       ✅ (production persistent storage with RocksDB)
-├── future/
-│   └── ListenableFuture.java     ✅ (single-threaded async with callbacks, states, multiple handlers)
-├── replica/
-│   ├── Replica.java              ✅ (abstract base class with common building blocks)
-│   └── QuorumBasedReplica.java   ✅ (quorum-specific consensus extending Replica)
-└── client/
-    └── Client.java               ✅ (bootstrap discovery, async requests, response handling, timeout management, correlation tracking)
-
-src/test/java/replicated/integration/
-├── DistributedSystemIntegrationTest.java ✅ (comprehensive real-world distributed scenarios)
-├── SimpleNioIntegrationTest.java         ✅ (basic NIO network testing)
-└── ProductionQuorumIntegrationTest.java  ✅ (full production stack: NIO + RocksDB + Quorum)
-```
-
-### 🧪 **Test Coverage: 220+ Passing**
-- NetworkAddress: 6 tests (creation, equality, port validation)
-- MessageType: 1 test (enum completeness)
-- Message: 6 tests (creation, equality, null validation)  
-- MessageCodec: 8 tests (encoding, decoding, error handling)
-- **Client API Messages:**
-  - GetRequest: 3 tests (clean client API, no correlation IDs)
-  - SetRequest: 4 tests (clean client API, no internal fields)
-  - GetResponse: 5 tests (VersionedValue support, clean client responses)  
-  - SetResponse: 3 tests (simple success/failure responses)
-- **Internal API Messages:**
-  - InternalGetRequest: 4 tests (correlation ID tracking)
-  - InternalSetRequest: 5 tests (correlation ID + timestamp)
-  - InternalGetResponse: 5 tests (correlation ID + VersionedValue)
-  - InternalSetResponse: 5 tests (correlation ID + success tracking)
-- MessagePayloadSerialization: 4 tests (type-safe messaging patterns)
-- **MessageBus: 14 tests (component registration, message routing, broadcast, handler management, tick coordination)**
-- **ListenableFuture: 20 tests (states, callbacks, error handling, multiple handlers, validation)**
-- **Storage & BytesKey: 21 tests (async operations, defensive copying, Map key behavior, fault injection)**
-- VersionedValue: 8 tests (creation, equality, validation, byte[] handling)
-- **Replica Architecture Tests:**
-  - ReplicaBaseTest: 12 tests (common building blocks, timeout handling, request ID generation)
-  - QuorumBasedReplicaTest: 13 tests (quorum logic, distributed consensus, message routing)
-  - ReplicaTest: 7 tests (basic abstract replica functionality)
-- **Client: 14 tests (async requests, response handling, timeout management, correlation tracking, clean API)**
-- **SimulatedNetwork: 14 tests (send/receive, delays, packet loss, deterministic behavior, partitioning, per-link config)**
-  - **ENHANCED**: Advanced network simulation with partitioning, asymmetric conditions, and domain-driven refactoring
-  - **PERFORMANCE**: Upgraded to PriorityQueue for O(log n) message processing efficiency
-- **🆕 DistributedSystemIntegration: 8 tests (comprehensive real-world scenarios)**
-  - **End-to-End Operations**: Full distributed GET/SET with 5-replica quorum
-  - **Network Partitions**: Split-brain scenarios, majority/minority handling  
-  - **Replica Failures**: Byzantine fault tolerance, automatic failover
-  - **Concurrent Operations**: High-contention multi-client scenarios
-  - **Quorum Requirements**: W+R > N consistency model validation
-  - **Conflict Resolution**: Partition healing, consistency recovery
-  - **Eventual Consistency**: Convergence demonstration, anti-entropy
-  - **Read Repair**: Stale data detection, background synchronization
-
-- **🆕 Production NIO Network: 12 tests (production-ready networking)**
-  - **NioNetworkTest**: Socket management, connection handling, message transmission
-  - **SimpleNioIntegrationTest**: End-to-end messaging scenarios with real networking
-  - **Multiple Message Handling**: TCP framing, message queuing, connection establishment
-
-- **🆕 Production RocksDB Storage: 8 tests (persistent storage)**
-  - **RocksDbStorageTest**: Database operations, key-value persistence, async behavior
-  - **ProductionQuorumIntegrationTest**: Full production stack with NIO + RocksDB + Quorum consensus
-
-### 🚀 **Current Status: Complete Production-Ready Distributed System**
-- **Phases 1-10 Complete**: Full distributed system with clean architecture, extensible replica framework, and critical production fixes
-- **Dual Implementation Strategy**: Both simulation (deterministic testing) and production (real networking) versions
-- **Production Stack**: NIO networking + RocksDB persistence + Quorum consensus working reliably
-- **Comprehensive Bug Fixes**: Message queuing, TCP framing, test isolation, client connection architecture, NIO bidirectional communication all resolved
-- **Advanced Features**: Network partitions, replica failures, quorum consensus, conflict resolution, bootstrap discovery, failover support
-- **Deterministic Testing**: All scenarios reproducible with consistent results
-- **Industry Standards**: Kafka/TigerBeetle-inspired connection patterns, proper client/server channel management
-- **Architecture Ready**: Easy to implement Raft, Chain Replication, Byzantine Fault Tolerance, etc.
-- **Knowledge Artifact**: "Growing a Language" article documenting the development methodology
-- **Next**: Phase 11 - Simulation Driver for complete system orchestration
-
----
-
-## Development Methodology
-
-Following **TDD cycle**: Red → Green → Refactor  
-Following **Tidy First**: Structural changes separate from behavioral changes  
-**Commit discipline**: Only when all tests pass, clear behavioral vs structural messages  
-**Code quality**: Eliminate duplication, express intent clearly, simplest solution that works 
+### ⏭️ Next Steps
+1. **MessageContext exposure** – add `channel()` getter (already present) and stabilise its use.
+2. **MessageBus.reply() helper** – delegate to `network.sendOnChannel()`.
+3. **Replica changes** – persist the original `MessageContext` with every pending request and call `messageBus.reply()` instead of `sendMessage()`.
+4. **Integration tests** – verify responses arrive in-order on the same socket.

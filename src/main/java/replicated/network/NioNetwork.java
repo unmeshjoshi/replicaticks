@@ -54,6 +54,9 @@ public class NioNetwork implements Network {
     // Per-channel state management (replaces shared buffers to prevent data corruption)
     private final Map<SocketChannel, ChannelState> channelStates = new ConcurrentHashMap<>();
     
+    // Request-response correlation tracking (enables proper response routing)
+    private final Map<String, MessageContext> pendingRequests = new ConcurrentHashMap<>();
+    
     private final Random random = new Random();
     
     public NioNetwork() {
@@ -435,14 +438,13 @@ public class NioNetwork implements Network {
         NetworkAddress destination = message.destination();
         SocketChannel channel = null;
         
-        // First, check if we have an inbound connection for this destination
-        // This is used when the server (replica) sends responses back to clients
+        // SIMPLIFIED ROUTING: Check for inbound channel first (for responses), 
+        // then fall back to outbound channel (for requests)
         channel = findInboundChannelForDestination(destination);
         if (channel != null && channel.isConnected()) {
             System.out.println("NIO: Using inbound connection for " + destination);
         } else {
             // No inbound connection, create/use outbound connection
-            // This is used when the client sends requests to servers
             channel = getOrCreateClientChannel(destination);
             System.out.println("NIO: Using outbound connection for " + destination);
         }
@@ -551,6 +553,42 @@ public class NioNetwork implements Network {
             }
         }
         return null;
+    }
+    
+    /**
+     * Determines if a message is a response to a previous request.
+     */
+    private boolean isResponseMessage(Message message) {
+        if (message == null) return false;
+        
+        String messageType = message.messageType().toString();
+        // All response messages contain "RESPONSE": CLIENT_RESPONSE, INTERNAL_GET_RESPONSE, INTERNAL_SET_RESPONSE
+        return messageType.contains("RESPONSE");
+    }
+    
+    /**
+     * Finds the original request channel for routing responses back.
+     * This implements proper request-response correlation.
+     */
+    private SocketChannel findResponseChannel(Message message) {
+        // Look for pending requests that match this response
+        String correlationPattern = message.destination() + "->" + message.source();
+        
+        for (Map.Entry<String, MessageContext> entry : pendingRequests.entrySet()) {
+            String correlationId = entry.getKey();
+            MessageContext requestContext = entry.getValue();
+            
+            if (correlationId.contains(correlationPattern) && 
+                requestContext.canRouteResponse()) {
+                // Found matching request context, return the source channel
+                System.out.println("NIO: Found response routing via correlation: " + correlationId);
+                return requestContext.getSourceChannel();
+            }
+        }
+        
+        // No correlation found, fallback to inbound channel lookup
+        System.out.println("NIO: No correlation found for response, using inbound channel lookup");
+        return findInboundChannelForDestination(message.destination());
     }
     
     /**
@@ -698,6 +736,16 @@ public class NioNetwork implements Network {
     }
     
     /**
+     * Generates a unique correlation ID for request-response tracking.
+     * This enables proper response routing back to the original request channel.
+     */
+    private String generateCorrelationId(Message message) {
+        return message.source() + "->" + message.destination() + "-" + 
+               message.messageType() + "-" + System.currentTimeMillis() + "-" + 
+               random.nextInt(1000);
+    }
+    
+    /**
      * Comprehensive connection cleanup to prevent resource leaks.
      * This follows production patterns for proper connection lifecycle management.
      */
@@ -712,6 +760,12 @@ public class NioNetwork implements Network {
             if (state != null) {
                 state.cleanup();
             }
+            
+            // Clean up pending requests for this channel
+            pendingRequests.entrySet().removeIf(entry -> {
+                MessageContext context = entry.getValue();
+                return context.getSourceChannel() == channel;
+            });
             
             // Cancel selection key
             SelectionKey key = channel.keyFor(selector);
@@ -763,6 +817,15 @@ public class NioNetwork implements Network {
     private void routeInboundMessage(MessageContext messageContext) {
         Message message = messageContext.getMessage();
         
+        // Store request context for response correlation
+        if (messageContext.isRequest()) {
+            String correlationId = generateCorrelationId(message);
+            messageContext.setCorrelationId(correlationId);
+            pendingRequests.put(correlationId, messageContext);
+            System.out.println("NIO: Stored request context for correlation: " + correlationId + 
+                              ", context: " + messageContext);
+        }
+        
         // Add to destination queue for processing
         Queue<Message> queue = messageQueues.get(message.destination());
         if (queue != null) {
@@ -773,9 +836,6 @@ public class NioNetwork implements Network {
             System.out.println("NIO: No receive queue found for " + message.destination() + 
                               ", context: " + messageContext);
         }
-        
-        // TODO: Store message context for response correlation (Phase 2)
-        // This will enable proper response routing back via the source channel
     }
     
     /**
@@ -803,6 +863,9 @@ public class NioNetwork implements Network {
             }
             channelStates.clear();
             
+            // Clean up pending requests
+            pendingRequests.clear();
+            
             // Close all server channels
             for (ServerSocketChannel channel : serverChannels.values()) {
                 try {
@@ -817,4 +880,26 @@ public class NioNetwork implements Network {
             throw new RuntimeException("Error closing network resources", e);
         }
     }
-} 
+    
+    // === NEW PUBLIC API =========================================================
+    @Override
+    public void sendOnChannel(SocketChannel channel, Message message) {
+        if (channel == null || message == null) {
+            throw new IllegalArgumentException("Channel and message must not be null");
+        }
+        if (!channel.isOpen()) {
+            throw new IllegalStateException("Channel is closed: " + channel);
+        }
+        // Encode immediately (small messages) – copies unavoidable for now
+        byte[] bytes = codec.encode(message);
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        ChannelState state = channelStates.computeIfAbsent(channel, c -> new ChannelState());
+        state.addPendingWrite(buffer);
+
+        // Ensure OP_WRITE interest so selector wakes up next tick
+        SelectionKey key = channel.keyFor(selector);
+        if (key != null && key.isValid()) {
+            key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+        }
+    }
+}

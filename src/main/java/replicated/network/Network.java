@@ -3,6 +3,7 @@ package replicated.network;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.Message;
 import java.util.List;
+import java.nio.channels.SocketChannel;
 
 /**
  * Network interface for sending and receiving messages in the distributed simulation.
@@ -113,4 +114,17 @@ public interface Network {
      * @throws IllegalArgumentException if either address is null or lossRate is not in [0.0, 1.0]
      */
     void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate);
-} 
+    
+    // --- Direct Channel Response Support (Phase 11 Fixes) ---
+    /**
+     * Sends a message directly on the provided <i>already-connected</i> SocketChannel.
+     * This allows servers to route a response back on the exact TCP connection on which
+     * the request was received, avoiding the overhead of opening a new connection and
+     * preserving message ordering. Default implementation throws {@link
+     * UnsupportedOperationException}; network implementations that support real sockets
+     * (e.g. {@code NioNetwork}) should override it.
+     */
+    default void sendOnChannel(SocketChannel channel, Message message) {
+        throw new UnsupportedOperationException("Direct channel send is not supported by this Network implementation");
+    }
+}
