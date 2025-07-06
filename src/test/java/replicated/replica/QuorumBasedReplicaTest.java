@@ -73,7 +73,7 @@ class QuorumBasedReplicaTest {
             MessageType.CLIENT_GET_REQUEST, getRequest);
         
         // When
-        replica.onMessageReceived(clientMessage);
+        replica.onMessageReceived(clientMessage, null);
         
         // Then - should initiate quorum get operation
         // This will be verified by checking internal messages sent to peers
@@ -90,7 +90,7 @@ class QuorumBasedReplicaTest {
             MessageType.CLIENT_SET_REQUEST, setRequest);
         
         // When
-        replica.onMessageReceived(clientMessage);
+        replica.onMessageReceived(clientMessage, null);
         
         // Then - should initiate quorum set operation
         assertDoesNotThrow(() -> replica.tick(1L));
@@ -110,7 +110,7 @@ class QuorumBasedReplicaTest {
         Message internalMessage = createMessage(coordinatorAddress, replicaAddress, 
             MessageType.INTERNAL_GET_REQUEST, getRequest);
         
-        replica.onMessageReceived(internalMessage);
+        replica.onMessageReceived(internalMessage, null);
         storage.tick(); // Process storage operation
         replica.tick(1L); // Process any pending work
         
@@ -130,7 +130,7 @@ class QuorumBasedReplicaTest {
             MessageType.INTERNAL_SET_REQUEST, setRequest);
         
         // When
-        replica.onMessageReceived(internalMessage);
+        replica.onMessageReceived(internalMessage, null);
         storage.tick(); // Process storage operation
         replica.tick(1L); // Process any pending work
         
@@ -151,8 +151,8 @@ class QuorumBasedReplicaTest {
             MessageType.CLIENT_GET_REQUEST, getRequest2);
         
         // When
-        replica.onMessageReceived(message1);
-        replica.onMessageReceived(message2);
+        replica.onMessageReceived(message1, null);
+        replica.onMessageReceived(message2, null);
         
         // Then - should track both requests separately
         // Verification would be done through inspection of internal state
@@ -173,7 +173,7 @@ class QuorumBasedReplicaTest {
         for (int i = 0; i < 5; i++) {
             Message message = createMessage(clientAddress, replicaAddress, 
                 MessageType.CLIENT_GET_REQUEST, getRequest);
-            replica.onMessageReceived(message);
+            replica.onMessageReceived(message, null);
         }
         
         // Then - each should have unique request ID
@@ -192,7 +192,7 @@ class QuorumBasedReplicaTest {
             MessageType.CLIENT_GET_REQUEST, getRequest);
         
         // When - send request and advance time beyond timeout
-        replica.onMessageReceived(message);
+        replica.onMessageReceived(message, null);
         
         // Advance time beyond timeout
         for (int tick = 1; tick <= 10; tick++) {

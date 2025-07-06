@@ -279,10 +279,7 @@ class DistributedSystemIntegrationTest {
         
         System.out.println("Debug: Starting majority partition write to " + replicaAddresses.get(0));
         ListenableFuture<Boolean> majorityFuture = client.sendSetRequest(key, value, replicaAddresses.get(0));
-        majorityFuture.onSuccess(result -> {
-            System.out.println("Debug: Majority operation succeeded with result: " + result);
-            majorityResult.set(result);
-        });
+        majorityFuture.onSuccess((r) -> majorityResult.set(r));
         majorityFuture.onFailure(error -> {
             System.out.println("Debug: Majority operation failed with error: " + error.getMessage());
             majorityError.set(error);

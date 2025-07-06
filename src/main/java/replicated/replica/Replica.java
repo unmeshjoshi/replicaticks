@@ -5,6 +5,7 @@ import replicated.storage.Storage;
 import replicated.future.ListenableFuture;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import replicated.network.MessageContext;
 
 /**
  * Base class for all replica implementations containing common building blocks.
@@ -78,12 +79,8 @@ public abstract class Replica implements MessageHandler {
         return peers;
     }
     
-    /**
-     * Message routing dispatcher - delegates to specific handlers.
-     * Subclasses should implement this to route messages to appropriate handlers.
-     */
     @Override
-    public abstract void onMessageReceived(Message message);
+    public abstract void onMessageReceived(Message message, MessageContext ctx);
     
     /**
      * Common tick() processing for all replica types.

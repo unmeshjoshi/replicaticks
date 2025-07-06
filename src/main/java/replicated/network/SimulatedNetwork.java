@@ -3,6 +3,7 @@ package replicated.network;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.Message;
 import java.util.*;
+import replicated.util.DebugConfig;
 
 /**
  * Simulated network implementation that provides deterministic message delivery
@@ -21,6 +22,7 @@ public class SimulatedNetwork implements Network {
     
     private final PriorityQueue<QueuedMessage> pendingMessages = new PriorityQueue<>();
     private final Map<NetworkAddress, List<Message>> deliveredMessages = new HashMap<>();
+    private final Map<Message, MessageContext> messageContexts = new HashMap<>();
     private long currentTick = 0;
     
     // Network partitioning state
@@ -32,6 +34,8 @@ public class SimulatedNetwork implements Network {
     
     // Connection establishment state
     private int nextEphemeralPort = 50000; // Start ephemeral ports at 50000
+    
+    private Message lastDeliveredMessage;
     
     /**
      * Creates a SimulatedNetwork with no delays and no packet loss.
@@ -91,6 +95,11 @@ public class SimulatedNetwork implements Network {
         
         List<Message> messages = deliveredMessages.remove(address);
         return messages == null ? List.of() : new ArrayList<>(messages);
+    }
+    
+    @Override
+    public MessageContext getContextFor(Message message) {
+        return messageContexts.get(message);
     }
     
     /**
@@ -161,7 +170,12 @@ public class SimulatedNetwork implements Network {
                pendingMessages.peek().deliveryTick <= tickTime) {
             
             QueuedMessage queuedMessage = pendingMessages.poll();
-            deliverMessage(queuedMessage.message);
+            deliveredMessages.computeIfAbsent(queuedMessage.message.destination(), k -> new ArrayList<>()).add(queuedMessage.message);
+            messageContexts.put(queuedMessage.message, new MessageContext(queuedMessage.message));
+            lastDeliveredMessage = queuedMessage.message;
+            if (DebugConfig.ENABLED) {
+                System.out.println("SimNet: delivered " + queuedMessage.message);
+            }
         }
     }
     
@@ -244,6 +258,13 @@ public class SimulatedNetwork implements Network {
         // goes through the send/receive methods
         
         return ephemeralAddress;
+    }
+    
+    /**
+     * Returns the most recently delivered message (for testing).
+     */
+    public Message getLastDeliveredMessage() {
+        return lastDeliveredMessage;
     }
     
     /**

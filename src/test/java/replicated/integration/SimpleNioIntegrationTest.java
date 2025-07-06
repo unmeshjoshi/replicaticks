@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import replicated.network.MessageContext;
 
 /**
  * Simple integration test to verify NIO network messaging works correctly.
@@ -166,7 +167,7 @@ class SimpleNioIntegrationTest {
         final AtomicReference<Integer> messageCount = new AtomicReference<>(0);
         
         @Override
-        public void onMessageReceived(Message message) {
+        public void onMessageReceived(Message message, MessageContext ctx) {
             receivedMessage.set(message);
             messageCount.set(messageCount.get() + 1);
         }

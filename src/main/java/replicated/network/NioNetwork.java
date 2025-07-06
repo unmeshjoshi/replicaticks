@@ -57,6 +57,9 @@ public class NioNetwork implements Network {
     // Request-response correlation tracking (enables proper response routing)
     private final Map<String, MessageContext> pendingRequests = new ConcurrentHashMap<>();
     
+    // map message identity (object) to context
+    private final Map<Message, MessageContext> messageContexts = new ConcurrentHashMap<>();
+    
     private final Random random = new Random();
     
     public NioNetwork() {
@@ -830,12 +833,19 @@ public class NioNetwork implements Network {
         Queue<Message> queue = messageQueues.get(message.destination());
         if (queue != null) {
             queue.offer(message);
+            // store context for upper layers
+            messageContexts.put(message, messageContext);
             System.out.println("NIO: Message added to receive queue for " + message.destination() + 
                               ", queue size: " + queue.size() + ", context: " + messageContext);
         } else {
             System.out.println("NIO: No receive queue found for " + message.destination() + 
                               ", context: " + messageContext);
         }
+    }
+    
+    @Override
+    public MessageContext getContextFor(Message message) {
+        return messageContexts.get(message);
     }
     
     /**

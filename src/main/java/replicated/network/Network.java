@@ -127,4 +127,13 @@ public interface Network {
     default void sendOnChannel(SocketChannel channel, Message message) {
         throw new UnsupportedOperationException("Direct channel send is not supported by this Network implementation");
     }
+    
+    /**
+     * Retrieves preserved {@link MessageContext} for a given decoded {@link Message}, if available.
+     * Returns {@code null} when the network implementation does not track contexts or the message
+     * did not originate locally.
+     */
+    default MessageContext getContextFor(Message message) {
+        return null;
+    }
 }

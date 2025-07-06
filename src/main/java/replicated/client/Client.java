@@ -1,6 +1,7 @@
 package replicated.client;
 
 import replicated.messaging.*;
+import replicated.network.MessageContext;
 import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
 import java.util.*;
@@ -239,7 +240,7 @@ public final class Client implements MessageHandler {
     }
     
     @Override
-    public void onMessageReceived(Message message) {
+    public void onMessageReceived(Message message, MessageContext ctx) {
         if (message.messageType() != MessageType.CLIENT_RESPONSE) {
             // Only handle client responses
             return;

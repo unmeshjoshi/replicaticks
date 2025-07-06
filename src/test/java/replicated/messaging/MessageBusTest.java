@@ -2,6 +2,7 @@ package replicated.messaging;
 
 import replicated.network.Network;
 import replicated.network.SimulatedNetwork;
+import replicated.network.MessageContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import static org.junit.jupiter.api.Assertions.*;
@@ -237,7 +238,7 @@ class MessageBusTest {
         private final List<Message> receivedMessages = new ArrayList<>();
         
         @Override
-        public void onMessageReceived(Message message) {
+        public void onMessageReceived(Message message, MessageContext ctx) {
             receivedMessages.add(message);
         }
         

@@ -2,6 +2,7 @@ package replicated.replica;
 
 import replicated.messaging.*;
 import replicated.network.SimulatedNetwork;
+import replicated.network.MessageContext;
 import replicated.storage.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -176,9 +177,7 @@ class ReplicaBaseTest {
         }
         
         @Override
-        public void onMessageReceived(Message message) {
-            // Test implementation - no message handling needed
-        }
+        public void onMessageReceived(Message message, MessageContext ctx) { }
         
         @Override
         protected void sendTimeoutResponse(PendingRequest request) {

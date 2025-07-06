@@ -1,6 +1,7 @@
 package replicated.messaging;
 
 import replicated.network.Network;
+import replicated.network.MessageContext;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -174,8 +175,22 @@ public class MessageBus {
             
             List<Message> messages = network.receive(address);
             for (Message message : messages) {
-                handler.onMessageReceived(message);
+                MessageContext ctx = network.getContextFor(message);
+                handler.onMessageReceived(message, ctx);
             }
+        }
+    }
+    
+    // === NEW helper for direct-channel replies ===
+    public void reply(MessageContext ctx, Message response) {
+        if (response == null) {
+            throw new IllegalArgumentException("Response cannot be null");
+        }
+        if (ctx != null && ctx.canRouteResponse()) {
+            network.sendOnChannel(ctx.getSourceChannel(), response);
+        } else {
+            // Fallback to normal send if direct channel not available (e.g., simulation or ctx null)
+            network.send(response);
         }
     }
 } 

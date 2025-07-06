@@ -1,6 +1,7 @@
 package replicated.client;
 
 import replicated.messaging.*;
+import replicated.network.MessageContext;
 import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
 import replicated.network.Network;
@@ -114,7 +115,7 @@ class ClientTest {
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
-        client.onMessageReceived(responseMessage);
+        client.onMessageReceived(responseMessage, null);
         
         // Then - future should be completed
         // Note: In actual implementation, correlation ID matching will be tested
@@ -136,7 +137,7 @@ class ClientTest {
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
-        client.onMessageReceived(responseMessage);
+        client.onMessageReceived(responseMessage, null);
         
         // Then - future should be completed
         assertDoesNotThrow(() -> client.tick(1L));
@@ -193,7 +194,7 @@ class ClientTest {
             MessageType.CLIENT_RESPONSE, response);
         
         // Then - should not throw exception
-        assertDoesNotThrow(() -> client.onMessageReceived(responseMessage));
+        assertDoesNotThrow(() -> client.onMessageReceived(responseMessage, null));
     }
     
     @Test
@@ -208,7 +209,7 @@ class ClientTest {
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_RESPONSE, response);
         
-        client.onMessageReceived(responseMessage);
+        client.onMessageReceived(responseMessage, null);
         client.tick(1L);
         
         // Then - should not cause issues with subsequent operations

@@ -4,6 +4,7 @@ import replicated.messaging.*;
 import replicated.storage.*;
 import replicated.future.ListenableFuture;
 import java.util.*;
+import replicated.network.MessageContext; // Added import
 
 /**
  * Quorum-based replica implementation for distributed key-value store.
@@ -28,15 +29,15 @@ public final class QuorumBasedReplica extends Replica {
     }
     
     @Override
-    public void onMessageReceived(Message message) {
+    public void onMessageReceived(Message message, MessageContext ctx) {
         if (messageBus == null || storage == null) {
             // Skip message processing if not fully configured
             return;
         }
         
         switch (message.messageType()) {
-            case CLIENT_GET_REQUEST -> handleClientGetRequest(message);
-            case CLIENT_SET_REQUEST -> handleClientSetRequest(message);
+            case CLIENT_GET_REQUEST -> handleClientGetRequest(message, ctx);
+            case CLIENT_SET_REQUEST -> handleClientSetRequest(message, ctx);
             case INTERNAL_GET_REQUEST -> handleInternalGetRequest(message);
             case INTERNAL_SET_REQUEST -> handleInternalSetRequest(message);
             case INTERNAL_GET_RESPONSE -> handleInternalGetResponse(message);
@@ -52,23 +53,33 @@ public final class QuorumBasedReplica extends Replica {
         if (request instanceof QuorumRequest quorumRequest) {
             if (quorumRequest.operation == QuorumRequest.Operation.GET) {
                 GetResponse timeoutResponse = new GetResponse(quorumRequest.key, null);
-                messageBus.sendMessage(new Message(
+                Message clientResponse = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(timeoutResponse)
-                ));
+                );
+                if (quorumRequest.responseContext != null) {
+                    messageBus.reply(quorumRequest.responseContext, clientResponse);
+                } else {
+                    messageBus.sendMessage(clientResponse);
+                }
             } else if (quorumRequest.operation == QuorumRequest.Operation.SET) {
                 SetResponse timeoutResponse = new SetResponse(quorumRequest.key, false);
-                messageBus.sendMessage(new Message(
+                Message clientResponse = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(timeoutResponse)
-                ));
+                );
+                if (quorumRequest.responseContext != null) {
+                    messageBus.reply(quorumRequest.responseContext, clientResponse);
+                } else {
+                    messageBus.sendMessage(clientResponse);
+                }
             }
         }
     }
     
     // Quorum-specific message handlers
     
-    private void handleClientGetRequest(Message message) {
+    private void handleClientGetRequest(Message message, MessageContext ctx) {
         String correlationId = generateRequestId();
         GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
@@ -77,7 +88,7 @@ public final class QuorumBasedReplica extends Replica {
             correlationId, message.source(), QuorumRequest.Operation.GET, 
             clientRequest.key(), null, timestamp, getCurrentTick()
         );
-        
+        quorumRequest.responseContext = ctx;
         pendingRequests.put(correlationId, quorumRequest);
         
         // Send INTERNAL_GET_REQUEST to all peers (including self)
@@ -93,7 +104,7 @@ public final class QuorumBasedReplica extends Replica {
         }
     }
     
-    private void handleClientSetRequest(Message message) {
+    private void handleClientSetRequest(Message message, MessageContext ctx) {
         String correlationId = generateRequestId();
         SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
@@ -103,7 +114,7 @@ public final class QuorumBasedReplica extends Replica {
             correlationId, message.source(), QuorumRequest.Operation.SET,
             clientRequest.key(), value, timestamp, getCurrentTick()
         );
-        
+        quorumRequest.responseContext = ctx;
         pendingRequests.put(correlationId, quorumRequest);
         
         // Send INTERNAL_SET_REQUEST to all peers (including self)
@@ -178,11 +189,13 @@ public final class QuorumBasedReplica extends Replica {
                 VersionedValue latestValue = quorumRequest.getLatestValue();
                 GetResponse clientResponse = new GetResponse(quorumRequest.key, latestValue);
                 
-                messageBus.sendMessage(new Message(
+                Message clientMessage = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(clientResponse)
-                ));
-                
+                );
+
+
+                messageBus.reply(quorumRequest.responseContext, clientMessage);
                 pendingRequests.remove(response.correlationId());
             }
         }
@@ -202,10 +215,15 @@ public final class QuorumBasedReplica extends Replica {
                 boolean success = quorumRequest.getSuccessCount() >= calculateQuorumSize();
                 SetResponse clientResponse = new SetResponse(quorumRequest.key, success);
                 
-                messageBus.sendMessage(new Message(
+                Message clientMessage = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(clientResponse)
-                ));
+                );
+                if (quorumRequest.responseContext != null) {
+                    messageBus.reply(quorumRequest.responseContext, clientMessage);
+                } else {
+                    messageBus.sendMessage(clientMessage);
+                }
                 
                 pendingRequests.remove(response.correlationId());
             }
@@ -229,6 +247,7 @@ public final class QuorumBasedReplica extends Replica {
         final Operation operation;
         final VersionedValue setValue; // For SET operations
         final long timestamp;
+        MessageContext responseContext;
         
         private final Map<NetworkAddress, Object> responses = new HashMap<>();
         
