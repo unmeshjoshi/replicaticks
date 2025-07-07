@@ -102,9 +102,6 @@ public abstract class Replica implements MessageHandler {
         // Tick the main timeout object
         timeout.tick();
         
-        // Process storage operations first
-        storage.tick();
-        
         // Handle request timeouts
         handleRequestTimeouts();
         

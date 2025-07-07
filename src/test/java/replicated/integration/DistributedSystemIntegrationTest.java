@@ -6,6 +6,7 @@ import replicated.storage.*;
 import replicated.future.ListenableFuture;
 import replicated.replica.QuorumBasedReplica;
 import replicated.client.Client;
+import replicated.simulation.SimulationDriver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +27,7 @@ class DistributedSystemIntegrationTest {
     private List<Client> clients;
     private List<NetworkAddress> replicaAddresses;
     private Random random;
+    private SimulationDriver simulationDriver;
     
     @BeforeEach
     void setUp() {
@@ -46,6 +48,7 @@ class DistributedSystemIntegrationTest {
         
         // Create replicas with individual storage - use predictable seeds for each replica
         replicas = new ArrayList<>();
+        List<Storage> storages = new ArrayList<>();
         for (int i = 0; i < replicaAddresses.size(); i++) {
             NetworkAddress address = replicaAddresses.get(i);
             List<NetworkAddress> peers = replicaAddresses.stream()
@@ -54,6 +57,7 @@ class DistributedSystemIntegrationTest {
             
             // Use a fixed seed for each replica to ensure test isolation
             Storage storage = new SimulatedStorage(new Random(42L + i));
+            storages.add(storage);
             QuorumBasedReplica replica = new QuorumBasedReplica("replica-" + address.port(), address, peers, messageBus, storage);
             replicas.add(replica);
             
@@ -68,6 +72,15 @@ class DistributedSystemIntegrationTest {
             clients.add(client);
             // Client handler is auto-registered by MessageBus.sendClientMessage()
         }
+        
+        // Create SimulationDriver to orchestrate all component ticking
+        simulationDriver = new SimulationDriver(
+            List.of(network),
+            storages,
+            replicas.stream().map(replica -> (replicated.replica.Replica) replica).toList(),
+            clients,
+            List.of(messageBus)
+        );
     }
     
     @AfterEach
@@ -456,35 +469,16 @@ class DistributedSystemIntegrationTest {
     private void processDistributedOperation(int ticks) {
         System.out.println("Debug: Starting processDistributedOperation for " + ticks + " ticks");
         
-        for (int currentTick = 1; currentTick <= ticks; currentTick++) {
-            // Process all components in correct order
-            System.out.println("Debug: Processing tick " + currentTick + "/" + ticks);
-            
-            // 1. Process clients and replicas (application layer)
-            final long tickValue = currentTick;
-            clients.forEach(client -> client.tick());
-            replicas.forEach(replica -> replica.tick());
-            
-            // 2. Process message bus routing (includes network.tick())
-            messageBus.tick();
-            
-            // Debug: Check message queue states
-            if (currentTick % 5 == 0) { // Log every 5 ticks to avoid spam
-                System.out.println("Debug: Tick " + currentTick + " - checking system state");
-                for (int i = 0; i < replicaAddresses.size(); i++) {
-                    NetworkAddress addr = replicaAddresses.get(i);
-                    List<Message> messages = network.receive(addr);
-                    if (!messages.isEmpty()) {
-                        System.out.println("Debug: Replica " + addr + " has " + messages.size() + " unprocessed messages");
-                    }
-                }
-            }
-            
-            // Small delay to allow async operations to complete
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        // Use SimulationDriver to orchestrate all component ticking
+        simulationDriver.runSimulation(ticks);
+        
+        // Debug: Check message queue states after simulation
+        System.out.println("Debug: Completed processDistributedOperation - checking final system state");
+        for (int i = 0; i < replicaAddresses.size(); i++) {
+            NetworkAddress addr = replicaAddresses.get(i);
+            List<Message> messages = network.receive(addr);
+            if (!messages.isEmpty()) {
+                System.out.println("Debug: Replica " + addr + " has " + messages.size() + " unprocessed messages");
             }
         }
         

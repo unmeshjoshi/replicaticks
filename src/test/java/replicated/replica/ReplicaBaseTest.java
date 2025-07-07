@@ -96,20 +96,7 @@ class ReplicaBaseTest {
         assertTrue(id1.startsWith("test-"));
         assertTrue(id2.startsWith("test-"));
     }
-    
-    @Test
-    void shouldCallStorageTickDuringTick() {
-        // Given
-        TestableStorage testStorage = new TestableStorage();
-        TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, testStorage, 10);
-        
-        // When
-        replica.tick();
-        
-        // Then
-        assertTrue(testStorage.tickCalled);
-    }
-    
+
     @Test
     void shouldHandleTimeoutsCorrectly() {
         // Given

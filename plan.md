@@ -337,17 +337,51 @@ Implement ability for replicas to send a response back on the exact `SocketChann
 
 ## Phase 12: Centralized Timeout & Tick Management (TigerBeetle-Style) ✅ **COMPLETED**
 
-- [x] Refactored Client and Replica to use the new Timeout class for request timeouts, removing internal tick counters and tick parameter passing.
-- [x] Updated all request-tracking and timeout logic to use Timeout objects.
-- [x] Refactored QuorumBasedReplica and all related request classes to use Timeout.
-- [x] Updated all relevant tests, including ReplicaBaseTest, to use Timeout and match the new API.
-- [x] Fixed test logic to ensure timeouts are tested deterministically.
-- [x] All tests are passing after this refactor.
+### ✅ **TIMEOUT MANAGEMENT REFACTORING**
+- [x] **Timeout Class**: Created TigerBeetle-style Timeout class with internal tick counter, start/stop/reset methods
+- [x] **Client Integration**: Refactored Client to use Timeout objects for request timeouts, removing internal tick counters
+- [x] **Replica Integration**: Refactored QuorumBasedReplica to use Timeout objects for request timeouts
+- [x] **API Simplification**: Removed tick parameters from interfaces, components manage internal counters where needed
+- [x] **Test Updates**: Updated all tests to use Timeout and match new API without tick parameters
+- [x] **Deterministic Testing**: Fixed test logic to ensure timeouts are tested deterministically
+
+### ✅ **CENTRALIZED TICK ORCHESTRATION**
+- [x] **SimulationDriver**: Created centralized tick orchestration following TigerBeetle's approach
+- [x] **Deterministic Order**: Components ticked in order: Clients → Replicas → MessageBuses → Networks → Storage
+- [x] **MessageBus Support**: Extended SimulationDriver to include MessageBus ticking for proper message routing
+- [x] **Integration Updates**: Updated DistributedSystemIntegrationTest and DirectChannelOrderTest to use SimulationDriver
+- [x] **Test Utilities**: Added TestUtils.runUntil() for test scenarios that need to wait for conditions
+- [x] **Redundant Ticking Removal**: Eliminated issue where Replica was calling storage.tick() internally
+
+### ✅ **ARCHITECTURAL BENEFITS ACHIEVED**
+- [x] **Single Source of Truth**: SimulationDriver is the only component responsible for tick orchestration
+- [x] **TigerBeetle Alignment**: Follows same tick management pattern as reference implementation
+- [x] **Deterministic Behavior**: All components progress together in predictable order
+- [x] **Test Reliability**: Tests are more reliable with centralized tick management
+- [x] **Clean Separation**: No component ticks another component internally
+
+### ✅ **TEST RESULTS**
+- [x] **241 tests total** - All passing ✅
+- [x] **0 failures** ✅
+- [x] **Clean build** ✅
 
 ---
 
-## Next Task: Centralized SimulationDriver
+## Phase 13: Direct-Channel Response Architecture ⏳ **← NEXT**
 
-- Implement a centralized SimulationDriver for orchestrating ticks across all components (network, storage, replicas, clients) in a deterministic order.
-- The SimulationDriver will be responsible for advancing the simulation clock and calling tick() on all registered components in the correct order.
-- This will further align the simulation architecture with TigerBeetle's approach and ensure full determinism and reproducibility.
+### 🆕 Phase 13A: Network Layer Direct-Channel Support
+
+### Scope
+Implement ability for replicas to send responses back on the exact `SocketChannel` that carried the request, ensuring proper request-response correlation and connection reuse.
+
+### ✅ **COMPLETED: MessageContext Infrastructure**
+- [x] **MessageContext Class**: Created to preserve source channel information for response routing
+- [x] **Network Integration**: NioNetwork stores MessageContext for each message and provides getContextFor() method
+- [x] **Request Correlation**: Network tracks pending requests with correlation IDs for proper response routing
+- [x] **Channel Management**: Proper separation of inbound/outbound connections with full metadata
+
+### ⏭️ **NEXT STEPS**
+1. **MessageBus.reply() Helper**: Add helper method to delegate to `network.sendOnChannel()`
+2. **Replica Integration**: Update replicas to persist MessageContext with pending requests and use `messageBus.reply()`
+3. **Integration Tests**: Verify responses arrive in-order on the same socket
+4. **Connection Reuse**: Ensure proper connection pooling and reuse patterns

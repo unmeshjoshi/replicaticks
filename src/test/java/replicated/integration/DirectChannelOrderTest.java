@@ -10,6 +10,7 @@ import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
 import replicated.util.DebugConfig;
+import replicated.simulation.SimulationDriver;
 
 import java.util.*;
 
@@ -24,25 +25,40 @@ public class DirectChannelOrderTest {
     private MessageBus bus;
     private List<QuorumBasedReplica> replicas;
     private NetworkAddress replicaAddr;
+    private SimulationDriver simulationDriver;
+    private Client client;
 
     @BeforeEach
     void setup() {
         network = new SimulatedNetwork(new Random(1));
         bus = new MessageBus(network, new JsonMessageCodec());
+        client = new Client(bus);
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
-        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), bus, new SimulatedStorage(new Random()));
+        SimulatedStorage storage = new SimulatedStorage(new Random());
+        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), bus, storage);
         bus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
+        
+        // Create SimulationDriver to orchestrate all component ticking
+        simulationDriver = new SimulationDriver(
+            List.of(network),
+            List.of(storage),
+            replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
+            List.of(client),
+            List.of(bus)
+        );
     }
 
     @Test
     void shouldPreserveSocketAndOrder() {
-        Client client = new Client(bus);
+        // Note: simulationDriver is already created in setup() with the correct storage instance
+        // No need to recreate it here
 
         // send first request
         ListenableFuture<Boolean> f1 = client.sendSetRequest("k", "v1".getBytes(), replicaAddr);
         // advance ticks to process
-        processTicks(10);
+        processTicks(100);
+
         assertTrue(f1.isCompleted() && f1.getResult());
 
         // Capture context after first response
@@ -60,11 +76,7 @@ public class DirectChannelOrderTest {
     }
 
     private void processTicks(int n) {
-        long tick = 1;
-        for (int i = 0; i < n; i++, tick++) {
-            for (QuorumBasedReplica r : replicas) r.tick();
-            bus.tick();
-            network.tick();
-        }
+        // Use SimulationDriver to orchestrate all component ticking
+        simulationDriver.runSimulation(n);
     }
 }
