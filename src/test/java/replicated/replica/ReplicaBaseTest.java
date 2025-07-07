@@ -4,6 +4,7 @@ import replicated.messaging.*;
 import replicated.network.SimulatedNetwork;
 import replicated.network.MessageContext;
 import replicated.storage.*;
+import replicated.util.Timeout;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -113,10 +114,10 @@ class ReplicaBaseTest {
     void shouldHandleTimeoutsCorrectly() {
         // Given
         TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, storage, 5);
-        TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 1);
+        TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 5); // Use 5 ticks timeout
         replica.testAddPendingRequest("req-1", request);
         
-        // When - tick beyond timeout (startTick=1, timeout=5, so tick=6 should timeout)
+        // When - tick beyond timeout (timeout=5, so tick=6 should timeout)
         for (int i = 0; i < 6; i++) {
             replica.tick();
         }
@@ -130,10 +131,10 @@ class ReplicaBaseTest {
     void shouldNotTimeoutRequestsWithinTimeout() {
         // Given
         TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, storage, 10);
-        TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 1);
+        TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 10);
         replica.testAddPendingRequest("req-1", request);
         
-        // When - tick within timeout (startTick=1, timeout=10, so tick=5 should not timeout)
+        // When - tick within timeout (timeout=10, so tick=5 should not timeout)
         for (int i = 0; i < 5; i++) {
             replica.tick();
         }
@@ -200,8 +201,14 @@ class ReplicaBaseTest {
     }
     
     private static class TestPendingRequest extends Replica.PendingRequest {
-        TestPendingRequest(String requestId, NetworkAddress clientAddress, String key, long startTick) {
-            super(requestId, clientAddress, key, startTick);
+        TestPendingRequest(String requestId, NetworkAddress clientAddress, String key, int timeoutTicks) {
+            super(requestId, clientAddress, key, createTimeout(requestId, timeoutTicks));
+        }
+        
+        private static Timeout createTimeout(String requestId, int timeoutTicks) {
+            Timeout timeout = new Timeout("test-request-" + requestId, timeoutTicks);
+            timeout.start();
+            return timeout;
         }
     }
     

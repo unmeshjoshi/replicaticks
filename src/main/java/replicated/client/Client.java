@@ -4,6 +4,7 @@ import replicated.messaging.*;
 import replicated.network.MessageContext;
 import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
+import replicated.util.Timeout;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -30,8 +31,8 @@ public final class Client implements MessageHandler {
     // Connection pool rotation index
     private int replicaIndex = 0;
     
-    // Internal counter for timeout management (TigerBeetle pattern)
-    private long currentTick = 0;
+    // Timeout management using TigerBeetle-style Timeout class
+    private final Timeout timeout;
     
     /**
      * Creates a Client with bootstrap replicas for cluster discovery.
@@ -60,6 +61,9 @@ public final class Client implements MessageHandler {
         this.bootstrapReplicas = new ArrayList<>(bootstrapReplicas);
         this.requestTimeoutTicks = requestTimeoutTicks;
         this.clientId = "client-" + UUID.randomUUID().toString().substring(0, 8);
+        
+        // Initialize timeout management
+        this.timeout = new Timeout("client-request-timeout", requestTimeoutTicks);
         
         // Initialize known replicas with bootstrap replicas
         this.knownReplicas.addAll(bootstrapReplicas);
@@ -149,9 +153,11 @@ public final class Client implements MessageHandler {
         String correlationId = generateCorrelationId();
         ListenableFuture<VersionedValue> future = new ListenableFuture<>();
         
-        // Track the pending request
+        // Track the pending request with timeout
+        Timeout requestTimeout = new Timeout("get-request-" + correlationId, requestTimeoutTicks);
+        requestTimeout.start();
         PendingRequest pendingRequest = new PendingRequest(
-            correlationId, PendingRequest.Type.GET, key, future, getCurrentTick()
+            correlationId, PendingRequest.Type.GET, key, future, requestTimeout
         );
         pendingRequests.put(correlationId, pendingRequest);
         
@@ -165,9 +171,11 @@ public final class Client implements MessageHandler {
         String correlationId = generateCorrelationId();
         ListenableFuture<Boolean> future = new ListenableFuture<>();
         
-        // Track the pending request
+        // Track the pending request with timeout
+        Timeout requestTimeout = new Timeout("set-request-" + correlationId, requestTimeoutTicks);
+        requestTimeout.start();
         PendingRequest pendingRequest = new PendingRequest(
-            correlationId, PendingRequest.Type.SET, key, future, getCurrentTick()
+            correlationId, PendingRequest.Type.SET, key, future, requestTimeout
         );
         pendingRequests.put(correlationId, pendingRequest);
         
@@ -278,18 +286,20 @@ public final class Client implements MessageHandler {
     
     /**
      * Called by the simulation loop for each tick.
-     * Handles request timeouts and cleanup.
-     * Client implementations manage their own internal tick counters for timeout management.
+     * Handles request timeouts and cleanup using Timeout objects.
      */
     public void tick() {
-        currentTick++; // Increment internal counter (TigerBeetle pattern)
+        // Tick the main timeout object
+        timeout.tick();
         
         // Handle request timeouts
         List<String> timedOutRequests = new ArrayList<>();
         
         for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
             PendingRequest request = entry.getValue();
-            if (currentTick - request.startTick >= requestTimeoutTicks) {
+            request.timeout.tick(); // Tick each request's timeout
+            
+            if (request.timeout.fired()) {
                 timedOutRequests.add(entry.getKey());
                 
                 // Complete the future with timeout error
@@ -357,10 +367,7 @@ public final class Client implements MessageHandler {
         return clientId + "-" + correlationIdGenerator.incrementAndGet();
     }
     
-    private long getCurrentTick() {
-        // In a real implementation, this would come from the simulation
-        return System.currentTimeMillis() / 1000; // Simple tick approximation
-    }
+
     
     private byte[] serializePayload(Object payload) {
         try {
@@ -387,14 +394,14 @@ public final class Client implements MessageHandler {
         final Type type;
         final String key;
         final ListenableFuture<?> future;
-        final long startTick;
+        final Timeout timeout;
         
-        PendingRequest(String correlationId, Type type, String key, ListenableFuture<?> future, long startTick) {
+        PendingRequest(String correlationId, Type type, String key, ListenableFuture<?> future, Timeout timeout) {
             this.correlationId = correlationId;
             this.type = type;
             this.key = key;
             this.future = future;
-            this.startTick = startTick;
+            this.timeout = timeout;
         }
     }
     

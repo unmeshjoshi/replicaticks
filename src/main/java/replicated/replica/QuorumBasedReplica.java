@@ -3,6 +3,7 @@ package replicated.replica;
 import replicated.messaging.*;
 import replicated.storage.*;
 import replicated.future.ListenableFuture;
+import replicated.util.Timeout;
 import java.util.*;
 import replicated.network.MessageContext; // Added import
 
@@ -84,9 +85,13 @@ public final class QuorumBasedReplica extends Replica {
         GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         
+        // Create timeout for this request
+        Timeout requestTimeout = new Timeout("quorum-get-" + correlationId, requestTimeoutTicks);
+        requestTimeout.start();
+        
         QuorumRequest quorumRequest = new QuorumRequest(
             correlationId, message.source(), QuorumRequest.Operation.GET, 
-            clientRequest.key(), null, timestamp, getCurrentTick()
+            clientRequest.key(), null, timestamp, requestTimeout
         );
         quorumRequest.responseContext = ctx;
         pendingRequests.put(correlationId, quorumRequest);
@@ -110,9 +115,13 @@ public final class QuorumBasedReplica extends Replica {
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         VersionedValue value = new VersionedValue(clientRequest.value(), timestamp);
         
+        // Create timeout for this request
+        Timeout requestTimeout = new Timeout("quorum-set-" + correlationId, requestTimeoutTicks);
+        requestTimeout.start();
+        
         QuorumRequest quorumRequest = new QuorumRequest(
             correlationId, message.source(), QuorumRequest.Operation.SET,
-            clientRequest.key(), value, timestamp, getCurrentTick()
+            clientRequest.key(), value, timestamp, requestTimeout
         );
         quorumRequest.responseContext = ctx;
         pendingRequests.put(correlationId, quorumRequest);
@@ -252,8 +261,8 @@ public final class QuorumBasedReplica extends Replica {
         private final Map<NetworkAddress, Object> responses = new HashMap<>();
         
         QuorumRequest(String requestId, NetworkAddress clientAddress, Operation operation,
-                     String key, VersionedValue setValue, long timestamp, long startTick) {
-            super(requestId, clientAddress, key, startTick);
+                     String key, VersionedValue setValue, long timestamp, Timeout timeout) {
+            super(requestId, clientAddress, key, timeout);
             this.operation = operation;
             this.setValue = setValue;
             this.timestamp = timestamp;

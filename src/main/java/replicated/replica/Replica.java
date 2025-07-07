@@ -3,6 +3,7 @@ package replicated.replica;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
 import replicated.storage.Storage;
+import replicated.util.Timeout;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -28,8 +29,8 @@ public abstract class Replica implements MessageHandler {
     protected final AtomicLong requestIdGenerator = new AtomicLong(0);
     protected final Map<String, PendingRequest> pendingRequests = new HashMap<>();
     
-    // Internal counter for timeout management (TigerBeetle pattern)
-    private long currentTick = 0;
+    // Timeout management using TigerBeetle-style Timeout class
+    private final Timeout timeout;
 
     /**
      * Base constructor for all replica implementations.
@@ -60,6 +61,9 @@ public abstract class Replica implements MessageHandler {
         this.storage = storage;
         this.requestTimeoutTicks = requestTimeoutTicks;
         
+        // Initialize timeout management
+        this.timeout = new Timeout("replica-request-timeout", requestTimeoutTicks);
+        
         // Validate dependencies
         if (messageBus != null && storage == null) {
             throw new IllegalArgumentException("Storage cannot be null when MessageBus is provided");
@@ -89,43 +93,45 @@ public abstract class Replica implements MessageHandler {
      * Common tick() processing for all replica types.
      * This handles infrastructure concerns like storage ticks and timeouts.
      * Subclasses can override to add specific logic.
-     * Replica implementations manage their own internal tick counters for timeout management.
      */
     public void tick() {
         if (messageBus == null || storage == null) {
             return;
         }
         
-        currentTick++; // Increment internal counter (TigerBeetle pattern)
+        // Tick the main timeout object
+        timeout.tick();
         
         // Process storage operations first
         storage.tick();
         
         // Handle request timeouts
-        handleRequestTimeouts(currentTick);
+        handleRequestTimeouts();
         
         // Allow subclasses to perform additional tick processing
-        onTick(currentTick);
+        onTick();
     }
     
     /**
      * Hook method for subclasses to perform additional tick processing.
      * This is called after common timeout handling.
      */
-    protected void onTick(long currentTick) {
-        // currentTick is already set in the main tick() method
+    protected void onTick() {
+        // Subclasses can override to add specific tick processing
     }
     
     /**
      * Handles request timeouts for all pending requests.
      * Subclasses should implement sendTimeoutResponse() to handle specific timeouts.
      */
-    protected void handleRequestTimeouts(long currentTick) {
+    protected void handleRequestTimeouts() {
         List<String> timedOutRequests = new ArrayList<>();
         
         for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
             PendingRequest request = entry.getValue();
-            if (currentTick - request.startTick >= requestTimeoutTicks) {
+            request.timeout.tick(); // Tick each request's timeout
+            
+            if (request.timeout.fired()) {
                 timedOutRequests.add(entry.getKey());
                 
                 // Send timeout response to client
@@ -152,13 +158,7 @@ public abstract class Replica implements MessageHandler {
         return name + "-" + requestIdGenerator.incrementAndGet();
     }
     
-    /**
-     * Gets the current tick for timestamp purposes.
-     * In a real implementation, this would come from the simulation.
-     */
-    protected long getCurrentTick() {
-        return System.currentTimeMillis() / 1000; // Simple tick approximation
-    }
+
     
     /**
      * Serializes a payload object to bytes.
@@ -214,13 +214,13 @@ public abstract class Replica implements MessageHandler {
         public final String requestId;
         public final NetworkAddress clientAddress;
         public final String key;
-        public final long startTick;
+        public final Timeout timeout;
         
-        protected PendingRequest(String requestId, NetworkAddress clientAddress, String key, long startTick) {
+        protected PendingRequest(String requestId, NetworkAddress clientAddress, String key, Timeout timeout) {
             this.requestId = requestId;
             this.clientAddress = clientAddress;
             this.key = key;
-            this.startTick = startTick;
+            this.timeout = timeout;
         }
     }
 } 
