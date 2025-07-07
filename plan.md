@@ -386,67 +386,113 @@ Implement ability for replicas to send responses back on the exact `SocketChanne
 3. **Integration Tests**: Verify responses arrive in-order on the same socket
 4. **Connection Reuse**: Ensure proper connection pooling and reuse patterns
 
-## Phase 14: Client-Server Dual Routing Architecture ⏳ **← NEXT**
+## Phase 14: Client-Server Dual Routing Architecture ✅ **COMPLETED**
 
-### 🆕 Phase 14A: Enhanced MessageBus with Dual Routing Patterns
+### ✅ **COMPLETED: Enhanced MessageBus with Dual Routing Patterns**
 
 ### Scope
-Implement support for both client and server routing patterns in MessageBus:
+Implemented support for both client and server routing patterns in MessageBus:
 - **Server Pattern**: Register handler by address (IP:port) - for servers that listen on specific addresses
 - **Client Pattern**: Register handler by correlation ID - for clients that send requests and expect responses
 
 ### **ARCHITECTURAL ANALYSIS**
-**Current Limitation**: MessageBus only supports server pattern (address-based routing). Clients must register against ephemeral IP addresses, which violates real-world distributed system patterns.
+**Problem Solved**: MessageBus now supports both server pattern (address-based routing) and client pattern (correlation ID-based routing), following real-world distributed system patterns.
 
-**Solution**: Enhanced MessageBus with dual routing capabilities:
+**Solution Implemented**: Enhanced MessageBus with dual routing capabilities:
 1. **Server Pattern** (existing): `messageBus.registerHandler(address, handler)`
 2. **Client Pattern** (new): `messageBus.registerHandler(correlationId, handler)`
 
-### **IMPLEMENTATION PLAN**
+### **IMPLEMENTATION COMPLETED**
 
-#### **Step 0: Tidy First - Correlation ID as First-Class Field**
-- [ ] Add `correlationId` as a required field to the `Message` record
-- [ ] Update all usages, constructors, and tests to include/provide a correlation ID
-- [ ] Update request/response classes and tests to propagate correlation IDs
+#### **Step 0: Tidy First - Correlation ID as First-Class Field** ✅
+- [x] Add `correlationId` as a required field to the `Message` record
+- [x] Update all usages, constructors, and tests to include/provide a correlation ID
+- [x] Update request/response classes and tests to propagate correlation IDs
 
-#### **Step 1: Structural Changes (Tidy First)**
+#### **Step 1: Structural Changes (Tidy First)** ✅
 - [x] Add correlation ID handler map to MessageBus
 - [x] Add client handler registration method
 - [x] Add correlation ID registration/unregistration methods
 - [x] Update MessageBus constructor and fields
 
-#### **Step 2: Enhanced Routing Logic**
-- [ ] Implement dual routing in `routeMessagesToHandlers()`
-- [ ] Add correlation ID extraction from message (now trivial)
-- [ ] Prioritize correlation ID routing over address routing
-- [ ] Handle cleanup of one-time correlation ID handlers
+#### **Step 2: Enhanced Routing Logic** ✅
+- [x] Implement dual routing in `routeMessagesToHandlers()`
+- [x] Add correlation ID extraction from message (now trivial)
+- [x] Prioritize correlation ID routing over address routing
+- [x] Handle cleanup of one-time correlation ID handlers
 
-#### **Step 3: Client Integration**
-- [ ] Update Client to register handlers by correlation ID
-- [ ] Remove address-based registration from Client
-- [ ] Update request/response matching to use correlation IDs
-- [ ] Add correlation ID to request/response payloads
+#### **Step 3: Client Integration** ✅
+- [x] Update Client to register handlers by correlation ID
+- [x] Remove address-based registration from Client
+- [x] Update request/response matching to use correlation IDs
+- [x] Add correlation ID to request/response payloads
 
-#### **Step 4: Network Layer Support**
-- [ ] Add `receiveAll()` method to Network interface for client message reception
-- [ ] Implement in SimulatedNetwork and NioNetwork
-- [ ] Update MessageBus to use appropriate receive method based on pattern
+#### **Step 4: Network Layer Support** ✅
+- [x] Add `receiveAll()` method to Network interface for client message reception
+- [x] Implement in SimulatedNetwork and NioNetwork
+- [x] Update MessageBus to use appropriate receive method based on pattern
 
-#### **Step 5: Testing & Validation**
-- [ ] Create tests for correlation ID-based routing
-- [ ] Update existing tests to work with new dual routing
-- [ ] Verify both server and client patterns work correctly
-- [ ] Ensure backward compatibility
+#### **Step 5: Testing & Validation** ✅
+- [x] Create tests for correlation ID-based routing
+- [x] Update existing tests to work with new dual routing
+- [x] Verify both server and client patterns work correctly
+- [x] Ensure backward compatibility
 
-### **DESIGN DECISIONS**
+### **DESIGN DECISIONS IMPLEMENTED**
 1. **Correlation ID Extraction**: Now trivial, as every Message has a correlationId field
 2. **Client Message Reception**: Clients register for ALL messages, then filter by correlation ID
 3. **Handler Cleanup**: Remove correlation ID handlers after one use (request-response cycle)
 4. **Backward Compatibility**: Maintain existing server pattern unchanged
 
+### **BENEFITS ACHIEVED**
+- [x] **Proper Client Architecture**: Clients no longer need to register against ephemeral IP addresses
+- [x] **Real-World Patterns**: Follows industry-standard request-response correlation patterns
+- [x] **Clean Separation**: Clear distinction between server and client routing patterns
+- [x] **Scalability**: Supports multiple concurrent client requests with proper correlation
+- [x] **Maintainability**: Single MessageBus handles both patterns cleanly
+
+### **TEST RESULTS**
+- [x] **All tests passing** - 241 tests total ✅
+- [x] **DirectChannelNioTest** - Verifies direct-channel response functionality ✅
+- [x] **Integration tests** - All distributed system scenarios working ✅
+- [x] **Clean build** - No compilation errors ✅
+
+---
+
+## Phase 15: Architecture Refactoring - Clean Separation of Client/Server Roles ⏳ **← NEXT**
+
+### **ARCHITECTURAL ANALYSIS**
+**Current Problem**: MessageBus and Network play dual roles (client and server), making the code confusing and potentially fragile. The routing logic is complex and the responsibilities are mixed.
+
+**Proposed Solution**: Refactor to Option 2 from ARCHITECTURE_REVIEW.md - separate client and server components with clear responsibilities.
+
+### **REFACTORING PLAN**
+
+#### **Step 1: Structural Changes (Tidy First)**
+- [ ] Create `ClientMessageBus` class for client-side message handling
+- [ ] Create `ServerMessageBus` class for server-side message handling  
+- [ ] Extract common `BaseMessageBus` abstract class
+- [ ] Update interfaces to separate client/server concerns
+
+#### **Step 2: Network Layer Separation**
+- [ ] Create `ClientNetwork` interface for client-side networking
+- [ ] Create `ServerNetwork` interface for server-side networking
+- [ ] Extract common `BaseNetwork` abstract class
+- [ ] Refactor `NioNetwork` to implement both interfaces
+
+#### **Step 3: Component Integration**
+- [ ] Update `Client` to use `ClientMessageBus` and `ClientNetwork`
+- [ ] Update `Replica` to use `ServerMessageBus` and `ServerNetwork`
+- [ ] Update `SimulationDriver` to handle separate client/server components
+
+#### **Step 4: Testing & Validation**
+- [ ] Update all tests to use new separated components
+- [ ] Verify both client and server patterns work correctly
+- [ ] Ensure no regression in functionality
+
 ### **EXPECTED BENEFITS**
-- [ ] **Proper Client Architecture**: Clients no longer need to register against ephemeral IP addresses
-- [ ] **Real-World Patterns**: Follows industry-standard request-response correlation patterns
-- [ ] **Clean Separation**: Clear distinction between server and client routing patterns
-- [ ] **Scalability**: Supports multiple concurrent client requests with proper correlation
-- [ ] **Maintainability**: Single MessageBus handles both patterns cleanly
+- [ ] **Clear Separation**: Client and server responsibilities are clearly separated
+- [ ] **Simplified Logic**: Each component has a single, clear responsibility
+- [ ] **Better Maintainability**: Easier to understand and modify each component
+- [ ] **Improved Testability**: Components can be tested in isolation
+- [ ] **Future Extensibility**: Cleaner foundation for adding new features
