@@ -899,17 +899,15 @@ public class NioNetwork implements Network {
         }
         
         // Add to destination queue for processing
-        Queue<Message> queue = messageQueues.get(message.destination());
-        if (queue != null) {
-            queue.offer(message);
-            // store context for upper layers
-            messageContexts.put(message, messageContext);
-            System.out.println("NIO: Message added to receive queue for " + message.destination() + 
-                              ", queue size: " + queue.size() + ", context: " + messageContext);
-        } else {
-            System.out.println("NIO: No receive queue found for " + message.destination() + 
-                              ", context: " + messageContext);
-        }
+        // Create queue dynamically if it doesn't exist (for client addresses)
+        Queue<Message> queue = messageQueues.computeIfAbsent(message.destination(), 
+            k -> new ConcurrentLinkedQueue<>());
+        
+        queue.offer(message);
+        // store context for upper layers
+        messageContexts.put(message, messageContext);
+        System.out.println("NIO: Message added to receive queue for " + message.destination() + 
+                          ", queue size: " + queue.size() + ", context: " + messageContext);
     }
     
     @Override

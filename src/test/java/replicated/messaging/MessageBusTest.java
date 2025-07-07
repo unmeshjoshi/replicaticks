@@ -52,7 +52,7 @@ class MessageBusTest {
     @Test
     void shouldSendMessageThroughNetwork() {
         // Given
-        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "test".getBytes());
+        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id");
         
         // When
         messageBus.sendMessage(message);
@@ -92,8 +92,8 @@ class MessageBusTest {
         messageBus.registerHandler(nodeA, handlerA);
         messageBus.registerHandler(nodeB, handlerB);
         
-        Message messageToA = new Message(nodeB, nodeA, MessageType.CLIENT_GET_REQUEST, "to-A".getBytes());
-        Message messageToB = new Message(nodeA, nodeB, MessageType.CLIENT_SET_REQUEST, "to-B".getBytes());
+        Message messageToA = new Message(nodeB, nodeA, MessageType.CLIENT_GET_REQUEST, "to-A".getBytes(), "test-correlation-id-1");
+        Message messageToB = new Message(nodeA, nodeB, MessageType.CLIENT_SET_REQUEST, "to-B".getBytes(), "test-correlation-id-2");
         
         // When
         messageBus.sendMessage(messageToA);
@@ -111,7 +111,7 @@ class MessageBusTest {
     @Test
     void shouldHandleUnregisteredAddresses() {
         // Given
-        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "unregistered".getBytes());
+        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "unregistered".getBytes(), "test-correlation-id-3");
         
         // When
         messageBus.sendMessage(message);
@@ -127,7 +127,7 @@ class MessageBusTest {
     @Test
     void shouldDelegateNetworkTick() {
         // Given
-        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "test".getBytes());
+        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id-4");
         messageBus.sendMessage(message);
         
         // When
@@ -176,7 +176,7 @@ class MessageBusTest {
         // When
         messageBus.unregisterHandler(nodeA);
         
-        Message message = new Message(nodeB, nodeA, MessageType.CLIENT_GET_REQUEST, "test".getBytes());
+        Message message = new Message(nodeB, nodeA, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id-6");
         messageBus.sendMessage(message);
         messageBus.tick();
         
@@ -194,9 +194,9 @@ class MessageBusTest {
         TestMessageHandler handler = new TestMessageHandler();
         messageBus.registerHandler(nodeB, handler);
         
-        Message message1 = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "msg1".getBytes());
-        Message message2 = new Message(nodeA, nodeB, MessageType.CLIENT_SET_REQUEST, "msg2".getBytes());
-        Message message3 = new Message(nodeA, nodeB, MessageType.INTERNAL_GET_REQUEST, "msg3".getBytes());
+        Message message1 = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "msg1".getBytes(), "test-correlation-id-7");
+        Message message2 = new Message(nodeA, nodeB, MessageType.CLIENT_SET_REQUEST, "msg2".getBytes(), "test-correlation-id-8");
+        Message message3 = new Message(nodeA, nodeB, MessageType.INTERNAL_GET_REQUEST, "msg3".getBytes(), "test-correlation-id-9");
         
         // When
         messageBus.sendMessage(message1);
@@ -218,8 +218,8 @@ class MessageBusTest {
         TestMessageHandler handler = new TestMessageHandler();
         messageBus.registerHandler(nodeB, handler);
         
-        Message message1 = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "first".getBytes());
-        Message message2 = new Message(nodeA, nodeB, MessageType.CLIENT_SET_REQUEST, "second".getBytes());
+        Message message1 = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "first".getBytes(), "test-correlation-id-10");
+        Message message2 = new Message(nodeA, nodeB, MessageType.CLIENT_SET_REQUEST, "second".getBytes(), "test-correlation-id-11");
         
         // When - send in specific order
         messageBus.sendMessage(message1);

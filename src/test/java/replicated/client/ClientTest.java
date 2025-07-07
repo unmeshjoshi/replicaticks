@@ -243,7 +243,7 @@ class ClientTest {
             JsonMessageCodec codec = new JsonMessageCodec();
             byte[] payloadBytes = JsonMessageCodec.createConfiguredObjectMapper()
                 .writeValueAsBytes(payload);
-            return new Message(source, destination, messageType, payloadBytes);
+            return new Message(source, destination, messageType, payloadBytes, "test-correlation-id");
         } catch (Exception e) {
             throw new RuntimeException("Failed to create test message", e);
         }

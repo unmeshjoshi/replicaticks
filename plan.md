@@ -385,3 +385,68 @@ Implement ability for replicas to send responses back on the exact `SocketChanne
 2. **Replica Integration**: Update replicas to persist MessageContext with pending requests and use `messageBus.reply()`
 3. **Integration Tests**: Verify responses arrive in-order on the same socket
 4. **Connection Reuse**: Ensure proper connection pooling and reuse patterns
+
+## Phase 14: Client-Server Dual Routing Architecture ⏳ **← NEXT**
+
+### 🆕 Phase 14A: Enhanced MessageBus with Dual Routing Patterns
+
+### Scope
+Implement support for both client and server routing patterns in MessageBus:
+- **Server Pattern**: Register handler by address (IP:port) - for servers that listen on specific addresses
+- **Client Pattern**: Register handler by correlation ID - for clients that send requests and expect responses
+
+### **ARCHITECTURAL ANALYSIS**
+**Current Limitation**: MessageBus only supports server pattern (address-based routing). Clients must register against ephemeral IP addresses, which violates real-world distributed system patterns.
+
+**Solution**: Enhanced MessageBus with dual routing capabilities:
+1. **Server Pattern** (existing): `messageBus.registerHandler(address, handler)`
+2. **Client Pattern** (new): `messageBus.registerHandler(correlationId, handler)`
+
+### **IMPLEMENTATION PLAN**
+
+#### **Step 0: Tidy First - Correlation ID as First-Class Field**
+- [ ] Add `correlationId` as a required field to the `Message` record
+- [ ] Update all usages, constructors, and tests to include/provide a correlation ID
+- [ ] Update request/response classes and tests to propagate correlation IDs
+
+#### **Step 1: Structural Changes (Tidy First)**
+- [x] Add correlation ID handler map to MessageBus
+- [x] Add client handler registration method
+- [x] Add correlation ID registration/unregistration methods
+- [x] Update MessageBus constructor and fields
+
+#### **Step 2: Enhanced Routing Logic**
+- [ ] Implement dual routing in `routeMessagesToHandlers()`
+- [ ] Add correlation ID extraction from message (now trivial)
+- [ ] Prioritize correlation ID routing over address routing
+- [ ] Handle cleanup of one-time correlation ID handlers
+
+#### **Step 3: Client Integration**
+- [ ] Update Client to register handlers by correlation ID
+- [ ] Remove address-based registration from Client
+- [ ] Update request/response matching to use correlation IDs
+- [ ] Add correlation ID to request/response payloads
+
+#### **Step 4: Network Layer Support**
+- [ ] Add `receiveAll()` method to Network interface for client message reception
+- [ ] Implement in SimulatedNetwork and NioNetwork
+- [ ] Update MessageBus to use appropriate receive method based on pattern
+
+#### **Step 5: Testing & Validation**
+- [ ] Create tests for correlation ID-based routing
+- [ ] Update existing tests to work with new dual routing
+- [ ] Verify both server and client patterns work correctly
+- [ ] Ensure backward compatibility
+
+### **DESIGN DECISIONS**
+1. **Correlation ID Extraction**: Now trivial, as every Message has a correlationId field
+2. **Client Message Reception**: Clients register for ALL messages, then filter by correlation ID
+3. **Handler Cleanup**: Remove correlation ID handlers after one use (request-response cycle)
+4. **Backward Compatibility**: Maintain existing server pattern unchanged
+
+### **EXPECTED BENEFITS**
+- [ ] **Proper Client Architecture**: Clients no longer need to register against ephemeral IP addresses
+- [ ] **Real-World Patterns**: Follows industry-standard request-response correlation patterns
+- [ ] **Clean Separation**: Clear distinction between server and client routing patterns
+- [ ] **Scalability**: Supports multiple concurrent client requests with proper correlation
+- [ ] **Maintainability**: Single MessageBus handles both patterns cleanly

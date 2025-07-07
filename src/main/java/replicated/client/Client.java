@@ -162,8 +162,8 @@ public final class Client implements MessageHandler {
         pendingRequests.put(correlationId, pendingRequest);
         
         // Establish connection for this request
-        establishConnectionAndSend(replicaAddress, MessageType.CLIENT_GET_REQUEST, new GetRequest(key));
-        
+        establishConnectionAndSend(replicaAddress, MessageType.CLIENT_GET_REQUEST, new GetRequest(key), correlationId);
+
         return future;
     }
     
@@ -180,7 +180,7 @@ public final class Client implements MessageHandler {
         pendingRequests.put(correlationId, pendingRequest);
         
         // Establish connection for this request
-        establishConnectionAndSend(replicaAddress, MessageType.CLIENT_SET_REQUEST, new SetRequest(key, value));
+        establishConnectionAndSend(replicaAddress, MessageType.CLIENT_SET_REQUEST, new SetRequest(key, value), correlationId);
         
         return future;
     }
@@ -190,38 +190,27 @@ public final class Client implements MessageHandler {
      * connections per request rather than per-client registration.
      * 
      * This method:
-     * 1. Establishes the connection first via the network layer
-     * 2. Gets the actual local address assigned by the network
-     * 3. Registers the handler with that real address
+     * 1. Registers the client with MessageBus to receive responses
+     * 2. Registers the client as a correlation ID handler for this specific request
+     * 3. Gets the actual local address assigned by the network
      * 4. Sends the message
      */
-    private void establishConnectionAndSend(NetworkAddress destination, MessageType messageType, Object request) {
-        // Step 1: Establish connection through network layer and get actual local address
-        NetworkAddress actualClientAddress = establishConnectionAndGetLocalAddress(destination);
+    private void establishConnectionAndSend(NetworkAddress destination, MessageType messageType, Object request, String correlationId) {
+        // Step 1: Register client with MessageBus to receive responses
+        NetworkAddress actualClientAddress = messageBus.registerClient(this);
         
-        // Step 2: Register handler with the actual connection address
-        messageBus.registerHandler(actualClientAddress, this);
+        // Step 2: Register client as correlation ID handler for this request
+        messageBus.registerCorrelationIdHandler(correlationId, this);
+        
+        // Step 3: Update current client address
         this.currentClientAddress = actualClientAddress;
         
-        // Step 3: Send the message using the established connection
-        Message message = new Message(actualClientAddress, destination, messageType, serializePayload(request));
+        // Step 4: Send the message using the established connection
+        Message message = new Message(actualClientAddress, destination, messageType, serializePayload(request), correlationId);
         messageBus.sendMessage(message);
     }
     
-    /**
-     * Establishes connection with the destination and returns the actual local address
-     * assigned by the network layer. This simulates the OS assigning an ephemeral port.
-     */
-    private NetworkAddress establishConnectionAndGetLocalAddress(NetworkAddress destination) {
-        // In a real implementation, this would:
-        // 1. Create a socket connection to the destination
-        // 2. Get the local address/port assigned by the OS
-        // 3. Return that actual address
-        
-        // For our simulation, we'll ask the network layer to establish the connection
-        // and return the ephemeral address it assigns
-        return messageBus.establishConnection(destination);
-    }
+
     
     /**
      * Selects the next replica using round-robin with randomization.
@@ -257,8 +246,52 @@ public final class Client implements MessageHandler {
             return;
         }
         
+        String correlationId = message.correlationId();
+        if (correlationId == null) {
+            // Fallback to old key-based matching for backward compatibility
+            handleResponseByKey(message);
+            return;
+        }
+        
+        // Handle response by correlation ID
+        PendingRequest pendingRequest = pendingRequests.get(correlationId);
+        if (pendingRequest == null) {
+            // No matching request found, ignore
+            return;
+        }
+        
         try {
-            // Try to determine if it's a GET or SET response by attempting deserialization
+            byte[] payload = message.payload();
+            
+            if (pendingRequest.type == PendingRequest.Type.GET) {
+                GetResponse getResponse = deserializePayload(payload, GetResponse.class);
+                @SuppressWarnings("unchecked")
+                ListenableFuture<VersionedValue> future = (ListenableFuture<VersionedValue>) pendingRequest.future;
+                future.complete(getResponse.value());
+            } else if (pendingRequest.type == PendingRequest.Type.SET) {
+                SetResponse setResponse = deserializePayload(payload, SetResponse.class);
+                @SuppressWarnings("unchecked")
+                ListenableFuture<Boolean> future = (ListenableFuture<Boolean>) pendingRequest.future;
+                future.complete(setResponse.success());
+            }
+            
+            // Remove the completed request and unregister the correlation ID handler
+            pendingRequests.remove(correlationId);
+            messageBus.unregisterCorrelationIdHandler(correlationId);
+            
+        } catch (Exception e) {
+            // Failed to handle response, complete with error
+            pendingRequest.future.fail(new RuntimeException("Failed to deserialize response", e));
+            pendingRequests.remove(correlationId);
+            messageBus.unregisterCorrelationIdHandler(correlationId);
+        }
+    }
+    
+    /**
+     * Fallback method for handling responses by key (for backward compatibility).
+     */
+    private void handleResponseByKey(Message message) {
+        try {
             byte[] payload = message.payload();
             
             // Try GET response first

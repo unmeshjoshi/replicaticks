@@ -17,7 +17,7 @@ class MessagePayloadSerializationTest {
         // Given - Create GetRequest and serialize it as JSON for payload
         GetRequest getRequest = new GetRequest("user:123");
         byte[] payload = jsonMapper.writeValueAsBytes(getRequest);
-        Message message = new Message(client, replica, MessageType.CLIENT_GET_REQUEST, payload);
+        Message message = new Message(client, replica, MessageType.CLIENT_GET_REQUEST, payload, "test-correlation-id");
         
         // When - Serialize and deserialize the entire message
         byte[] encodedMessage = messageCodec.encode(message);
@@ -36,7 +36,7 @@ class MessagePayloadSerializationTest {
         // Given
         SetRequest setRequest = new SetRequest("user:123", "John Doe".getBytes());
         byte[] payload = jsonMapper.writeValueAsBytes(setRequest);
-        Message message = new Message(client, replica, MessageType.CLIENT_SET_REQUEST, payload);
+        Message message = new Message(client, replica, MessageType.CLIENT_SET_REQUEST, payload, "test-correlation-id-1");
         
         // When
         byte[] encodedMessage = messageCodec.encode(message);
@@ -57,7 +57,7 @@ class MessagePayloadSerializationTest {
         VersionedValue value = new VersionedValue("John Doe".getBytes(), 1L);
         GetResponse getResponse = new GetResponse("user:123", value);
         byte[] payload = jsonMapper.writeValueAsBytes(getResponse);
-        Message message = new Message(replica, client, MessageType.CLIENT_RESPONSE, payload);
+        Message message = new Message(replica, client, MessageType.CLIENT_RESPONSE, payload, "test-correlation-id-2");
         
         // When
         byte[] encodedMessage = messageCodec.encode(message);
@@ -97,7 +97,7 @@ class MessagePayloadSerializationTest {
                                            MessageType type, T payload) {
         try {
             byte[] payloadBytes = jsonMapper.writeValueAsBytes(payload);
-            return new Message(source, dest, type, payloadBytes);
+            return new Message(source, dest, type, payloadBytes, "test-correlation-id");
         } catch (Exception e) {
             throw new RuntimeException("Failed to create message", e);
         }

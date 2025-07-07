@@ -14,7 +14,7 @@ class MessageTest {
         byte[] payload = "test payload".getBytes();
         
         // When
-        Message message = new Message(source, destination, messageType, payload);
+        Message message = new Message(source, destination, messageType, payload, "test-correlation-id");
         
         // Then
         assertEquals(source, message.source());
@@ -31,9 +31,9 @@ class MessageTest {
         MessageType messageType = MessageType.CLIENT_GET_REQUEST;
         byte[] payload = "test".getBytes();
         
-        Message message1 = new Message(source, destination, messageType, payload);
-        Message message2 = new Message(source, destination, messageType, payload);
-        Message message3 = new Message(source, destination, MessageType.CLIENT_SET_REQUEST, payload);
+        Message message1 = new Message(source, destination, messageType, payload, "test-correlation-id");
+        Message message2 = new Message(source, destination, messageType, payload, "test-correlation-id");
+        Message message3 = new Message(source, destination, MessageType.CLIENT_SET_REQUEST, payload, "test-correlation-id");
         
         // When & Then
         assertEquals(message1, message2);
@@ -50,7 +50,7 @@ class MessageTest {
         
         // When & Then
         assertThrows(NullPointerException.class, () ->
-            new Message(null, destination, messageType, payload));
+            new Message(null, destination, messageType, payload, "test-correlation-id"));
     }
     
     @Test
@@ -62,7 +62,7 @@ class MessageTest {
         
         // When & Then
         assertThrows(NullPointerException.class, () ->
-            new Message(source, null, messageType, payload));
+            new Message(source, null, messageType, payload, "test-correlation-id"));
     }
     
     @Test
@@ -74,7 +74,7 @@ class MessageTest {
         
         // When & Then
         assertThrows(NullPointerException.class, () ->
-            new Message(source, destination, null, payload));
+            new Message(source, destination, null, payload, "test-correlation-id"));
     }
     
     @Test
@@ -86,6 +86,19 @@ class MessageTest {
         
         // When & Then
         assertThrows(NullPointerException.class, () ->
-            new Message(source, destination, messageType, null));
+            new Message(source, destination, messageType, null, "test-correlation-id"));
+    }
+    
+    @Test
+    void shouldThrowExceptionForNullCorrelationId() {
+        // Given
+        NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
+        NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
+        MessageType messageType = MessageType.CLIENT_GET_REQUEST;
+        byte[] payload = "test".getBytes();
+        
+        // When & Then
+        assertThrows(NullPointerException.class, () ->
+            new Message(source, destination, messageType, payload, null));
     }
 } 

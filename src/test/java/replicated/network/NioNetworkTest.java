@@ -106,7 +106,7 @@ class NioNetworkTest {
     @Test
     void shouldAcceptMessagesForSending() {
         // Given
-        Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, "test".getBytes());
+        Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id");
         
         // When/Then - should not throw
         assertDoesNotThrow(() -> network.send(message));

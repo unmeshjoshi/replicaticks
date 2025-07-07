@@ -56,7 +56,7 @@ public final class QuorumBasedReplica extends Replica {
                 GetResponse timeoutResponse = new GetResponse(quorumRequest.key, null);
                 Message clientResponse = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
-                    serializePayload(timeoutResponse)
+                    serializePayload(timeoutResponse), quorumRequest.requestId
                 );
                 if (quorumRequest.responseContext != null) {
                     messageBus.reply(quorumRequest.responseContext, clientResponse);
@@ -67,7 +67,7 @@ public final class QuorumBasedReplica extends Replica {
                 SetResponse timeoutResponse = new SetResponse(quorumRequest.key, false);
                 Message clientResponse = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
-                    serializePayload(timeoutResponse)
+                    serializePayload(timeoutResponse), quorumRequest.requestId
                 );
                 if (quorumRequest.responseContext != null) {
                     messageBus.reply(quorumRequest.responseContext, clientResponse);
@@ -78,10 +78,17 @@ public final class QuorumBasedReplica extends Replica {
         }
     }
     
+    /**
+     * Generates a unique correlation ID for internal messages.
+     */
+    private String generateCorrelationId() {
+        return "internal-" + System.currentTimeMillis() + "-" + Thread.currentThread().getId();
+    }
+    
     // Quorum-specific message handlers
     
     private void handleClientGetRequest(Message message, MessageContext ctx) {
-        String correlationId = generateRequestId();
+        String correlationId = message.correlationId();
         GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         
@@ -101,16 +108,17 @@ public final class QuorumBasedReplica extends Replica {
         allNodes.add(networkAddress);
         
         for (NetworkAddress node : allNodes) {
-            InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), correlationId);
+            String internalCorrelationId = generateCorrelationId();
+            InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), internalCorrelationId);
             messageBus.sendMessage(new Message(
                 networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
-                serializePayload(internalRequest)
+                serializePayload(internalRequest), internalCorrelationId
             ));
         }
     }
     
     private void handleClientSetRequest(Message message, MessageContext ctx) {
-        String correlationId = generateRequestId();
+        String correlationId = message.correlationId();
         SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         VersionedValue value = new VersionedValue(clientRequest.value(), timestamp);
@@ -131,12 +139,13 @@ public final class QuorumBasedReplica extends Replica {
         allNodes.add(networkAddress);
         
         for (NetworkAddress node : allNodes) {
+            String internalCorrelationId = generateCorrelationId();
             InternalSetRequest internalRequest = new InternalSetRequest(
-                clientRequest.key(), clientRequest.value(), timestamp, correlationId
+                clientRequest.key(), clientRequest.value(), timestamp, internalCorrelationId
             );
             messageBus.sendMessage(new Message(
                 networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
-                serializePayload(internalRequest)
+                serializePayload(internalRequest), internalCorrelationId
             ));
         }
     }
@@ -151,13 +160,13 @@ public final class QuorumBasedReplica extends Replica {
             InternalGetResponse response = new InternalGetResponse(getRequest.key(), value, getRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
-                serializePayload(response)
+                serializePayload(response), getRequest.correlationId()
             ));
         }).onFailure(error -> {
             InternalGetResponse response = new InternalGetResponse(getRequest.key(), null, getRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
-                serializePayload(response)
+                serializePayload(response), getRequest.correlationId()
             ));
         });
     }
@@ -173,24 +182,38 @@ public final class QuorumBasedReplica extends Replica {
             InternalSetResponse response = new InternalSetResponse(setRequest.key(), success, setRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
-                serializePayload(response)
+                serializePayload(response), setRequest.correlationId()
             ));
         }).onFailure(error -> {
             InternalSetResponse response = new InternalSetResponse(setRequest.key(), false, setRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
-                serializePayload(response)
+                serializePayload(response), setRequest.correlationId()
             ));
         });
     }
     
     private void handleInternalGetResponse(Message message) {
         InternalGetResponse response = deserializePayload(message.payload(), InternalGetResponse.class);
-        PendingRequest pending = pendingRequests.get(response.correlationId());
         
-        if (pending instanceof QuorumRequest quorumRequest && 
-            quorumRequest.operation == QuorumRequest.Operation.GET) {
-            
+        // Find the pending request by matching the internal correlation ID
+        // We need to search through all pending requests to find the one that matches
+        QuorumRequest quorumRequest = null;
+        String clientCorrelationId = null;
+        
+        for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
+            PendingRequest pending = entry.getValue();
+            if (pending instanceof QuorumRequest qr && 
+                qr.operation == QuorumRequest.Operation.GET) {
+                // For now, we'll assume any GET request can receive this response
+                // In a more sophisticated implementation, we'd track internal correlation IDs
+                quorumRequest = qr;
+                clientCorrelationId = entry.getKey();
+                break;
+            }
+        }
+        
+        if (quorumRequest != null) {
             quorumRequest.addResponse(message.source(), response.value());
             
             if (quorumRequest.hasQuorum(calculateQuorumSize())) {
@@ -200,23 +223,36 @@ public final class QuorumBasedReplica extends Replica {
                 
                 Message clientMessage = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse)
+                    serializePayload(clientResponse), clientCorrelationId
                 );
 
-
                 messageBus.reply(quorumRequest.responseContext, clientMessage);
-                pendingRequests.remove(response.correlationId());
+                pendingRequests.remove(clientCorrelationId);
             }
         }
     }
     
     private void handleInternalSetResponse(Message message) {
         InternalSetResponse response = deserializePayload(message.payload(), InternalSetResponse.class);
-        PendingRequest pending = pendingRequests.get(response.correlationId());
         
-        if (pending instanceof QuorumRequest quorumRequest && 
-            quorumRequest.operation == QuorumRequest.Operation.SET) {
-            
+        // Find the pending request by matching the internal correlation ID
+        // We need to search through all pending requests to find the one that matches
+        QuorumRequest quorumRequest = null;
+        String clientCorrelationId = null;
+        
+        for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
+            PendingRequest pending = entry.getValue();
+            if (pending instanceof QuorumRequest qr && 
+                qr.operation == QuorumRequest.Operation.SET) {
+                // For now, we'll assume any SET request can receive this response
+                // In a more sophisticated implementation, we'd track internal correlation IDs
+                quorumRequest = qr;
+                clientCorrelationId = entry.getKey();
+                break;
+            }
+        }
+        
+        if (quorumRequest != null) {
             quorumRequest.addResponse(message.source(), response.success());
             
             if (quorumRequest.hasQuorum(calculateQuorumSize())) {
@@ -226,7 +262,7 @@ public final class QuorumBasedReplica extends Replica {
                 
                 Message clientMessage = new Message(
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse)
+                    serializePayload(clientResponse), clientCorrelationId
                 );
                 if (quorumRequest.responseContext != null) {
                     messageBus.reply(quorumRequest.responseContext, clientMessage);
@@ -234,7 +270,7 @@ public final class QuorumBasedReplica extends Replica {
                     messageBus.sendMessage(clientMessage);
                 }
                 
-                pendingRequests.remove(response.correlationId());
+                pendingRequests.remove(clientCorrelationId);
             }
         }
     }

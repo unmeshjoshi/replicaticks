@@ -6,16 +6,25 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * MessageBus provides a higher-level messaging abstraction over the Network layer.
  * It handles component registration, message routing, and coordinates tick() calls.
+ * 
+ * Supports two routing patterns:
+ * 1. Server pattern: Register handler by address (IP:port) - for servers that listen on specific addresses
+ * 2. Client pattern: Register handler by correlation ID - for clients that send requests and expect responses
  */
 public class MessageBus {
     
     private final Network network;
     private final MessageCodec messageCodec;
     private final Map<NetworkAddress, MessageHandler> registeredHandlers;
+    private final Map<String, MessageHandler> correlationIdHandlers = new HashMap<>();
+    private final List<MessageHandler> clientHandlers = new ArrayList<>();
     private final Map<Object, NetworkAddress> clientAddresses;
     private final AtomicInteger clientPortCounter;
     
@@ -67,8 +76,16 @@ public class MessageBus {
     public void sendClientMessage(NetworkAddress destination, MessageType messageType, 
                                  byte[] payload, MessageHandler clientHandler) {
         NetworkAddress clientAddress = getOrAssignClientAddress(clientHandler);
-        Message message = new Message(clientAddress, destination, messageType, payload);
+        String correlationId = generateCorrelationId();
+        Message message = new Message(clientAddress, destination, messageType, payload, correlationId);
         sendMessage(message);
+    }
+    
+    /**
+     * Generates a unique correlation ID for message tracking.
+     */
+    private String generateCorrelationId() {
+        return "msg-" + System.currentTimeMillis() + "-" + Thread.currentThread().getId();
     }
     
     /**
@@ -98,12 +115,33 @@ public class MessageBus {
     /**
      * Registers a message handler for the given network address.
      * When messages are received for this address, they will be routed to the handler.
+     * This is the server pattern - for components that listen on specific addresses.
      * 
      * @param address the network address to register the handler for
      * @param handler the message handler to receive messages
      */
     public void registerHandler(NetworkAddress address, MessageHandler handler) {
         registeredHandlers.put(address, handler);
+    }
+    
+    /**
+     * Registers a message handler for the given correlation ID.
+     * When messages with this correlation ID are received, they will be routed to the handler.
+     * This is the client pattern - for components that send requests and expect responses.
+     * 
+     * @param correlationId the correlation ID to register the handler for
+     * @param handler the message handler to receive messages
+     */
+    public void registerHandler(String correlationId, MessageHandler handler) {
+        correlationIdHandlers.put(correlationId, handler);
+    }
+    
+    /**
+     * Registers a client handler to receive all messages (for client-side correlation ID routing).
+     */
+    public void registerClientHandler(MessageHandler handler) {
+        if (handler == null) throw new NullPointerException();
+        clientHandlers.add(handler);
     }
     
     /**
@@ -114,6 +152,24 @@ public class MessageBus {
      */
     public void unregisterHandler(NetworkAddress address) {
         registeredHandlers.remove(address);
+    }
+    
+    /**
+     * Unregisters the message handler for the given correlation ID.
+     * Messages with this correlation ID will no longer be routed to any handler.
+     * 
+     * @param correlationId the correlation ID to unregister
+     */
+    public void unregisterHandler(String correlationId) {
+        correlationIdHandlers.remove(correlationId);
+    }
+    
+    /**
+     * Unregisters a client handler.
+     */
+    public void unregisterClientHandler(MessageHandler handler) {
+        if (handler == null) throw new NullPointerException();
+        clientHandlers.remove(handler);
     }
     
     /**
@@ -129,7 +185,8 @@ public class MessageBus {
                          MessageType messageType, byte[] payload) {
         for (NetworkAddress recipient : recipients) {
             if (!recipient.equals(source)) {  // Don't send to self
-                Message message = new Message(source, recipient, messageType, payload);
+                String correlationId = generateCorrelationId();
+                Message message = new Message(source, recipient, messageType, payload, correlationId);
                 sendMessage(message);
             }
         }
@@ -169,14 +226,56 @@ public class MessageBus {
     }
     
     private void routeMessagesToHandlers() {
-        for (Map.Entry<NetworkAddress, MessageHandler> entry : registeredHandlers.entrySet()) {
-            NetworkAddress address = entry.getKey();
-            MessageHandler handler = entry.getValue();
-            
+        // Collect all messages from all registered addresses
+        Set<NetworkAddress> allAddresses = new HashSet<>(registeredHandlers.keySet());
+        // Optionally, add more addresses if needed (e.g., ephemeral client addresses)
+        // But for now, we only care about registeredHandlers
+
+        List<Message> allMessages = new ArrayList<>();
+        for (NetworkAddress address : allAddresses) {
             List<Message> messages = network.receive(address);
-            for (Message message : messages) {
-                MessageContext ctx = network.getContextFor(message);
-                handler.onMessageReceived(message, ctx);
+            if (!messages.isEmpty()) {
+                System.out.println("MessageBus: Received " + messages.size() + " messages from " + address);
+                allMessages.addAll(messages);
+            }
+        }
+
+        // Only print debug info if there are actual messages to process
+        if (!allMessages.isEmpty()) {
+            System.out.println("MessageBus: Processing " + allMessages.size() + " total messages");
+        }
+
+        for (Message message : allMessages) {
+            MessageContext ctx = network.getContextFor(message);
+            String correlationId = message.correlationId();
+            
+            System.out.println("MessageBus: Routing message " + message.messageType() + " from " + message.source() + 
+                              " to " + message.destination() + " (correlationId=" + correlationId + ")");
+            
+            // Determine if this is a response message (from server to client)
+            boolean isResponse = message.messageType() == MessageType.CLIENT_RESPONSE;
+            
+            if (isResponse && correlationId != null) {
+                // Response message: route by correlationId to client
+                MessageHandler correlationHandler = correlationIdHandlers.get(correlationId);
+                if (correlationHandler != null) {
+                    System.out.println("MessageBus: Delivering response to correlationId handler");
+                    correlationHandler.onMessageReceived(message, ctx);
+                } else {
+                    System.out.println("MessageBus: No correlationId handler found for response, delivering to all client handlers");
+                    for (MessageHandler clientHandler : clientHandlers) {
+                        clientHandler.onMessageReceived(message, ctx);
+                    }
+                }
+            } else {
+                // Request message: route by address to server
+                MessageHandler addressHandler = registeredHandlers.get(message.destination());
+                if (addressHandler != null) {
+                    System.out.println("MessageBus: Delivering request to address handler for " + message.destination());
+                    addressHandler.onMessageReceived(message, ctx);
+                } else {
+                    System.out.println("MessageBus: No address handler found for request to " + message.destination());
+                }
             }
         }
     }
@@ -192,5 +291,21 @@ public class MessageBus {
             // Fallback to normal send if direct channel not available (e.g., simulation or ctx null)
             network.send(response);
         }
+    }
+    
+    /**
+     * Registers a handler for a specific correlation ID (for client request/response correlation).
+     */
+    public void registerCorrelationIdHandler(String correlationId, MessageHandler handler) {
+        if (correlationId == null || handler == null) throw new NullPointerException();
+        correlationIdHandlers.put(correlationId, handler);
+    }
+
+    /**
+     * Unregisters a handler for a specific correlation ID.
+     */
+    public void unregisterCorrelationIdHandler(String correlationId) {
+        if (correlationId == null) throw new NullPointerException();
+        correlationIdHandlers.remove(correlationId);
     }
 } 
