@@ -3,6 +3,7 @@ package replicated.network;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.Message;
 import java.util.*;
+import java.nio.channels.SocketChannel;
 import replicated.util.DebugConfig;
 
 /**
@@ -103,6 +104,13 @@ public class SimulatedNetwork implements Network {
     @Override
     public MessageContext getContextFor(Message message) {
         return messageContexts.get(message);
+    }
+    
+    @Override
+    public void sendOnChannel(SocketChannel channel, Message message) {
+        // In SimulatedNetwork, we don't have real SocketChannels, so we fall back to normal send
+        // This maintains compatibility with the direct-channel API while working in simulation
+        send(message);
     }
     
     /**
