@@ -19,7 +19,7 @@ class SimpleNioIntegrationTest {
     
     private NioNetwork network;
     private MessageCodec codec;
-    private MessageBus messageBus;
+    private ServerMessageBus messageBus;
     
     private NetworkAddress address1;
     private NetworkAddress address2;
@@ -36,7 +36,7 @@ class SimpleNioIntegrationTest {
         // Setup network and messaging
         network = new NioNetwork();
         codec = new JsonMessageCodec();
-        messageBus = new MessageBus(network, codec);
+        messageBus = new ServerMessageBus(network, codec);
         
         // Bind network addresses
         network.bind(address1);

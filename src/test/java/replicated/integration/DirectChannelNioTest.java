@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class DirectChannelNioTest {
     private NioNetwork network;
-    private MessageBus bus;
+    private ClientMessageBus clientBus;
+    private ServerMessageBus serverBus;
     private List<QuorumBasedReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
@@ -32,21 +33,22 @@ public class DirectChannelNioTest {
     @BeforeEach
     void setup() {
         network = new NioNetwork(new JsonMessageCodec());
-        bus = new MessageBus(network, new JsonMessageCodec());
-        client = new Client(bus);
+        clientBus = new ClientMessageBus(network, new JsonMessageCodec());
+        serverBus = new ServerMessageBus(network, new JsonMessageCodec());
+        client = new Client(clientBus);
         replicaAddr = new NetworkAddress("127.0.0.1", 7000);
         
         // Bind the network to the replica address
         network.bind(replicaAddr);
         
         storage = new SimulatedStorage(new Random());
-        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), bus, storage);
-        bus.registerHandler(replicaAddr, replica);
+        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), serverBus, storage);
+        serverBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         
         // Register the client to receive responses
-        bus.registerClient(client);
-        bus.registerClientHandler(client);
+        clientBus.registerClient(client);
+        clientBus.registerClientHandler(client);
         
         // Create SimulationDriver to orchestrate all component ticking
         simulationDriver = new SimulationDriver(
@@ -54,7 +56,7 @@ public class DirectChannelNioTest {
             List.of(storage),
             replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
             List.of(client),
-            List.of(bus)
+            List.of(clientBus, serverBus)
         );
     }
 

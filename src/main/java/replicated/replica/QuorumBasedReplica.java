@@ -17,7 +17,7 @@ public final class QuorumBasedReplica extends Replica {
      * Creates a QuorumBasedReplica with the specified configuration.
      */
     public QuorumBasedReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                             MessageBus messageBus, Storage storage, int requestTimeoutTicks) {
+                             BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
         super(name, networkAddress, peers, messageBus, storage, requestTimeoutTicks);
     }
     
@@ -25,7 +25,7 @@ public final class QuorumBasedReplica extends Replica {
      * Creates a QuorumBasedReplica with default timeout.
      */
     public QuorumBasedReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                             MessageBus messageBus, Storage storage) {
+                             BaseMessageBus messageBus, Storage storage) {
         super(name, networkAddress, peers, messageBus, storage, 10); // 10 tick default timeout
     }
     

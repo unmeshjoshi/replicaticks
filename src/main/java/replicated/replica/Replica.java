@@ -21,7 +21,7 @@ public abstract class Replica implements MessageHandler {
     protected final List<NetworkAddress> peers;
     
     // Infrastructure dependencies
-    protected final MessageBus messageBus;
+    protected final BaseMessageBus messageBus;
     protected final Storage storage;
     protected final int requestTimeoutTicks;
     
@@ -43,7 +43,7 @@ public abstract class Replica implements MessageHandler {
      * @param requestTimeoutTicks timeout for requests in ticks
      */
     protected Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                     MessageBus messageBus, Storage storage, int requestTimeoutTicks) {
+                     BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
         if (name == null) {
             throw new IllegalArgumentException("Name cannot be null");
         }

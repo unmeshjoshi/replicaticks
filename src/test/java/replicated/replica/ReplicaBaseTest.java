@@ -19,7 +19,7 @@ class ReplicaBaseTest {
     private NetworkAddress address1;
     private NetworkAddress address2;
     private List<NetworkAddress> peers;
-    private MessageBus messageBus;
+    private ServerMessageBus serverBus;
     private Storage storage;
     
     @BeforeEach
@@ -27,14 +27,14 @@ class ReplicaBaseTest {
         address1 = new NetworkAddress("192.168.1.1", 8080);
         address2 = new NetworkAddress("192.168.1.2", 8080);
         peers = List.of(address2);
-        messageBus = new MessageBus(new SimulatedNetwork(new Random(42)), new JsonMessageCodec());
+        serverBus = new ServerMessageBus(new SimulatedNetwork(new Random(42)), new JsonMessageCodec());
         storage = new SimulatedStorage(new Random(42));
     }
     
     @Test
     void shouldCreateReplicaBaseWithValidParameters() {
         // Given/When
-        TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
         
         // Then
         assertEquals("test", replica.getName());
@@ -46,7 +46,7 @@ class ReplicaBaseTest {
     void shouldThrowExceptionForNullName() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica(null, address1, peers, messageBus, storage, 10)
+            new TestableReplica(null, address1, peers, serverBus, storage, 10)
         );
     }
     
@@ -54,7 +54,7 @@ class ReplicaBaseTest {
     void shouldThrowExceptionForNullNetworkAddress() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica("test", null, peers, messageBus, storage, 10)
+            new TestableReplica("test", null, peers, serverBus, storage, 10)
         );
     }
     
@@ -62,7 +62,7 @@ class ReplicaBaseTest {
     void shouldThrowExceptionForNullPeers() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica("test", address1, null, messageBus, storage, 10)
+            new TestableReplica("test", address1, null, serverBus, storage, 10)
         );
     }
     
@@ -70,7 +70,7 @@ class ReplicaBaseTest {
     void shouldThrowExceptionWhenMessageBusWithoutStorage() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica("test", address1, peers, messageBus, null, 10)
+            new TestableReplica("test", address1, peers, serverBus, null, 10)
         );
     }
     
@@ -85,7 +85,7 @@ class ReplicaBaseTest {
     @Test
     void shouldGenerateUniqueRequestIds() {
         // Given
-        TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
         
         // When
         String id1 = replica.testGenerateRequestId();
@@ -100,7 +100,7 @@ class ReplicaBaseTest {
     @Test
     void shouldHandleTimeoutsCorrectly() {
         // Given
-        TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, storage, 5);
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 5);
         TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 5); // Use 5 ticks timeout
         replica.testAddPendingRequest("req-1", request);
         
@@ -117,7 +117,7 @@ class ReplicaBaseTest {
     @Test
     void shouldNotTimeoutRequestsWithinTimeout() {
         // Given
-        TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
         TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 10);
         replica.testAddPendingRequest("req-1", request);
         
@@ -134,9 +134,9 @@ class ReplicaBaseTest {
     @Test
     void shouldImplementEqualsAndHashCodeBasedOnNameAndAddress() {
         // Given
-        TestableReplica replica1 = new TestableReplica("test", address1, peers, messageBus, storage, 10);
-        TestableReplica replica2 = new TestableReplica("test", address1, List.of(), messageBus, storage, 10);
-        TestableReplica replica3 = new TestableReplica("different", address1, peers, messageBus, storage, 10);
+        TestableReplica replica1 = new TestableReplica("test", address1, peers, serverBus, storage, 10);
+        TestableReplica replica2 = new TestableReplica("test", address1, List.of(), serverBus, storage, 10);
+        TestableReplica replica3 = new TestableReplica("different", address1, peers, serverBus, storage, 10);
         
         // Then
         assertEquals(replica1, replica2); // Same name and address, different peers
@@ -148,7 +148,7 @@ class ReplicaBaseTest {
     void shouldCreateDefensiveCopyOfPeers() {
         // Given
         List<NetworkAddress> mutablePeers = new java.util.ArrayList<>(peers);
-        TestableReplica replica = new TestableReplica("test", address1, mutablePeers, messageBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, mutablePeers, serverBus, storage, 10);
         
         // When
         mutablePeers.clear();
@@ -164,7 +164,7 @@ class ReplicaBaseTest {
         PendingRequest lastTimeoutRequest = null;
         
         TestableReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                       MessageBus messageBus, Storage storage, int requestTimeoutTicks) {
+                       BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
             super(name, networkAddress, peers, messageBus, storage, requestTimeoutTicks);
         }
         

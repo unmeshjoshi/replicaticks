@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class DirectChannelOrderTest {
     private SimulatedNetwork network;
-    private MessageBus bus;
+    private ClientMessageBus clientBus;
+    private ServerMessageBus serverBus;
     private List<QuorumBasedReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
@@ -31,12 +32,13 @@ public class DirectChannelOrderTest {
     @BeforeEach
     void setup() {
         network = new SimulatedNetwork(new Random(1));
-        bus = new MessageBus(network, new JsonMessageCodec());
-        client = new Client(bus);
+        clientBus = new ClientMessageBus(network, new JsonMessageCodec());
+        serverBus = new ServerMessageBus(network, new JsonMessageCodec());
+        client = new Client(clientBus);
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
         SimulatedStorage storage = new SimulatedStorage(new Random());
-        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), bus, storage);
-        bus.registerHandler(replicaAddr, replica);
+        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), serverBus, storage);
+        serverBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         
         // Create SimulationDriver to orchestrate all component ticking
@@ -45,7 +47,7 @@ public class DirectChannelOrderTest {
             List.of(storage),
             replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
             List.of(client),
-            List.of(bus)
+            List.of(clientBus, serverBus)
         );
     }
 

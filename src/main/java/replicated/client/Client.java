@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class Client implements MessageHandler {
     
-    private final MessageBus messageBus;
+    private final BaseMessageBus messageBus;
     private final int requestTimeoutTicks;
     private final String clientId;
     
@@ -42,14 +42,14 @@ public final class Client implements MessageHandler {
      * @param messageBus the message bus for communication
      * @param bootstrapReplicas initial list of replica addresses for cluster discovery
      */
-    public Client(MessageBus messageBus, List<NetworkAddress> bootstrapReplicas) {
+    public Client(BaseMessageBus messageBus, List<NetworkAddress> bootstrapReplicas) {
         this(messageBus, bootstrapReplicas, 10);
     }
     
     /**
      * Full constructor with configurable timeout.
      */
-    public Client(MessageBus messageBus, List<NetworkAddress> bootstrapReplicas, int requestTimeoutTicks) {
+    public Client(BaseMessageBus messageBus, List<NetworkAddress> bootstrapReplicas, int requestTimeoutTicks) {
         if (messageBus == null) {
             throw new IllegalArgumentException("MessageBus cannot be null");
         }
@@ -72,7 +72,7 @@ public final class Client implements MessageHandler {
     }
     
     // Backward compatibility constructor (for tests)
-    public Client(MessageBus messageBus) {
+    public Client(BaseMessageBus messageBus) {
         // Create a single bootstrap replica for backward compatibility
         this(messageBus, List.of(new NetworkAddress("127.0.0.1", 8080)));
     }

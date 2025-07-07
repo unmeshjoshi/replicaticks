@@ -14,7 +14,7 @@ class MessageBusTest {
     
     private Network network;
     private MessageCodec codec;
-    private MessageBus messageBus;
+    private ServerMessageBus messageBus;
     private NetworkAddress nodeA;
     private NetworkAddress nodeB;
     
@@ -22,7 +22,7 @@ class MessageBusTest {
     void setUp() {
         network = new SimulatedNetwork(new Random(42L));
         codec = new JsonMessageCodec();
-        messageBus = new MessageBus(network, codec);
+        messageBus = new ServerMessageBus(network, codec);
         nodeA = new NetworkAddress("192.168.1.1", 8080);
         nodeB = new NetworkAddress("192.168.1.2", 8080);
     }
@@ -39,14 +39,14 @@ class MessageBusTest {
     void shouldThrowExceptionForNullNetwork() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new MessageBus(null, codec));
+            () -> new ServerMessageBus(null, codec));
     }
     
     @Test
     void shouldThrowExceptionForNullCodec() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new MessageBus(network, null));
+            () -> new ServerMessageBus(network, null));
     }
     
     @Test

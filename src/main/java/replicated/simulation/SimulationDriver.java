@@ -4,7 +4,7 @@ import replicated.network.Network;
 import replicated.storage.Storage;
 import replicated.replica.Replica;
 import replicated.client.Client;
-import replicated.messaging.MessageBus;
+import replicated.messaging.BaseMessageBus;
 import java.util.List;
 
 /**
@@ -16,7 +16,7 @@ public class SimulationDriver {
     private final List<Storage> storages;
     private final List<Replica> replicas;
     private final List<Client> clients;
-    private final List<MessageBus> messageBuses;
+    private final List<BaseMessageBus> messageBuses;
 
     /**
      * Constructs a SimulationDriver with the given component lists.
@@ -26,7 +26,7 @@ public class SimulationDriver {
      * @param clients List of client components
      * @param messageBuses List of message bus components
      */
-    public SimulationDriver(List<Network> networks, List<Storage> storages, List<Replica> replicas, List<Client> clients, List<MessageBus> messageBuses) {
+    public SimulationDriver(List<Network> networks, List<Storage> storages, List<Replica> replicas, List<Client> clients, List<BaseMessageBus> messageBuses) {
         this.networks = networks;
         this.storages = storages;
         this.replicas = replicas;
@@ -50,7 +50,7 @@ public class SimulationDriver {
         replicas.forEach(Replica::tick);
         
         // 2. Service Layer - Message routing and I/O processing
-        messageBuses.forEach(MessageBus::tick);
+        messageBuses.forEach(BaseMessageBus::tick);
         networks.forEach(Network::tick);
         storages.forEach(Storage::tick);
     }

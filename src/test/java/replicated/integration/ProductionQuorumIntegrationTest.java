@@ -34,7 +34,8 @@ class ProductionQuorumIntegrationTest {
     
     private SimulatedNetwork network;
     private MessageCodec codec;
-    private MessageBus messageBus;
+    private ClientMessageBus clientBus;
+    private ServerMessageBus serverBus;
     
     // Three replicas for quorum consensus
     private QuorumBasedReplica replica1;
@@ -62,7 +63,8 @@ class ProductionQuorumIntegrationTest {
         // Setup network and messaging with deterministic behavior
         network = new SimulatedNetwork(new Random(42), 0, 0.0); // No delay, no packet loss
         codec = new JsonMessageCodec();
-        messageBus = new MessageBus(network, codec);
+        clientBus = new ClientMessageBus(network, codec);
+        serverBus = new ServerMessageBus(network, codec);
         
         // Setup persistent storage for each replica
         storage1 = new RocksDbStorage(tempDir.resolve("replica1-db").toString());
@@ -76,17 +78,17 @@ class ProductionQuorumIntegrationTest {
         
         // Setup replicas with production storage
         // Constructor: name, networkAddress, peers, messageBus, storage, requestTimeoutTicks
-        replica1 = new QuorumBasedReplica("replica1", address1, peers1, messageBus, storage1, 10);
-        replica2 = new QuorumBasedReplica("replica2", address2, peers2, messageBus, storage2, 10);
-        replica3 = new QuorumBasedReplica("replica3", address3, peers3, messageBus, storage3, 10);
+        replica1 = new QuorumBasedReplica("replica1", address1, peers1, serverBus, storage1, 10);
+        replica2 = new QuorumBasedReplica("replica2", address2, peers2, serverBus, storage2, 10);
+        replica3 = new QuorumBasedReplica("replica3", address3, peers3, serverBus, storage3, 10);
         
-        // Setup client (address will be auto-assigned by MessageBus)
-        client = new Client(messageBus);
+        // Setup client (address will be auto-assigned by ClientMessageBus)
+        client = new Client(clientBus);
         
         // Register replica message handlers
-        messageBus.registerHandler(address1, replica1);
-        messageBus.registerHandler(address2, replica2);
-        messageBus.registerHandler(address3, replica3);
+        serverBus.registerHandler(address1, replica1);
+        serverBus.registerHandler(address2, replica2);
+        serverBus.registerHandler(address3, replica3);
         // Client handler is auto-registered by MessageBus.sendClientMessage()
     }
     
@@ -108,7 +110,8 @@ class ProductionQuorumIntegrationTest {
             currentTick++;
             
             // Tick all components to process pending operations
-            messageBus.tick(); // This ticks network and routes messages
+            clientBus.tick(); // This ticks network and routes client messages
+            serverBus.tick(); // This ticks network and routes server messages
             storage1.tick();
             storage2.tick();
             storage3.tick();

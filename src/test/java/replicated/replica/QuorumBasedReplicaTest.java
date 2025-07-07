@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 class QuorumBasedReplicaTest {
     
-    private MessageBus messageBus;
+    private ServerMessageBus serverBus;
     private Storage storage;
     private QuorumBasedReplica replica;
     private NetworkAddress replicaAddress;
@@ -21,7 +21,7 @@ class QuorumBasedReplicaTest {
     @BeforeEach
     void setUp() {
         // Setup components
-        messageBus = createMockMessageBus();
+        serverBus = createMockMessageBus();
         storage = new SimulatedStorage(new Random(42L));
         
         // Setup addresses
@@ -31,7 +31,7 @@ class QuorumBasedReplicaTest {
         peers = List.of(peer1, peer2);
         
         // Create enhanced replica
-        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, messageBus, storage);
+        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, serverBus, storage);
     }
     
     @Test
@@ -48,14 +48,14 @@ class QuorumBasedReplicaTest {
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumBasedReplica("test", replicaAddress, peers, null, storage));
+            () -> new QuorumBasedReplica("test", replicaAddress, peers, (BaseMessageBus) null, storage));
     }
     
     @Test
     void shouldThrowExceptionForNullStorage() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumBasedReplica("test", replicaAddress, peers, messageBus, null));
+            () -> new QuorumBasedReplica("test", replicaAddress, peers, serverBus, null));
     }
     
     @Test
@@ -184,7 +184,7 @@ class QuorumBasedReplicaTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - replica with timeout configuration
-        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, messageBus, storage, 5); // 5 tick timeout
+        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, serverBus, storage, 5); // 5 tick timeout
         
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
         GetRequest getRequest = new GetRequest("test-key");
@@ -218,10 +218,10 @@ class QuorumBasedReplicaTest {
     
     // Helper methods
     
-    private MessageBus createMockMessageBus() {
+    private ServerMessageBus createMockMessageBus() {
         // For now, return a simple mock that doesn't throw errors
         // In a real implementation, we'd use a proper mock framework
-        return new MessageBus(new TestNetwork(), new JsonMessageCodec());
+        return new ServerMessageBus(new TestNetwork(), new JsonMessageCodec());
     }
     
     private Message createMessage(NetworkAddress source, NetworkAddress destination, 

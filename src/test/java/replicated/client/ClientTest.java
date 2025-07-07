@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 class ClientTest {
     
-    private MessageBus messageBus;
+    private ClientMessageBus messageBus;
     private NetworkAddress replicaAddress;
     private Client client;
     
@@ -23,7 +23,7 @@ class ClientTest {
         replicaAddress = new NetworkAddress("192.168.1.1", 8080);
         
         // Setup message bus with test network
-        messageBus = new MessageBus(new TestNetwork(), new JsonMessageCodec());
+        messageBus = new ClientMessageBus(new TestNetwork(), new JsonMessageCodec());
         
         // Create client with bootstrap replicas (new API)
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
