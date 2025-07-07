@@ -82,7 +82,7 @@ class ReplicaTest {
         long currentTick = 100L;
         
         // When & Then - should not throw
-        assertDoesNotThrow(() -> replica.tick(currentTick));
+        assertDoesNotThrow(() -> replica.tick());
     }
     
     @Test

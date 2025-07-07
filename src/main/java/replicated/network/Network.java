@@ -41,6 +41,7 @@ public interface Network {
      * that have just completed (message deliveries, timeouts, etc.).
      * 
      * Should be called by the simulation loop to advance network state.
+     * Network implementations manage their own internal tick counters for timing.
      */
     void tick();
     

@@ -103,7 +103,7 @@ class ReplicaBaseTest {
         TestableReplica replica = new TestableReplica("test", address1, peers, messageBus, testStorage, 10);
         
         // When
-        replica.tick(1);
+        replica.tick();
         
         // Then
         assertTrue(testStorage.tickCalled);
@@ -116,8 +116,10 @@ class ReplicaBaseTest {
         TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 1);
         replica.testAddPendingRequest("req-1", request);
         
-        // When - tick beyond timeout
-        replica.tick(10); // startTick=1, timeout=5, so tick=6 should timeout
+        // When - tick beyond timeout (startTick=1, timeout=5, so tick=6 should timeout)
+        for (int i = 0; i < 6; i++) {
+            replica.tick();
+        }
         
         // Then
         assertTrue(replica.timeoutResponseSent);
@@ -131,8 +133,10 @@ class ReplicaBaseTest {
         TestPendingRequest request = new TestPendingRequest("req-1", address2, "key1", 1);
         replica.testAddPendingRequest("req-1", request);
         
-        // When - tick within timeout
-        replica.tick(5); // startTick=1, timeout=10, so tick=5 should not timeout
+        // When - tick within timeout (startTick=1, timeout=10, so tick=5 should not timeout)
+        for (int i = 0; i < 5; i++) {
+            replica.tick();
+        }
         
         // Then
         assertFalse(replica.timeoutResponseSent);

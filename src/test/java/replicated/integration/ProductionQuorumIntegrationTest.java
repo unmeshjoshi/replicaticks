@@ -113,11 +113,11 @@ class ProductionQuorumIntegrationTest {
             storage2.tick();
             storage3.tick();
             
-            replica1.tick(currentTick);
-            replica2.tick(currentTick);
-            replica3.tick(currentTick);
+            replica1.tick();
+            replica2.tick();
+            replica3.tick();
             
-            client.tick(currentTick);
+            client.tick();
             
             if (System.currentTimeMillis() - startTime > timeoutMs) {
                 fail("Timeout waiting for condition to be met");

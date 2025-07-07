@@ -1,11 +1,11 @@
 package replicated.replica;
 
 import replicated.messaging.*;
+import replicated.network.MessageContext;
 import replicated.storage.Storage;
-import replicated.future.ListenableFuture;
+
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
-import replicated.network.MessageContext;
 
 /**
  * Base class for all replica implementations containing common building blocks.
@@ -28,6 +28,9 @@ public abstract class Replica implements MessageHandler {
     protected final AtomicLong requestIdGenerator = new AtomicLong(0);
     protected final Map<String, PendingRequest> pendingRequests = new HashMap<>();
     
+    // Internal counter for timeout management (TigerBeetle pattern)
+    private long currentTick = 0;
+
     /**
      * Base constructor for all replica implementations.
      * 
@@ -86,11 +89,14 @@ public abstract class Replica implements MessageHandler {
      * Common tick() processing for all replica types.
      * This handles infrastructure concerns like storage ticks and timeouts.
      * Subclasses can override to add specific logic.
+     * Replica implementations manage their own internal tick counters for timeout management.
      */
-    public void tick(long currentTick) {
+    public void tick() {
         if (messageBus == null || storage == null) {
             return;
         }
+        
+        currentTick++; // Increment internal counter (TigerBeetle pattern)
         
         // Process storage operations first
         storage.tick();
@@ -107,7 +113,7 @@ public abstract class Replica implements MessageHandler {
      * This is called after common timeout handling.
      */
     protected void onTick(long currentTick) {
-        // Default implementation does nothing
+        // currentTick is already set in the main tick() method
     }
     
     /**

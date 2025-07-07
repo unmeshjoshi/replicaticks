@@ -19,6 +19,8 @@ public class SimulatedStorage implements Storage {
     // Internal state
     private final Map<BytesKey, VersionedValue> dataStore = new HashMap<>();
     private final PriorityQueue<PendingOperation> pendingOperations = new PriorityQueue<>();
+    
+    // Internal counter for operation timing (TigerBeetle pattern)
     private long currentTick = 0;
     
     /**

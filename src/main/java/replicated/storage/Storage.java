@@ -30,6 +30,7 @@ public interface Storage {
      * Advances the storage simulation by one tick.
      * This method processes pending operations and completes their futures.
      * Should be called by the simulation loop.
+     * Storage implementations manage their own internal tick counters for timing.
      */
     void tick();
 } 

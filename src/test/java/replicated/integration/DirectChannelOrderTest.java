@@ -62,7 +62,7 @@ public class DirectChannelOrderTest {
     private void processTicks(int n) {
         long tick = 1;
         for (int i = 0; i < n; i++, tick++) {
-            for (QuorumBasedReplica r : replicas) r.tick(tick);
+            for (QuorumBasedReplica r : replicas) r.tick();
             bus.tick();
             network.tick();
         }

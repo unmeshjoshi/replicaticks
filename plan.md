@@ -334,3 +334,82 @@ Implement ability for replicas to send a response back on the exact `SocketChann
 2. **MessageBus.reply() helper** – delegate to `network.sendOnChannel()`.
 3. **Replica changes** – persist the original `MessageContext` with every pending request and call `messageBus.reply()` instead of `sendMessage()`.
 4. **Integration tests** – verify responses arrive in-order on the same socket.
+
+## Phase 12: TigerBeetle-Style Tick Management 🆕 **← CURRENT FOCUS**
+
+### **Problem Statement**
+Current tick orchestration is scattered across tests with inconsistent patterns. Each test implements its own `runUntil()` method with different tick management approaches. We need centralized, deterministic tick management following TigerBeetle's proven patterns.
+
+### **TigerBeetle Analysis Results**
+After analyzing TigerBeetle's codebase, we discovered:
+- ✅ **NO Component interface** - Direct method calls with concrete types
+- ✅ **Internal counters only where needed** - Timeout objects, Network, Storage
+- ✅ **Simple orchestration** - Main loop calls `replica.tick()`, `network.tick()`, `storage.tick()`
+- ✅ **Self-contained timeouts** - Each timeout manages its own tick counter
+
+### **Phase 12A: Structural Changes (Tidy First)** ⏳ **← NEXT**
+
+#### **Step 1: Remove Tick Parameters from Interfaces**
+- [ ] **Update Network Interface**: Remove `currentTick` parameter from `tick(long currentTick)` → `tick()`
+- [ ] **Update Storage Interface**: Remove `currentTick` parameter from `tick(long currentTick)` → `tick()`
+- [ ] **Update Client Interface**: Remove `currentTick` parameter from `tick(long currentTick)` → `tick()`
+- [ ] **Update Replica Interface**: Remove `currentTick` parameter from `tick(long currentTick)` → `tick()`
+
+#### **Step 2: Add Internal Counters Where Needed**
+- [ ] **SimulatedNetwork**: Add `private long currentTick = 0` and increment in `tick()`
+- [ ] **SimulatedStorage**: Add `private long currentTick = 0` and increment in `tick()`
+- [ ] **Timeout Objects**: Create `Timeout` class with internal `ticks` counter (TigerBeetle pattern)
+
+#### **Step 3: Create Timeout Management**
+- [ ] **Timeout Class**: Implement TigerBeetle-style timeout with internal counter
+  - [ ] `start()` method to begin timeout
+  - [ ] `tick()` method to increment internal counter
+  - [ ] `fired()` method to check if timeout expired
+  - [ ] `reset()` method for retries
+- [ ] **Update Client**: Replace internal timeout tracking with Timeout objects
+- [ ] **Update Replica**: Replace internal timeout tracking with Timeout objects
+
+### **Phase 12B: Behavioral Changes (After Structural)**
+
+#### **Step 4: Create Simulation Driver**
+- [ ] **SimulationDriver Class**: Centralized orchestration following TigerBeetle pattern
+  - [ ] `List<Client> clients` - Application Layer components
+  - [ ] `List<Replica> replicas` - Application Layer components  
+  - [ ] `List<Storage> storages` - Service Layer components
+  - [ ] `List<Network> networks` - Service Layer components
+  - [ ] `runSimulation(int maxTicks)` method with deterministic order
+
+#### **Step 5: Update Test Infrastructure**
+- [ ] **TestSimulationDriver**: Extends SimulationDriver for test scenarios
+  - [ ] `runUntil(Supplier<Boolean> condition, long timeoutMs)` method
+  - [ ] Replace all test `runUntil()` implementations
+- [ ] **Update Integration Tests**: Use centralized simulation driver
+  - [ ] `ProductionQuorumIntegrationTest`
+  - [ ] `DistributedSystemIntegrationTest`
+  - [ ] `SimpleNioIntegrationTest`
+
+#### **Step 6: Create Main Entry Point**
+- [ ] **SimulationMain Class**: Production simulation entry point
+  - [ ] `main(String[] args)` method
+  - [ ] Component setup and orchestration
+  - [ ] Command-line argument parsing for simulation parameters
+
+### **Phase 12C: Validation & Testing**
+
+#### **Step 7: Comprehensive Testing**
+- [ ] **Unit Tests**: Verify Timeout class behavior
+- [ ] **Integration Tests**: Verify centralized tick orchestration
+- [ ] **Determinism Tests**: Ensure identical results with same seed
+- [ ] **Performance Tests**: Verify no regression in simulation speed
+
+#### **Step 8: Documentation & Examples**
+- [ ] **Updated README**: Document new tick management approach
+- [ ] **Code Examples**: Demonstrate SimulationDriver usage
+- [ ] **Migration Guide**: How to update existing tests
+
+### **Expected Benefits**
+- ✅ **Simplified API**: No tick parameters to pass around
+- ✅ **TigerBeetle Proven**: Follows production distributed system patterns
+- ✅ **Centralized Orchestration**: Single source of truth for simulation loop
+- ✅ **Better Testing**: Consistent test infrastructure across all scenarios
+- ✅ **Production Ready**: Main simulation entry point for real deployments

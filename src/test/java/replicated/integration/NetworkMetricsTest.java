@@ -86,10 +86,10 @@ class NetworkMetricsTest {
         // Drive the system for a while so sockets can connect and responses flow
         for (int tick = 0; tick < 200; tick++) {
             network.tick();
-            r1.tick(tick);
-            r2.tick(tick);
-            r3.tick(tick);
-            client.tick(tick);
+            r1.tick();
+            r2.tick();
+            r3.tick();
+            client.tick();
         }
 
         var m = network.getMetrics();

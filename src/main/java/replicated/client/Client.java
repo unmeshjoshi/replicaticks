@@ -30,6 +30,9 @@ public final class Client implements MessageHandler {
     // Connection pool rotation index
     private int replicaIndex = 0;
     
+    // Internal counter for timeout management (TigerBeetle pattern)
+    private long currentTick = 0;
+    
     /**
      * Creates a Client with bootstrap replicas for cluster discovery.
      * Follows the Kafka bootstrap pattern - client starts with one or more replica addresses
@@ -276,8 +279,11 @@ public final class Client implements MessageHandler {
     /**
      * Called by the simulation loop for each tick.
      * Handles request timeouts and cleanup.
+     * Client implementations manage their own internal tick counters for timeout management.
      */
-    public void tick(long currentTick) {
+    public void tick() {
+        currentTick++; // Increment internal counter (TigerBeetle pattern)
+        
         // Handle request timeouts
         List<String> timedOutRequests = new ArrayList<>();
         

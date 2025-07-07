@@ -462,8 +462,8 @@ class DistributedSystemIntegrationTest {
             
             // 1. Process clients and replicas (application layer)
             final long tickValue = currentTick;
-            clients.forEach(client -> client.tick(tickValue));
-            replicas.forEach(replica -> replica.tick(tickValue));
+            clients.forEach(client -> client.tick());
+            replicas.forEach(replica -> replica.tick());
             
             // 2. Process message bus routing (includes network.tick())
             messageBus.tick();

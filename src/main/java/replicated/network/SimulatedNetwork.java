@@ -23,6 +23,8 @@ public class SimulatedNetwork implements Network {
     private final PriorityQueue<QueuedMessage> pendingMessages = new PriorityQueue<>();
     private final Map<NetworkAddress, List<Message>> deliveredMessages = new HashMap<>();
     private final Map<Message, MessageContext> messageContexts = new HashMap<>();
+    
+    // Internal counter for delivery timing (TigerBeetle pattern)
     private long currentTick = 0;
     
     // Network partitioning state
@@ -83,7 +85,8 @@ public class SimulatedNetwork implements Network {
             return; // Message lost due to packet loss
         }
         
-        long deliveryTick = calculateDeliveryTick(link);
+        // Use internal counter to calculate delivery tick (TigerBeetle pattern)
+        long deliveryTick = calculateDeliveryTick(link, currentTick);
         queueForDelivery(message, deliveryTick);
     }
     
@@ -111,7 +114,7 @@ public class SimulatedNetwork implements Network {
      * - It does NOT initiate new actions (that's the Application Layer's role)
      * 
      * Timing Mechanics:
-     * 1. Increments currentTick to advance simulation time
+     * 1. Increments internal currentTick counter
      * 2. Processes all messages whose deliveryTick <= currentTick
      * 3. Moves processed messages from pendingMessages to deliveredMessages
      * 4. Messages become available via receive() after processing
@@ -133,7 +136,7 @@ public class SimulatedNetwork implements Network {
      */
     @Override
     public void tick() {
-        currentTick++;
+        currentTick++; // Increment internal counter (TigerBeetle pattern)
         deliverPendingMessagesFor(currentTick);
     }
     
@@ -154,7 +157,7 @@ public class SimulatedNetwork implements Network {
         return effectivePacketLoss > 0.0 && random.nextDouble() < effectivePacketLoss;
     }
     
-    private long calculateDeliveryTick(NetworkLink link) {
+    private long calculateDeliveryTick(NetworkLink link, long currentTick) {
         int effectiveDelay = linkDelays.getOrDefault(link, defaultDelayTicks);
         return currentTick + effectiveDelay;
     }

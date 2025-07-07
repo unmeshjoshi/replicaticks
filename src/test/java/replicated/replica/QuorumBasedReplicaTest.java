@@ -78,7 +78,7 @@ class QuorumBasedReplicaTest {
         // Then - should initiate quorum get operation
         // This will be verified by checking internal messages sent to peers
         // For now, just verify no exception is thrown
-        assertDoesNotThrow(() -> replica.tick(1L));
+        assertDoesNotThrow(() -> replica.tick());
     }
     
     @Test
@@ -93,7 +93,7 @@ class QuorumBasedReplicaTest {
         replica.onMessageReceived(clientMessage, null);
         
         // Then - should initiate quorum set operation
-        assertDoesNotThrow(() -> replica.tick(1L));
+        assertDoesNotThrow(() -> replica.tick());
     }
     
     @Test
@@ -112,7 +112,7 @@ class QuorumBasedReplicaTest {
         
         replica.onMessageReceived(internalMessage, null);
         storage.tick(); // Process storage operation
-        replica.tick(1L); // Process any pending work
+        replica.tick(); // Process any pending work
         
         // Then - should respond with INTERNAL_GET_RESPONSE
         // Response verification would be done through MessageBus mock
@@ -132,7 +132,7 @@ class QuorumBasedReplicaTest {
         // When
         replica.onMessageReceived(internalMessage, null);
         storage.tick(); // Process storage operation
-        replica.tick(1L); // Process any pending work
+        replica.tick(); // Process any pending work
         
         // Then - should respond with INTERNAL_SET_RESPONSE
         assertDoesNotThrow(() -> {});
@@ -158,8 +158,8 @@ class QuorumBasedReplicaTest {
         // Verification would be done through inspection of internal state
         // For now, verify no exceptions
         assertDoesNotThrow(() -> {
-            replica.tick(1L);
-            replica.tick(2L);
+            replica.tick();
+            replica.tick();
         });
     }
     
@@ -178,7 +178,7 @@ class QuorumBasedReplicaTest {
         
         // Then - each should have unique request ID
         // This will be verified through MessageBus interactions
-        assertDoesNotThrow(() -> replica.tick(1L));
+        assertDoesNotThrow(() -> replica.tick());
     }
     
     @Test
@@ -196,7 +196,7 @@ class QuorumBasedReplicaTest {
         
         // Advance time beyond timeout
         for (int tick = 1; tick <= 10; tick++) {
-            replica.tick(tick);
+            replica.tick();
         }
         
         // Then - request should timeout and respond to client
@@ -213,7 +213,7 @@ class QuorumBasedReplicaTest {
         // This will be tested indirectly through quorum behavior
         // For 3 nodes: need 2 responses for quorum
         // For 5 nodes: need 3 responses for quorum
-        assertDoesNotThrow(() -> replica.tick(1L));
+        assertDoesNotThrow(() -> replica.tick());
     }
     
     // Helper methods

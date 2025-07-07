@@ -64,7 +64,7 @@ class ClientTest {
         assertNotNull(future);
         // Verify request is tracked internally
         // This will be verified through message sending and state inspection
-        assertDoesNotThrow(() -> client.tick(1L));
+        assertDoesNotThrow(() -> client.tick());
     }
     
     @Test
@@ -79,7 +79,7 @@ class ClientTest {
         // Then
         assertNotNull(future);
         // Verify request is tracked internally
-        assertDoesNotThrow(() -> client.tick(1L));
+        assertDoesNotThrow(() -> client.tick());
     }
     
     @Test
@@ -119,7 +119,7 @@ class ClientTest {
         
         // Then - future should be completed
         // Note: In actual implementation, correlation ID matching will be tested
-        assertDoesNotThrow(() -> client.tick(1L));
+        assertDoesNotThrow(() -> client.tick());
     }
     
     @Test
@@ -140,7 +140,7 @@ class ClientTest {
         client.onMessageReceived(responseMessage, null);
         
         // Then - future should be completed
-        assertDoesNotThrow(() -> client.tick(1L));
+        assertDoesNotThrow(() -> client.tick());
     }
     
     @Test
@@ -159,7 +159,7 @@ class ClientTest {
         assertNotSame(future1, future2);
         
         // Should handle multiple pending requests
-        assertDoesNotThrow(() -> client.tick(1L));
+        assertDoesNotThrow(() -> client.tick());
     }
     
     @Test
@@ -176,7 +176,7 @@ class ClientTest {
         
         // When - advance time beyond timeout
         for (int tick = 1; tick <= 5; tick++) {
-            client.tick(tick);
+            client.tick();
         }
         
         // Then - request should timeout
@@ -210,7 +210,7 @@ class ClientTest {
             MessageType.CLIENT_RESPONSE, response);
         
         client.onMessageReceived(responseMessage, null);
-        client.tick(1L);
+        client.tick();
         
         // Then - should not cause issues with subsequent operations
         assertDoesNotThrow(() -> {
@@ -231,8 +231,7 @@ class ClientTest {
         
         // Then - should work without timeout for ticks < customTimeout
         for (int tick = 1; tick < customTimeout; tick++) {
-            final int currentTick = tick; // Make effectively final for lambda
-            assertDoesNotThrow(() -> customClient.tick(currentTick));
+            assertDoesNotThrow(() -> customClient.tick());
         }
     }
     
