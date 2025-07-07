@@ -360,12 +360,15 @@ After analyzing TigerBeetle's codebase, we discovered:
 - [ ] **SimulatedStorage**: Add `private long currentTick = 0` and increment in `tick()`
 - [ ] **Timeout Objects**: Create `Timeout` class with internal `ticks` counter (TigerBeetle pattern)
 
-#### **Step 3: Create Timeout Management**
-- [ ] **Timeout Class**: Implement TigerBeetle-style timeout with internal counter
-  - [ ] `start()` method to begin timeout
-  - [ ] `tick()` method to increment internal counter
-  - [ ] `fired()` method to check if timeout expired
-  - [ ] `reset()` method for retries
+#### **Step 3: Create Timeout Management** ✅ **COMPLETED**
+- [x] **Timeout Class**: Implement TigerBeetle-style timeout with internal counter
+  - [x] `start()` method to begin timeout
+  - [x] `tick()` method to increment internal counter
+  - [x] `fired()` method to check if timeout expired
+  - [x] `reset()` method for retries
+  - [x] `stop()` method to stop timeout
+  - [x] `getRemainingTicks()` method for debugging
+- [x] **TimeoutTest**: Comprehensive test coverage (15 tests)
 - [ ] **Update Client**: Replace internal timeout tracking with Timeout objects
 - [ ] **Update Replica**: Replace internal timeout tracking with Timeout objects
 
