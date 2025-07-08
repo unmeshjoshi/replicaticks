@@ -82,6 +82,14 @@ public final class Client implements MessageHandler {
     }
     
     /**
+     * Gets the message bus used by this client.
+     * @return the message bus instance
+     */
+    public BaseMessageBus getMessageBus() {
+        return messageBus;
+    }
+    
+    /**
      * Send a GET request using automatic replica selection and failover.
      */
     public ListenableFuture<VersionedValue> sendGetRequest(String key) {
@@ -171,6 +179,9 @@ public final class Client implements MessageHandler {
         String correlationId = generateCorrelationId();
         ListenableFuture<Boolean> future = new ListenableFuture<>();
         
+        System.out.println("Client: Creating SET request - key: " + key + ", value: " + new String(value) + 
+                          ", replica: " + replicaAddress + ", correlationId: " + correlationId);
+        
         // Track the pending request with timeout
         Timeout requestTimeout = new Timeout("set-request-" + correlationId, requestTimeoutTicks);
         requestTimeout.start();
@@ -179,9 +190,13 @@ public final class Client implements MessageHandler {
         );
         pendingRequests.put(correlationId, pendingRequest);
         
+        System.out.println("Client: SET request registered with pendingRequests, size: " + pendingRequests.size());
+        
         // Establish connection for this request
+        System.out.println("Client: Establishing connection and sending SET request...");
         establishConnectionAndSend(replicaAddress, MessageType.CLIENT_SET_REQUEST, new SetRequest(key, value), correlationId);
         
+        System.out.println("Client: SET request sent successfully");
         return future;
     }
     
@@ -196,18 +211,27 @@ public final class Client implements MessageHandler {
      * 4. Sends the message
      */
     private void establishConnectionAndSend(NetworkAddress destination, MessageType messageType, Object request, String correlationId) {
+        System.out.println("Client: establishConnectionAndSend - destination: " + destination + 
+                          ", messageType: " + messageType + ", correlationId: " + correlationId);
+        
         // Step 1: Register client with MessageBus to receive responses
+        System.out.println("Client: Registering client with MessageBus...");
         NetworkAddress actualClientAddress = messageBus.registerClient(this);
+        System.out.println("Client: Registered with actual client address: " + actualClientAddress);
         
         // Step 2: Register client as correlation ID handler for this request
+        System.out.println("Client: Registering correlation ID handler for: " + correlationId);
         messageBus.registerCorrelationIdHandler(correlationId, this);
         
         // Step 3: Update current client address
         this.currentClientAddress = actualClientAddress;
         
         // Step 4: Send the message using the established connection
+        System.out.println("Client: Creating message from " + actualClientAddress + " to " + destination);
         Message message = new Message(actualClientAddress, destination, messageType, serializePayload(request), correlationId);
+        System.out.println("Client: Sending message via MessageBus...");
         messageBus.sendMessage(message);
+        System.out.println("Client: Message sent via MessageBus");
     }
     
 
@@ -257,6 +281,7 @@ public final class Client implements MessageHandler {
         PendingRequest pendingRequest = pendingRequests.get(correlationId);
         if (pendingRequest == null) {
             // No matching request found, ignore
+            System.out.println("Client: No matching request found for correlationId: " + correlationId);
             return;
         }
         
@@ -267,12 +292,27 @@ public final class Client implements MessageHandler {
                 GetResponse getResponse = deserializePayload(payload, GetResponse.class);
                 @SuppressWarnings("unchecked")
                 ListenableFuture<VersionedValue> future = (ListenableFuture<VersionedValue>) pendingRequest.future;
-                future.complete(getResponse.value());
+                
+                // Debug logging for GET response
+                String key = getResponse.key();
+                VersionedValue value = getResponse.value();
+                String valueStr = value != null ? new String(value.value()) : "null";
+                System.out.println("Client: Received GET response - correlationId: " + correlationId + 
+                                  ", key: " + key + ", value: " + valueStr);
+                
+                future.complete(value);
             } else if (pendingRequest.type == PendingRequest.Type.SET) {
                 SetResponse setResponse = deserializePayload(payload, SetResponse.class);
                 @SuppressWarnings("unchecked")
                 ListenableFuture<Boolean> future = (ListenableFuture<Boolean>) pendingRequest.future;
-                future.complete(setResponse.success());
+                
+                // Debug logging for SET response
+                String key = setResponse.key();
+                boolean success = setResponse.success();
+                System.out.println("Client: Received SET response - correlationId: " + correlationId + 
+                                  ", key: " + key + ", success: " + success);
+                
+                future.complete(success);
             }
             
             // Remove the completed request and unregister the correlation ID handler
@@ -281,6 +321,8 @@ public final class Client implements MessageHandler {
             
         } catch (Exception e) {
             // Failed to handle response, complete with error
+            System.out.println("Client: Failed to deserialize response for correlationId: " + correlationId + 
+                              ", error: " + e.getMessage());
             pendingRequest.future.fail(new RuntimeException("Failed to deserialize response", e));
             pendingRequests.remove(correlationId);
             messageBus.unregisterCorrelationIdHandler(correlationId);

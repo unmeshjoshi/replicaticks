@@ -92,6 +92,9 @@ public final class QuorumBasedReplica extends Replica {
         GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         
+        System.out.println("QuorumBasedReplica: Processing client GET request - key: " + clientRequest.key() + 
+                          ", correlationId: " + correlationId + ", from: " + message.source());
+        
         // Create timeout for this request
         Timeout requestTimeout = new Timeout("quorum-get-" + correlationId, requestTimeoutTicks);
         requestTimeout.start();
@@ -109,6 +112,9 @@ public final class QuorumBasedReplica extends Replica {
         
         for (NetworkAddress node : allNodes) {
             String internalCorrelationId = generateCorrelationId();
+            // Track the internal correlation ID for this request
+            quorumRequest.addInternalCorrelationId(internalCorrelationId);
+            
             InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), internalCorrelationId);
             messageBus.sendMessage(new Message(
                 networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
@@ -122,6 +128,10 @@ public final class QuorumBasedReplica extends Replica {
         SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
         long timestamp = System.currentTimeMillis(); // In real system, use coordinated time
         VersionedValue value = new VersionedValue(clientRequest.value(), timestamp);
+        
+        System.out.println("QuorumBasedReplica: Processing client SET request - key: " + clientRequest.key() + 
+                          ", value: " + new String(clientRequest.value()) + ", correlationId: " + correlationId + 
+                          ", from: " + message.source());
         
         // Create timeout for this request
         Timeout requestTimeout = new Timeout("quorum-set-" + correlationId, requestTimeoutTicks);
@@ -140,6 +150,9 @@ public final class QuorumBasedReplica extends Replica {
         
         for (NetworkAddress node : allNodes) {
             String internalCorrelationId = generateCorrelationId();
+            // Track the internal correlation ID for this request
+            quorumRequest.addInternalCorrelationId(internalCorrelationId);
+            
             InternalSetRequest internalRequest = new InternalSetRequest(
                 clientRequest.key(), clientRequest.value(), timestamp, internalCorrelationId
             );
@@ -153,16 +166,26 @@ public final class QuorumBasedReplica extends Replica {
     private void handleInternalGetRequest(Message message) {
         InternalGetRequest getRequest = deserializePayload(message.payload(), InternalGetRequest.class);
         
+        System.out.println("QuorumBasedReplica: Processing internal GET request - key: " + getRequest.key() + 
+                          ", correlationId: " + getRequest.correlationId() + ", from: " + message.source());
+        
         // Perform local storage operation
         ListenableFuture<VersionedValue> future = storage.get(getRequest.key().getBytes());
         
         future.onSuccess(value -> {
+            String valueStr = value != null ? new String(value.value()) : "null";
+            System.out.println("QuorumBasedReplica: Internal GET completed - key: " + getRequest.key() + 
+                              ", value: " + valueStr + ", correlationId: " + getRequest.correlationId());
+            
             InternalGetResponse response = new InternalGetResponse(getRequest.key(), value, getRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
                 serializePayload(response), getRequest.correlationId()
             ));
         }).onFailure(error -> {
+            System.out.println("QuorumBasedReplica: Internal GET failed - key: " + getRequest.key() + 
+                              ", error: " + error.getMessage() + ", correlationId: " + getRequest.correlationId());
+            
             InternalGetResponse response = new InternalGetResponse(getRequest.key(), null, getRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
@@ -175,16 +198,26 @@ public final class QuorumBasedReplica extends Replica {
         InternalSetRequest setRequest = deserializePayload(message.payload(), InternalSetRequest.class);
         VersionedValue value = new VersionedValue(setRequest.value(), setRequest.timestamp());
         
+        System.out.println("QuorumBasedReplica: Processing internal SET request - key: " + setRequest.key() + 
+                          ", value: " + new String(setRequest.value()) + ", timestamp: " + setRequest.timestamp() + 
+                          ", correlationId: " + setRequest.correlationId() + ", from: " + message.source());
+        
         // Perform local storage operation
         ListenableFuture<Boolean> future = storage.set(setRequest.key().getBytes(), value);
         
         future.onSuccess(success -> {
+            System.out.println("QuorumBasedReplica: Internal SET completed - key: " + setRequest.key() + 
+                              ", success: " + success + ", correlationId: " + setRequest.correlationId());
+            
             InternalSetResponse response = new InternalSetResponse(setRequest.key(), success, setRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
                 serializePayload(response), setRequest.correlationId()
             ));
         }).onFailure(error -> {
+            System.out.println("QuorumBasedReplica: Internal SET failed - key: " + setRequest.key() + 
+                              ", error: " + error.getMessage() + ", correlationId: " + setRequest.correlationId());
+            
             InternalSetResponse response = new InternalSetResponse(setRequest.key(), false, setRequest.correlationId());
             messageBus.sendMessage(new Message(
                 networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
@@ -196,19 +229,23 @@ public final class QuorumBasedReplica extends Replica {
     private void handleInternalGetResponse(Message message) {
         InternalGetResponse response = deserializePayload(message.payload(), InternalGetResponse.class);
         
+        System.out.println("QuorumBasedReplica: Processing internal GET response - key: " + response.key() + 
+                          ", internalCorrelationId: " + response.correlationId() + ", from: " + message.source());
+        
         // Find the pending request by matching the internal correlation ID
-        // We need to search through all pending requests to find the one that matches
         QuorumRequest quorumRequest = null;
         String clientCorrelationId = null;
         
         for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
             PendingRequest pending = entry.getValue();
             if (pending instanceof QuorumRequest qr && 
-                qr.operation == QuorumRequest.Operation.GET) {
-                // For now, we'll assume any GET request can receive this response
-                // In a more sophisticated implementation, we'd track internal correlation IDs
+                qr.operation == QuorumRequest.Operation.GET &&
+                qr.hasInternalCorrelationId(response.correlationId())) {
+                // Found the correct request that matches this internal correlation ID
                 quorumRequest = qr;
                 clientCorrelationId = entry.getKey();
+                System.out.println("QuorumBasedReplica: Found matching GET request - clientCorrelationId: " + 
+                                  clientCorrelationId + ", key: " + quorumRequest.key);
                 break;
             }
         }
@@ -226,28 +263,40 @@ public final class QuorumBasedReplica extends Replica {
                     serializePayload(clientResponse), clientCorrelationId
                 );
 
+                System.out.println("QuorumBasedReplica: Sending client GET response - key: " + quorumRequest.key + 
+                                  ", value: " + (latestValue != null ? new String(latestValue.value()) : "null") + 
+                                  ", clientCorrelationId: " + clientCorrelationId);
+                
                 messageBus.reply(quorumRequest.responseContext, clientMessage);
                 pendingRequests.remove(clientCorrelationId);
             }
+        } else {
+            System.out.println("QuorumBasedReplica: No matching GET request found for internalCorrelationId: " + 
+                              response.correlationId());
         }
     }
     
     private void handleInternalSetResponse(Message message) {
         InternalSetResponse response = deserializePayload(message.payload(), InternalSetResponse.class);
         
+        System.out.println("QuorumBasedReplica: Processing internal SET response - key: " + response.key() + 
+                          ", success: " + response.success() + ", internalCorrelationId: " + response.correlationId() + 
+                          ", from: " + message.source());
+        
         // Find the pending request by matching the internal correlation ID
-        // We need to search through all pending requests to find the one that matches
         QuorumRequest quorumRequest = null;
         String clientCorrelationId = null;
         
         for (Map.Entry<String, PendingRequest> entry : pendingRequests.entrySet()) {
             PendingRequest pending = entry.getValue();
             if (pending instanceof QuorumRequest qr && 
-                qr.operation == QuorumRequest.Operation.SET) {
-                // For now, we'll assume any SET request can receive this response
-                // In a more sophisticated implementation, we'd track internal correlation IDs
+                qr.operation == QuorumRequest.Operation.SET &&
+                qr.hasInternalCorrelationId(response.correlationId())) {
+                // Found the correct request that matches this internal correlation ID
                 quorumRequest = qr;
                 clientCorrelationId = entry.getKey();
+                System.out.println("QuorumBasedReplica: Found matching SET request - clientCorrelationId: " + 
+                                  clientCorrelationId + ", key: " + quorumRequest.key);
                 break;
             }
         }
@@ -264,6 +313,10 @@ public final class QuorumBasedReplica extends Replica {
                     networkAddress, quorumRequest.clientAddress, MessageType.CLIENT_RESPONSE,
                     serializePayload(clientResponse), clientCorrelationId
                 );
+                
+                System.out.println("QuorumBasedReplica: Sending client SET response - key: " + quorumRequest.key + 
+                                  ", success: " + success + ", clientCorrelationId: " + clientCorrelationId);
+                
                 if (quorumRequest.responseContext != null) {
                     messageBus.reply(quorumRequest.responseContext, clientMessage);
                 } else {
@@ -272,6 +325,9 @@ public final class QuorumBasedReplica extends Replica {
                 
                 pendingRequests.remove(clientCorrelationId);
             }
+        } else {
+            System.out.println("QuorumBasedReplica: No matching SET request found for internalCorrelationId: " + 
+                              response.correlationId());
         }
     }
     
@@ -295,6 +351,7 @@ public final class QuorumBasedReplica extends Replica {
         MessageContext responseContext;
         
         private final Map<NetworkAddress, Object> responses = new HashMap<>();
+        private final Set<String> internalCorrelationIds = new HashSet<>();
         
         QuorumRequest(String requestId, NetworkAddress clientAddress, Operation operation,
                      String key, VersionedValue setValue, long timestamp, Timeout timeout) {
@@ -306,6 +363,14 @@ public final class QuorumBasedReplica extends Replica {
         
         void addResponse(NetworkAddress source, Object response) {
             responses.put(source, response);
+        }
+        
+        void addInternalCorrelationId(String internalCorrelationId) {
+            internalCorrelationIds.add(internalCorrelationId);
+        }
+        
+        boolean hasInternalCorrelationId(String internalCorrelationId) {
+            return internalCorrelationIds.contains(internalCorrelationId);
         }
         
         boolean hasQuorum(int quorumSize) {

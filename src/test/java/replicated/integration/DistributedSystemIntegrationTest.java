@@ -253,6 +253,18 @@ class DistributedSystemIntegrationTest {
         // Process all concurrent operations
         processDistributedOperation(30);
         
+        // Debug output for incomplete operations
+        boolean incomplete = false;
+        for (int i = 0; i < setResults.size(); i++) {
+            if (setResults.get(i).get() == null) {
+                System.out.println("DEBUG: Operation " + i + " (key: " + baseKey + i + ") did not complete (result is null)");
+                incomplete = true;
+            }
+        }
+        if (incomplete) {
+            System.out.println("DEBUG: Some operations did not complete within allotted ticks.");
+        }
+        
         // Then - All operations should eventually succeed
         for (AtomicReference<Boolean> result : setResults) {
             assertTrue(result.get(), "Concurrent operation should succeed");

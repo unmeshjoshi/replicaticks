@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 repositories {
@@ -15,6 +16,55 @@ dependencies {
     
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
+
+// Configure the shadow plugin to create a fat JAR
+shadowJar {
+    archiveBaseName.set('replicated-server')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+    
+    // Merge service files (important for RocksDB)
+    mergeServiceFiles()
+    
+    // Exclude development dependencies
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    exclude 'META-INF/*.SF'
+    
+    // Set the main class for the JAR
+    manifest {
+        attributes 'Main-Class': 'replicated.cmd.ServerApplication'
+    }
+}
+
+// Create a separate client JAR
+task shadowClientJar(type: com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    group = 'build'
+    description = 'Creates a fat JAR for the client application'
+    
+    from sourceSets.main.output
+    configurations = [project.configurations.runtimeClasspath]
+    
+    archiveBaseName.set('replicated-client')
+    archiveClassifier.set('')
+    archiveVersion.set('')
+    
+    // Merge service files
+    mergeServiceFiles()
+    
+    // Exclude development dependencies
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    exclude 'META-INF/*.SF'
+    
+    // Set the main class for the client JAR
+    manifest {
+        attributes 'Main-Class': 'replicated.cmd.ClientApplication'
+    }
+}
+
+// Make the shadowJar task depend on the jar task
+jar.dependsOn shadowJar
 
 test {
     useJUnitPlatform()
