@@ -1,8 +1,9 @@
 package replicated.messaging;
 
-import replicated.storage.VersionedValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import replicated.storage.VersionedValue;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class MessagePayloadSerializationTest {

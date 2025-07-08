@@ -1,15 +1,18 @@
 package replicated.replica;
 
-import replicated.messaging.*;
-import replicated.network.SimulatedNetwork;
-import replicated.network.MessageContext;
-import replicated.storage.*;
-import replicated.util.Timeout;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import replicated.messaging.*;
+import replicated.network.MessageContext;
+import replicated.network.SimulatedNetwork;
+import replicated.storage.SimulatedStorage;
+import replicated.storage.Storage;
+import replicated.util.Timeout;
+
 import java.util.List;
 import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for the ReplicaBase class common building blocks.

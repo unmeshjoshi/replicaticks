@@ -1,7 +1,8 @@
 package replicated.messaging;
 
-import replicated.network.Network;
 import replicated.network.MessageContext;
+import replicated.network.Network;
+
 import java.util.List;
 
 /**

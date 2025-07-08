@@ -1,6 +1,7 @@
 package replicated.network;
 
 import replicated.messaging.NetworkAddress;
+
 import java.nio.channels.SocketChannel;
 import java.time.Instant;
 

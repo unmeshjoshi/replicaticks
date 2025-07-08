@@ -2,6 +2,7 @@ package replicated.network;
 
 import replicated.messaging.Message;
 import replicated.messaging.NetworkAddress;
+
 import java.nio.channels.SocketChannel;
 
 /**

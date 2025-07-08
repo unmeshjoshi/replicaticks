@@ -1,6 +1,7 @@
 package replicated.messaging;
 
 import replicated.storage.VersionedValue;
+
 import java.util.Objects;
 
 public record GetResponse(String key, VersionedValue value) {

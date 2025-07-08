@@ -1,10 +1,11 @@
 package replicated.network;
 
-import replicated.messaging.NetworkAddress;
 import replicated.messaging.Message;
-import java.util.*;
-import java.nio.channels.SocketChannel;
+import replicated.messaging.NetworkAddress;
 import replicated.util.DebugConfig;
+
+import java.nio.channels.SocketChannel;
+import java.util.*;
 
 /**
  * Simulated network implementation that provides deterministic message delivery

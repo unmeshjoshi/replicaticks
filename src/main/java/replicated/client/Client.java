@@ -1,10 +1,11 @@
 package replicated.client;
 
+import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
 import replicated.storage.VersionedValue;
-import replicated.future.ListenableFuture;
 import replicated.util.Timeout;
+
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 

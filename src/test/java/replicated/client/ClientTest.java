@@ -1,15 +1,16 @@
 package replicated.client;
 
-import replicated.messaging.*;
-import replicated.network.MessageContext;
-import replicated.storage.VersionedValue;
-import replicated.future.ListenableFuture;
-import replicated.network.Network;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import replicated.future.ListenableFuture;
+import replicated.messaging.*;
+import replicated.network.Network;
+import replicated.storage.VersionedValue;
+
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ClientTest {
     

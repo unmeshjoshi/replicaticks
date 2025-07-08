@@ -1,8 +1,8 @@
 package replicated.network;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Per-channel state management for NIO operations.

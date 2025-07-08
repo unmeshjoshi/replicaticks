@@ -1,19 +1,22 @@
 package replicated.network;
 
-import replicated.messaging.NetworkAddress;
+import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.Message;
 import replicated.messaging.MessageCodec;
-import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.NetworkAddress;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.List;
 
 /**
  * Production-ready NIO-based network implementation.
@@ -984,12 +987,5 @@ public class NioNetwork implements Network {
     public Metrics getMetrics() {
         return new Metrics(inboundConnectionCount.get(), outboundConnectionCount.get(), closedConnectionCount.get(),
                            List.copyOf(connectionStats.values()));
-    }
-
-    /**
-     * Returns a snapshot of per-connection statistics.
-     */
-    public Collection<ConnectionStats> getConnectionStats() {
-        return List.copyOf(connectionStats.values());
     }
 }

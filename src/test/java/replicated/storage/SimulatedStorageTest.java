@@ -1,12 +1,13 @@
 package replicated.storage;
 
-import replicated.future.ListenableFuture;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import replicated.future.ListenableFuture;
+
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class SimulatedStorageTest {
     

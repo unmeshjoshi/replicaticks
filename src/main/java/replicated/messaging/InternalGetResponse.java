@@ -1,6 +1,7 @@
 package replicated.messaging;
 
 import replicated.storage.VersionedValue;
+
 import java.util.Objects;
 
 public record InternalGetResponse(String key, VersionedValue value, String correlationId) {

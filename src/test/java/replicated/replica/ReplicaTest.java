@@ -1,11 +1,13 @@
 package replicated.replica;
 
-import replicated.messaging.NetworkAddress;
-import replicated.messaging.Message;
-import replicated.network.MessageContext;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import replicated.messaging.Message;
+import replicated.messaging.NetworkAddress;
+import replicated.network.MessageContext;
+
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ReplicaTest {
 

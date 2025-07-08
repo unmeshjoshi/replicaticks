@@ -1,7 +1,8 @@
 package replicated.messaging;
 
-import replicated.storage.VersionedValue;
 import org.junit.jupiter.api.Test;
+import replicated.storage.VersionedValue;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class GetResponseTest {

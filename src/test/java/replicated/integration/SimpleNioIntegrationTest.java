@@ -1,15 +1,16 @@
 package replicated.integration;
 
-import replicated.network.NioNetwork;
-import replicated.messaging.*;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
-import static org.junit.jupiter.api.Assertions.*;
-import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import replicated.messaging.*;
+import replicated.network.MessageContext;
+import replicated.network.NioNetwork;
+
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
-import replicated.network.MessageContext;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Simple integration test to verify NIO network messaging works correctly.

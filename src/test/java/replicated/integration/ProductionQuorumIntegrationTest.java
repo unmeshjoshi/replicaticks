@@ -1,23 +1,25 @@
 package replicated.integration;
 
-import replicated.replica.QuorumBasedReplica;
-import replicated.network.SimulatedNetwork;
-import replicated.storage.RocksDbStorage;
-import replicated.messaging.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import replicated.client.Client;
 import replicated.future.ListenableFuture;
+import replicated.messaging.*;
+import replicated.network.SimulatedNetwork;
+import replicated.replica.QuorumBasedReplica;
+import replicated.storage.RocksDbStorage;
 import replicated.storage.VersionedValue;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.io.TempDir;
-import static org.junit.jupiter.api.Assertions.*;
+
 import java.nio.file.Path;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
-import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Integration test for QuorumBasedReplica using production storage components:

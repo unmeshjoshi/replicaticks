@@ -1,16 +1,22 @@
 package replicated.integration;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
-
-import replicated.network.*;
-import replicated.messaging.*;
-import replicated.replica.*;
-import replicated.storage.*;
+import org.junit.jupiter.api.Test;
 import replicated.client.Client;
+import replicated.messaging.ClientMessageBus;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.NetworkAddress;
+import replicated.messaging.ServerMessageBus;
+import replicated.network.NioNetwork;
+import replicated.replica.QuorumBasedReplica;
+import replicated.storage.SimulatedStorage;
+import replicated.storage.Storage;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Verifies that NioNetwork.metrics counters reflect the live connection set when a

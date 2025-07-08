@@ -3,19 +3,19 @@ package replicated.simulation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.client.Client;
+import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.Network;
 import replicated.replica.QuorumBasedReplica;
 import replicated.storage.Storage;
-import replicated.future.ListenableFuture;
 import replicated.storage.VersionedValue;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for SimulationDriver to verify tick orchestration and TestUtils.runUntil functionality.

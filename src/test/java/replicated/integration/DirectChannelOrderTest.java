@@ -3,15 +3,21 @@ package replicated.integration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.client.Client;
-import replicated.messaging.*;
-import replicated.network.*;
+import replicated.future.ListenableFuture;
+import replicated.messaging.ClientMessageBus;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.NetworkAddress;
+import replicated.messaging.ServerMessageBus;
+import replicated.network.MessageContext;
+import replicated.network.SimulatedNetwork;
 import replicated.replica.QuorumBasedReplica;
+import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
-import replicated.future.ListenableFuture;
-import replicated.simulation.SimulationDriver;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 

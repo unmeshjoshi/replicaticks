@@ -1,14 +1,16 @@
 package replicated.storage;
 
-import replicated.future.ListenableFuture;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import static org.junit.jupiter.api.Assertions.*;
+import replicated.future.ListenableFuture;
+
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class RocksDbStorageTest {
     

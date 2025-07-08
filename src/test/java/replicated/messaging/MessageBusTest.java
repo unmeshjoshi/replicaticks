@@ -1,14 +1,16 @@
 package replicated.messaging;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import replicated.network.MessageContext;
 import replicated.network.Network;
 import replicated.network.SimulatedNetwork;
-import replicated.network.MessageContext;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.ArrayList;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class MessageBusTest {
     

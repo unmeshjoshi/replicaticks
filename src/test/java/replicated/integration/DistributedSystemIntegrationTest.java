@@ -1,18 +1,25 @@
 package replicated.integration;
 
-import replicated.messaging.*;
-import replicated.network.*;
-import replicated.storage.*;
-import replicated.future.ListenableFuture;
-import replicated.replica.QuorumBasedReplica;
-import replicated.client.Client;
-import replicated.simulation.SimulationDriver;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
-import static org.junit.jupiter.api.Assertions.*;
-import java.util.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import replicated.client.Client;
+import replicated.future.ListenableFuture;
+import replicated.messaging.*;
+import replicated.network.Network;
+import replicated.network.SimulatedNetwork;
+import replicated.replica.QuorumBasedReplica;
+import replicated.simulation.SimulationDriver;
+import replicated.storage.SimulatedStorage;
+import replicated.storage.Storage;
+import replicated.storage.VersionedValue;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Comprehensive integration tests for distributed system scenarios.

@@ -1,10 +1,11 @@
 package replicated.simulation;
 
-import replicated.network.Network;
-import replicated.storage.Storage;
-import replicated.replica.Replica;
 import replicated.client.Client;
 import replicated.messaging.BaseMessageBus;
+import replicated.network.Network;
+import replicated.replica.Replica;
+import replicated.storage.Storage;
+
 import java.util.List;
 
 /**

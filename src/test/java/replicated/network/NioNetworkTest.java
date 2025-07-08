@@ -1,12 +1,16 @@
 package replicated.network;
 
-import replicated.messaging.*;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import replicated.messaging.Message;
+import replicated.messaging.MessageType;
+import replicated.messaging.NetworkAddress;
+
 import java.util.List;
 import java.util.function.Supplier;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class NioNetworkTest {
     

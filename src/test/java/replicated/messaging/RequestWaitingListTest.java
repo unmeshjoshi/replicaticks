@@ -2,7 +2,6 @@ package replicated.messaging;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.future.ListenableFuture;
 
 import java.util.concurrent.TimeoutException;
 

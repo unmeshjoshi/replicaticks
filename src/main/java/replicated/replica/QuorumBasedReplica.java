@@ -1,25 +1,21 @@
 package replicated.replica;
 
-import replicated.messaging.*;
-import replicated.storage.*;
 import replicated.future.ListenableFuture;
-import replicated.util.Timeout;
+import replicated.messaging.*;
+import replicated.network.MessageContext;
+import replicated.storage.Storage;
+import replicated.storage.VersionedValue;
 
-import java.util.*;
-
-import replicated.network.MessageContext; // Added import
-
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Quorum-based replica implementation for distributed key-value store.
  * This implementation uses majority quorum consensus for read and write operations.
  */
 public final class QuorumBasedReplica extends Replica {
-
-    // Request tracking using RequestWaitingList
-    // Mapping from internal correlation ID to client correlation ID
-    private final Map<String, String> internalToClientCorrelationMap = new ConcurrentHashMap<>();
 
     /**
      * Creates a QuorumBasedReplica with the specified configuration.
@@ -298,66 +294,4 @@ public final class QuorumBasedReplica extends Replica {
                 ", from: " + message.source());
         waitingList.handleResponse(message.correlationId(), response, message.source());
     }
-
-
-    /**
-     * Quorum-specific request tracking that extends the base PendingRequest.
-     */
-    private static class QuorumRequest extends PendingRequest {
-        enum Operation {GET, SET}
-
-        final Operation operation;
-        final VersionedValue setValue; // For SET operations
-        final long timestamp;
-        MessageContext responseContext;
-
-        private final Map<NetworkAddress, Object> responses = new HashMap<>();
-        private final Set<String> internalCorrelationIds = new HashSet<>();
-
-        QuorumRequest(String requestId, NetworkAddress clientAddress, Operation operation,
-                      String key, VersionedValue setValue, long timestamp, Timeout timeout) {
-            super(requestId, clientAddress, key, timeout);
-            this.operation = operation;
-            this.setValue = setValue;
-            this.timestamp = timestamp;
-        }
-
-        void addResponse(NetworkAddress source, Object response) {
-            responses.put(source, response);
-        }
-
-        void addInternalCorrelationId(String internalCorrelationId) {
-            internalCorrelationIds.add(internalCorrelationId);
-        }
-
-        boolean hasInternalCorrelationId(String internalCorrelationId) {
-            return internalCorrelationIds.contains(internalCorrelationId);
-        }
-
-        boolean hasQuorum(int quorumSize) {
-            return responses.size() >= quorumSize;
-        }
-
-        VersionedValue getLatestValue() {
-            VersionedValue latest = null;
-            for (Object response : responses.values()) {
-                if (response instanceof VersionedValue value) {
-                    if (latest == null || value.timestamp() > latest.timestamp()) {
-                        latest = value;
-                    }
-                }
-            }
-            return latest;
-        }
-
-        int getSuccessCount() {
-            int count = 0;
-            for (Object response : responses.values()) {
-                if (response instanceof Boolean success && success) {
-                    count++;
-                }
-            }
-            return count;
-        }
-    }
-} 
+}

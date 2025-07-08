@@ -1,9 +1,10 @@
 package replicated.network;
 
-import replicated.messaging.NetworkAddress;
 import replicated.messaging.Message;
-import java.util.List;
+import replicated.messaging.NetworkAddress;
+
 import java.nio.channels.SocketChannel;
+import java.util.List;
 
 /**
  * Network interface for sending and receiving messages in the distributed simulation.

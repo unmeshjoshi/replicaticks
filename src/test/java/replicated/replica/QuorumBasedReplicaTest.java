@@ -1,14 +1,16 @@
 package replicated.replica;
 
-import replicated.messaging.*;
-import replicated.storage.*;
-import replicated.future.ListenableFuture;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import replicated.messaging.*;
+import replicated.storage.SimulatedStorage;
+import replicated.storage.Storage;
+import replicated.storage.VersionedValue;
+
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class QuorumBasedReplicaTest {
     

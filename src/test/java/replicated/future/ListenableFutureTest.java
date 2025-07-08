@@ -1,11 +1,12 @@
 package replicated.future;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
-import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ListenableFutureTest {
     

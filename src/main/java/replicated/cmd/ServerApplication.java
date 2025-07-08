@@ -1,17 +1,17 @@
 package replicated.cmd;
 
-import replicated.network.NioNetwork;
-import replicated.network.Network;
-import replicated.replica.QuorumBasedReplica;
-import replicated.messaging.ServerMessageBus;
-import replicated.messaging.MessageCodec;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
+import replicated.messaging.ServerMessageBus;
+import replicated.network.Network;
+import replicated.network.NioNetwork;
+import replicated.replica.QuorumBasedReplica;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.Storage;
 
-import java.util.List;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Command-line server application for running replica nodes.

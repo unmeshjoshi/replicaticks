@@ -1,13 +1,15 @@
 package replicated.network;
 
-import replicated.messaging.NetworkAddress;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import replicated.messaging.Message;
 import replicated.messaging.MessageType;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+import replicated.messaging.NetworkAddress;
+
 import java.util.List;
 import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class SimulatedNetworkTest {
 

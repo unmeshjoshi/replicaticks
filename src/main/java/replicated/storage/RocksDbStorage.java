@@ -1,16 +1,19 @@
 package replicated.storage;
 
+import org.rocksdb.CompressionType;
+import org.rocksdb.Options;
+import org.rocksdb.RocksDB;
+import org.rocksdb.RocksDBException;
 import replicated.future.ListenableFuture;
-import org.rocksdb.*;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.CompletableFuture;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.Queue;
 
 /**
  * Production-ready RocksDB-based storage implementation.

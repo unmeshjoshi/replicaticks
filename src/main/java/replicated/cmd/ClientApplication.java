@@ -1,17 +1,14 @@
 package replicated.cmd;
 
 import replicated.client.Client;
-import replicated.messaging.NetworkAddress;
-import replicated.messaging.GetRequest;
-import replicated.messaging.SetRequest;
-import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
 import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
+import replicated.storage.VersionedValue;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Command-line client application for the distributed key-value store.
