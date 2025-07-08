@@ -9,7 +9,6 @@ import replicated.replica.QuorumBasedReplica;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
-import replicated.util.DebugConfig;
 import replicated.simulation.SimulationDriver;
 
 import java.util.*;
@@ -59,7 +58,8 @@ public class DirectChannelOrderTest {
         // send first request
         ListenableFuture<Boolean> f1 = client.sendSetRequest("k", "v1".getBytes(), replicaAddr);
         // advance ticks to process
-        processTicks(100);
+        // Use SimulationDriver to orchestrate all component ticking
+        simulationDriver.runSimulation(100);
 
         assertTrue(f1.isCompleted() && f1.getResult());
 
@@ -69,7 +69,8 @@ public class DirectChannelOrderTest {
 
         // second request
         ListenableFuture<VersionedValue> f2 = client.sendGetRequest("k", replicaAddr);
-        processTicks(10);
+        // Use SimulationDriver to orchestrate all component ticking
+        simulationDriver.runSimulation(10);
         assertEquals("v1", new String(Objects.requireNonNull(f2.getResult()).value()));
 
         MessageContext ctx2 = network.getContextFor(network.getLastDeliveredMessage());
@@ -77,8 +78,4 @@ public class DirectChannelOrderTest {
         assertSame(ctx1.getSourceChannel(), ctx2.getSourceChannel(), "responses should use same channel");
     }
 
-    private void processTicks(int n) {
-        // Use SimulationDriver to orchestrate all component ticking
-        simulationDriver.runSimulation(n);
-    }
 }

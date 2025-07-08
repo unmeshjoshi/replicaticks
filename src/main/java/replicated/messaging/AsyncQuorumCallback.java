@@ -1,0 +1,123 @@
+package replicated.messaging;
+
+import replicated.future.ListenableFuture;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+
+/**
+ * Completes the associated future once quorum predicate succeeds.
+ * This callback is used for distributed operations that require consensus.
+ * 
+ * @param <T> the type of the response
+ */
+public class AsyncQuorumCallback<T> implements RequestCallback<T> {
+    private final int totalResponses;
+    private final List<Exception> exceptions = new ArrayList<>();
+    private final Map<NetworkAddress, T> responses = new HashMap<>();
+    private final ListenableFuture<Map<NetworkAddress, T>> quorumFuture = new ListenableFuture<>();
+    private final Predicate<T> successCondition;
+    private volatile boolean completed = false;
+
+    /**
+     * Creates a new AsyncQuorumCallback with default success condition.
+     * 
+     * @param totalResponses the total number of expected responses
+     */
+    public AsyncQuorumCallback(int totalResponses) {
+        this(totalResponses, (responses) -> true);
+    }
+
+    /**
+     * Creates a new AsyncQuorumCallback with a custom success condition.
+     * 
+     * @param totalResponses the total number of expected responses
+     * @param successCondition predicate that determines if a response is successful
+     */
+    public AsyncQuorumCallback(int totalResponses, Predicate<T> successCondition) {
+        this.successCondition = successCondition;
+        if (totalResponses <= 0) {
+            throw new IllegalArgumentException("Total responses must be positive");
+        }
+        this.totalResponses = totalResponses;
+    }
+
+    /**
+     * Calculates the majority quorum size.
+     * 
+     * @return the majority quorum size
+     */
+    private int majorityQuorum() {
+        return totalResponses / 2 + 1;
+    }
+
+    @Override
+    public void onResponse(T response, NetworkAddress fromNode) {
+        if (completed) {
+            return; // Already completed, ignore additional responses
+        }
+        responses.put(fromNode, response);
+        tryCompletingFuture();
+    }
+
+    /**
+     * Attempts to complete the future if quorum conditions are met.
+     */
+    private void tryCompletingFuture() {
+        if (completed) {
+            return; // Already completed
+        }
+        
+        if (quorumSucceeded(responses)) {
+            completed = true;
+            quorumFuture.complete(responses);
+            return;
+        }
+        
+        if (responses.size() + exceptions.size() == totalResponses) {
+            // All responses received but quorum not met
+            completed = true;
+            quorumFuture.fail(new RuntimeException("Quorum condition not met after " + totalResponses + " responses"));
+        }
+    }
+
+    /**
+     * Checks if the quorum condition is satisfied.
+     * 
+     * @param responses the current responses
+     * @return true if quorum is satisfied, false otherwise
+     */
+    private boolean quorumSucceeded(Map<NetworkAddress, T> responses) {
+        return responses.values()
+                .stream()
+                .filter(successCondition)
+                .count() >= majorityQuorum();
+    }
+
+    @Override
+    public void onError(Exception error) {
+        if (completed) {
+            return; // Already completed, ignore additional errors
+        }
+        exceptions.add(error);
+        if (error instanceof java.util.concurrent.TimeoutException) {
+            if (!quorumSucceeded(responses)) {
+                completed = true;
+                quorumFuture.fail(error);
+                return;
+            }
+        }
+        tryCompletingFuture();
+    }
+
+    /**
+     * Gets the quorum future that will be completed when quorum is reached.
+     * 
+     * @return the quorum future
+     */
+    public ListenableFuture<Map<NetworkAddress, T>> getQuorumFuture() {
+        return quorumFuture;
+    }
+} 

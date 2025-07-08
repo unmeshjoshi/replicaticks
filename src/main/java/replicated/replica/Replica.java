@@ -202,7 +202,10 @@ public abstract class Replica implements MessageHandler {
                 ", peers=" + peers +
                 '}';
     }
-    
+
+    RequestWaitingList waitingList = new RequestWaitingList(10);
+
+
     /**
      * Abstract base class for tracking pending requests.
      * Subclasses can extend this to add algorithm-specific state.

@@ -47,7 +47,7 @@ class DirectChannelResponseTest {
         // Setup storage
         storage = new SimulatedStorage(new java.util.Random(42), 0, 0.0);
         
-        // Setup replica
+        // Setup replica - use empty peers list for single-node setup (peers should not include self)
         replica = new QuorumBasedReplica("test-replica", replicaAddress, List.of(), serverBus, storage);
         serverBus.registerHandler(replicaAddress, replica);
         

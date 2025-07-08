@@ -171,7 +171,7 @@ public class SimulatedNetwork implements Network {
     }
     
     private void queueForDelivery(Message message, long deliveryTick) {
-        pendingMessages.offer(new QueuedMessage(message, deliveryTick));
+        pendingMessages.offer(new QueuedMessage(message, deliveryTick, currentTick));
     }
     
     private void deliverPendingMessagesFor(long tickTime) {
@@ -282,12 +282,19 @@ public class SimulatedNetwork implements Network {
      * Internal record to track messages with their delivery timing.
      * Implements Comparable to allow PriorityQueue ordering by delivery time.
      */
-    private record QueuedMessage(Message message, long deliveryTick) 
+    private record QueuedMessage(Message message, long deliveryTick, long sequenceNumber) 
             implements Comparable<QueuedMessage> {
         
         @Override
         public int compareTo(QueuedMessage other) {
-            return Long.compare(this.deliveryTick, other.deliveryTick);
+            // Primary ordering: delivery tick (earlier messages first)
+            int tickComparison = Long.compare(this.deliveryTick, other.deliveryTick);
+            if (tickComparison != 0) {
+                return tickComparison;
+            }
+            
+            // Secondary ordering: sequence number for FIFO behavior when delivery ticks are equal
+            return Long.compare(this.sequenceNumber, other.sequenceNumber);
         }
     }
     
