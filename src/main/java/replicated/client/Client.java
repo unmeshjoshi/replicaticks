@@ -7,6 +7,7 @@ import replicated.storage.VersionedValue;
 import replicated.util.Timeout;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class Client implements MessageHandler {
@@ -27,7 +28,7 @@ public final class Client implements MessageHandler {
     
     // Request tracking
     private final AtomicLong correlationIdGenerator = new AtomicLong(0);
-    private final Map<String, PendingRequest> pendingRequests = new HashMap<>();
+    private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     
     // Connection pool rotation index
     private int replicaIndex = 0;
