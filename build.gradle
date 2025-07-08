@@ -76,3 +76,36 @@ test {
         showStandardStreams = true
     }
 }
+
+// Task to run the distributed cluster test
+task runCluster(type: Exec) {
+    group = 'application'
+    description = 'Runs a 3-node distributed cluster test with client operations'
+    
+    // Ensure JARs are built first
+    dependsOn shadowJar, shadowClientJar
+    
+    // Make executable
+    doFirst {
+        exec {
+            commandLine 'chmod', '+x', 'scripts/run-cluster.sh'
+        }
+    }
+    
+    commandLine './scripts/run-cluster.sh'
+    
+    // Handle cleanup on failure
+    doLast {
+        if (executionResult.get().exitValue != 0) {
+            println "Cluster test failed, ensuring cleanup..."
+            try {
+                exec {
+                    commandLine './scripts/kill-servers.sh'
+                    ignoreExitValue = true
+                }
+            } catch (Exception e) {
+                println "Cleanup script failed: ${e.message}"
+            }
+        }
+    }
+}

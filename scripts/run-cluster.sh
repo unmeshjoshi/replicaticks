@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Demo script for the distributed key-value store
+# Cluster script for the distributed key-value store
 # This script demonstrates a 3-node cluster with client operations
 
 set -e  # Exit on any error
@@ -39,6 +39,7 @@ log_error() {
 cleanup() {
     log_info "Cleaning up..."
     pkill -f "ServerApplication" || true
+    pkill -f "replicated-server.jar" || true
     rm -rf "$DATA_DIR"
     log_success "Cleanup completed"
 }
@@ -49,7 +50,7 @@ trap cleanup EXIT
 # Create data directory
 mkdir -p "$DATA_DIR"
 
-log_info "Starting 3-node distributed key-value store demo..."
+log_info "Starting 3-node distributed key-value store cluster..."
 
 # Start replica 1
 log_info "Starting replica 1 on port $REPLICA1_PORT..."
@@ -83,7 +84,7 @@ REPLICA3_PID=$!
 
 # Wait for replicas to start
 log_info "Waiting for replicas to start..."
-sleep 3
+sleep 5
 
 # Check if replicas are running
 if ! kill -0 $REPLICA1_PID 2>/dev/null; then
@@ -104,7 +105,7 @@ fi
 log_success "All replicas started successfully!"
 
 # Demo operations
-log_info "Running demo operations..."
+log_info "Running cluster operations..."
 
 # Set a value
 log_info "Setting key 'demo-key' to value 'Hello, Distributed World!'"
@@ -122,10 +123,12 @@ java -jar build/libs/replicated-client.jar set 127.0.0.1:9002 test-key "Quorum c
 log_info "Getting value for key 'test-key'"
 java -jar build/libs/replicated-client.jar get 127.0.0.1:9002 test-key
 
-log_success "Demo operations completed!"
+log_success "Cluster operations completed!"
 
 # Keep running for a bit to show the system is working
-log_info "Demo running for 10 seconds to show system stability..."
+log_info "Running cluster for 10 seconds to show system stability..."
 sleep 10
 
-log_success "Demo completed successfully!" 
+log_success "Cluster test completed successfully!"
+
+# Script will auto-cleanup via trap on exit 
