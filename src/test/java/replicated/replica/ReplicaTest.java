@@ -121,10 +121,6 @@ class ReplicaTest {
         
         @Override
         public void onMessageReceived(Message message, MessageContext ctx) { }
-        
-        @Override
-        protected void sendTimeoutResponse(PendingRequest request) {
-            // Test implementation - no timeout handling needed
-        }
+
     }
 } 

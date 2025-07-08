@@ -53,10 +53,6 @@ public final class QuorumBasedReplica extends Replica {
         }
     }
 
-    @Override
-    protected void sendTimeoutResponse(PendingRequest request) {
-
-    }
 
     /**
      * Generates a unique correlation ID for internal messages.
@@ -72,66 +68,91 @@ public final class QuorumBasedReplica extends Replica {
     private void handleClientGetRequest(Message message, MessageContext ctx) {
         String correlationId = message.correlationId();
         GetRequest clientRequest = deserializePayload(message.payload(), GetRequest.class);
+        NetworkAddress clientAddress = message.source();
 
-        System.out.println("QuorumBasedReplica: Processing client GET request - key: " + clientRequest.key() +
-                ", correlationId: " + correlationId + ", from: " + message.source());
+        logIncomingGetRequest(clientRequest, correlationId, clientAddress);
 
-        // Create AsyncQuorumCallback for this request
-        List<NetworkAddress> allNodes = new ArrayList<>(peers);
-        allNodes.add(networkAddress);
+        var quorumCallback = createGetQuorumCallback();
+        quorumCallback.onSuccess(responses -> sendSuccessGetResponse(clientRequest, correlationId, clientAddress, ctx, responses))
+                     .onFailure(error -> sendFailureGetResponse(clientRequest, correlationId, clientAddress, ctx, error));
 
-        AsyncQuorumCallback<InternalGetResponse> quorumCallback = new AsyncQuorumCallback<>(
+        sendInternalGetRequests(clientRequest.key(), quorumCallback);
+    }
+
+    private AsyncQuorumCallback<InternalGetResponse> createGetQuorumCallback() {
+        List<NetworkAddress> allNodes = getAllNodes();
+        return new AsyncQuorumCallback<>(
                 allNodes.size(),
-                response -> {
-                    // Success condition: check if this individual response is successful
-                    return response != null && response.value() != null;
-                }
+                response -> response != null && response.value() != null
         );
-        // Set up future completion handlers
-        ListenableFuture<Map<NetworkAddress, InternalGetResponse>> quorumFuture = quorumCallback.getQuorumFuture();
+    }
 
-        quorumFuture.onSuccess(responses -> {
-            // Quorum achieved - find the latest value and send response to client
-            VersionedValue latestValue = getLatestValueFromResponses(responses);
-            GetResponse clientResponse = new GetResponse(clientRequest.key(), latestValue);
+    // Logging helpers
+    private void logIncomingGetRequest(GetRequest req, String correlationId, NetworkAddress clientAddr) {
+        System.out.println("QuorumBasedReplica: Processing client GET request - key: " + req.key() +
+                ", correlationId: " + correlationId + ", from: " + clientAddr);
+    }
 
-            Message clientMessage = new Message(
-                    networkAddress, message.source(), MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse), correlationId
-            );
+    private void sendSuccessGetResponse(GetRequest req, String correlationId, NetworkAddress clientAddr,
+                                        MessageContext ctx, Map<NetworkAddress, InternalGetResponse> responses) {
+        VersionedValue latestValue = getLatestValueFromResponses(responses);
+        GetResponse clientResponse = new GetResponse(req.key(), latestValue);
+        Message clientMessage = new Message(
+                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                serializePayload(clientResponse), correlationId
+        );
 
-            System.out.println("QuorumBasedReplica: Sending client GET response - key: " + clientRequest.key() +
-                    ", value: " + (latestValue != null ? new String(latestValue.value()) : "null") +
-                    ", correlationId: " + correlationId);
+        logSuccessfulGetResponse(req, correlationId, latestValue);
+        messageBus.reply(ctx, clientMessage);
+    }
 
-            messageBus.reply(ctx, clientMessage);
+    private void sendFailureGetResponse(GetRequest req, String correlationId, NetworkAddress clientAddr,
+                                        MessageContext ctx, Throwable error) {
+        GetResponse clientResponse = new GetResponse(req.key(), null);
+        Message clientMessage = new Message(
+                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                serializePayload(clientResponse), correlationId
+        );
 
-        }).onFailure(error -> {
-            // Quorum failed - send error response to client
-            GetResponse clientResponse = new GetResponse(clientRequest.key(), null);
+        logFailedGetResponse(req, correlationId, error);
+        messageBus.reply(ctx, clientMessage);
+    }
 
-            Message clientMessage = new Message(
-                    networkAddress, message.source(), MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse), correlationId
-            );
+    private void logSuccessfulGetResponse(GetRequest req, String correlationId, VersionedValue latestValue) {
+        String valueDescription = latestValue != null ? new String(latestValue.value()) : "null";
+        System.out.println("QuorumBasedReplica: Sending client GET response - key: " + req.key() +
+                ", value: " + valueDescription + ", correlationId: " + correlationId);
+    }
 
-            System.out.println("QuorumBasedReplica: Sending client GET error response - key: " + clientRequest.key() +
-                    ", error: " + error.getMessage() + ", correlationId: " + correlationId);
+    private void logFailedGetResponse(GetRequest req, String correlationId, Throwable error) {
+        System.out.println("QuorumBasedReplica: Sending client GET error response - key: " + req.key() +
+                ", error: " + error.getMessage() + ", correlationId: " + correlationId);
+    }
 
-            messageBus.reply(ctx, clientMessage);
-        });
-
-        // Send INTERNAL_GET_REQUEST to all peers (including self)
+    private void sendInternalGetRequests(String key, AsyncQuorumCallback<InternalGetResponse> quorumCallback) {
+        List<NetworkAddress> allNodes = getAllNodes();
+        
         for (NetworkAddress node : allNodes) {
             String internalCorrelationId = generateCorrelationId();
             waitingList.add(internalCorrelationId, quorumCallback);
 
-            InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), internalCorrelationId);
-            messageBus.sendMessage(new Message(
+            InternalGetRequest internalRequest = new InternalGetRequest(key, internalCorrelationId);
+            Message internalMessage = new Message(
                     networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
                     serializePayload(internalRequest), internalCorrelationId
-            ));
+            );
+            messageBus.sendMessage(internalMessage);
         }
+    }
+
+    /**
+     * Gets all nodes in the cluster (peers + self).
+     * Extracted to eliminate duplication across methods.
+     */
+    private List<NetworkAddress> getAllNodes() {
+        List<NetworkAddress> allNodes = new ArrayList<>(peers);
+        allNodes.add(networkAddress);
+        return allNodes;
     }
 
     /**
@@ -157,59 +178,84 @@ public final class QuorumBasedReplica extends Replica {
     private void handleClientSetRequest(Message message, MessageContext ctx) {
         String correlationId = message.correlationId();
         SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
+        NetworkAddress clientAddress = message.source();
 
-        System.out.println("QuorumBasedReplica: Processing client SET request - key: " + clientRequest.key() +
-                ", value: " + new String(clientRequest.value()) + ", correlationId: " + correlationId +
-                ", from: " + message.source());
+        logIncomingSetRequest(clientRequest, correlationId, clientAddress);
 
-        // Send INTERNAL_SET_REQUEST to all peers (including self)
-        List<NetworkAddress> allNodes = new ArrayList<>(peers);
-        allNodes.add(networkAddress);
+        AsyncQuorumCallback<InternalSetResponse> quorumCallback = createSetQuorumCallback();
 
-        AsyncQuorumCallback<InternalSetResponse> quorumCallback = new AsyncQuorumCallback<>(
-                allNodes.size(),  // Fixed: use allNodes.size() instead of peers.size()
-                response -> {
-                    // Success condition: check if this individual response is successful
-                    return response != null && response.success();
-                }
+        quorumCallback.onSuccess(responses -> sendSuccessSetResponseToClient(clientRequest, correlationId, clientAddress, ctx))
+                     .onFailure(error -> sendFailureSetResponseToClient(clientRequest, correlationId, clientAddress, ctx, error));
+
+       sendInternalSetRequests(quorumCallback, clientRequest);
+
+    }
+
+    // SET helper methods
+
+    private void logIncomingSetRequest(SetRequest req, String correlationId, NetworkAddress clientAddr) {
+        System.out.println("QuorumBasedReplica: Processing client SET request - key: " + req.key() +
+                ", value: " + new String(req.value()) + ", correlationId: " + correlationId +
+                ", from: " + clientAddr);
+    }
+
+    private AsyncQuorumCallback<InternalSetResponse> createSetQuorumCallback() {
+        List<NetworkAddress> allNodes = getAllNodes();
+        return new AsyncQuorumCallback<>(
+                allNodes.size(),
+                response -> response != null && response.success()
+        );
+    }
+
+    private void sendSuccessSetResponseToClient(SetRequest req, String correlationId, NetworkAddress clientAddr,
+                                                MessageContext ctx) {
+        SetResponse clientResponse = new SetResponse(req.key(), true);
+        Message clientMessage = new Message(
+                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                serializePayload(clientResponse), correlationId
         );
 
-        // Set up future completion handlers
-        ListenableFuture<Map<NetworkAddress, InternalSetResponse>> quorumFuture = quorumCallback.getQuorumFuture();
+        logSuccessfulSetResponse(req, correlationId);
+        messageBus.reply(ctx, clientMessage);
+    }
 
-        quorumFuture.onSuccess(responses -> {
-            // Quorum achieved - find the latest value and send response to client
-            SetResponse clientResponse = new SetResponse(clientRequest.key(), true);
-            Message clientMessage = new Message(
-                    networkAddress, message.source(), MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse), correlationId
-            );
+    private void sendFailureSetResponseToClient(SetRequest req, String correlationId, NetworkAddress clientAddr,
+                                                MessageContext ctx, Throwable error) {
+        SetResponse clientResponse = new SetResponse(req.key(), false);
+        Message clientMessage = new Message(
+                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                serializePayload(clientResponse), correlationId
+        );
 
-            messageBus.reply(ctx, clientMessage);
+        logFailedSetResponse(req, correlationId, error);
+        messageBus.reply(ctx, clientMessage);
+    }
 
-        }).onFailure(error -> {
-            // Quorum failed - send error response to client
-            SetResponse clientResponse = new SetResponse(clientRequest.key(), false);
-            Message clientMessage = new Message(
-                    networkAddress, message.source(), MessageType.CLIENT_RESPONSE,
-                    serializePayload(clientResponse), correlationId
-            );
-            messageBus.reply(ctx, clientMessage);
-        });
+    private void logSuccessfulSetResponse(SetRequest req, String correlationId) {
+        System.out.println("QuorumBasedReplica: Sending client SET success response - key: " + req.key() +
+                ", correlationId: " + correlationId);
+    }
 
+    private void logFailedSetResponse(SetRequest req, String correlationId, Throwable error) {
+        System.out.println("QuorumBasedReplica: Sending client SET failure response - key: " + req.key() +
+                ", error: " + error.getMessage() + ", correlationId: " + correlationId);
+    }
+
+    private void sendInternalSetRequests(AsyncQuorumCallback<InternalSetResponse> quorumCallback, SetRequest setRequest) {
+        List<NetworkAddress> allNodes = getAllNodes();
         for (NetworkAddress node : allNodes) {
             String internalCorrelationId = generateCorrelationId();
-            // Track the internal correlation ID for this request
-            InternalSetRequest internalRequest = new InternalSetRequest(
-                    clientRequest.key(), clientRequest.value(), 0, internalCorrelationId
-            );
-
             waitingList.add(internalCorrelationId, quorumCallback);
 
-            messageBus.sendMessage(new Message(
+            InternalSetRequest internalRequest = new InternalSetRequest(
+                    setRequest.key(), setRequest.value(), 0, internalCorrelationId
+            );
+
+            Message internalMessage = new Message(
                     networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
                     serializePayload(internalRequest), internalCorrelationId
-            ));
+            );
+            messageBus.sendMessage(internalMessage);
         }
     }
 

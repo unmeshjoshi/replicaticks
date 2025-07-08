@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -120,5 +121,34 @@ public class AsyncQuorumCallback<T> implements RequestCallback<T> {
      */
     public ListenableFuture<Map<NetworkAddress, T>> getQuorumFuture() {
         return quorumFuture;
+    }
+
+    // -------------------------------------------------------------------
+    // Convenience delegation methods for better readability
+    // -------------------------------------------------------------------
+
+    /**
+     * Registers a success handler that will be invoked when the quorum future
+     * completes successfully. This is syntactic sugar delegating to the
+     * underlying ListenableFuture.
+     *
+     * @param onSuccess consumer invoked with the map of successful responses
+     * @return this callback for fluent chaining
+     */
+    public AsyncQuorumCallback<T> onSuccess(Consumer<Map<NetworkAddress, T>> onSuccess) {
+        quorumFuture.onSuccess(onSuccess);
+        return this;
+    }
+
+    /**
+     * Registers a failure handler that will be invoked when the quorum future
+     * fails (e.g. quorum not reached, timeout).
+     *
+     * @param onFailure consumer invoked with the failure cause
+     * @return this callback for fluent chaining
+     */
+    public AsyncQuorumCallback<T> onFailure(Consumer<Throwable> onFailure) {
+        quorumFuture.onFailure(onFailure);
+        return this;
     }
 } 
