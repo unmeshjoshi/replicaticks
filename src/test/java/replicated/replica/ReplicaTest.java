@@ -1,126 +1,127 @@
 package replicated.replica;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.messaging.Message;
-import replicated.messaging.NetworkAddress;
+import replicated.messaging.*;
 import replicated.network.MessageContext;
+import replicated.network.SimulatedNetwork;
+import replicated.storage.SimulatedStorage;
+import replicated.storage.Storage;
 
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests for the ReplicaBase class common building blocks.
+ */
 class ReplicaTest {
-
+    
+    private NetworkAddress address1;
+    private NetworkAddress address2;
+    private List<NetworkAddress> peers;
+    private ServerMessageBus serverBus;
+    private Storage storage;
+    
+    @BeforeEach
+    void setUp() {
+        address1 = new NetworkAddress("192.168.1.1", 8080);
+        address2 = new NetworkAddress("192.168.1.2", 8080);
+        peers = List.of(address2);
+        serverBus = new ServerMessageBus(new SimulatedNetwork(new Random(42)), new JsonMessageCodec());
+        storage = new SimulatedStorage(new Random(42));
+    }
+    
     @Test
-    void shouldCreateReplicaWithBasicProperties() {
-        // Given
-        String name = "replica-1";
-        NetworkAddress networkAddress = new NetworkAddress("192.168.1.10", 8080);
-        List<NetworkAddress> peers = List.of(
-            new NetworkAddress("192.168.1.11", 8080),
-            new NetworkAddress("192.168.1.12", 8080)
-        );
-        
-        // When
-        TestableReplica replica = new TestableReplica(name, networkAddress, peers);
+    void shouldCreateReplicaBaseWithValidParameters() {
+        // Given/When
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
         
         // Then
-        assertEquals(name, replica.getName());
-        assertEquals(networkAddress, replica.getNetworkAddress());
+        assertEquals("test", replica.getName());
+        assertEquals(address1, replica.getNetworkAddress());
         assertEquals(peers, replica.getPeers());
     }
     
     @Test
-    void shouldRejectNullName() {
-        // Given
-        NetworkAddress networkAddress = new NetworkAddress("192.168.1.10", 8080);
-        List<NetworkAddress> peers = List.of();
-        
-        // When & Then
-        assertThrows(IllegalArgumentException.class, () -> 
-            new TestableReplica(null, networkAddress, peers));
-    }
-    
-    @Test
-    void shouldRejectNullNetworkAddress() {
-        // Given
-        String name = "replica-1";
-        List<NetworkAddress> peers = List.of();
-        
-        // When & Then
-        assertThrows(IllegalArgumentException.class, () -> 
-            new TestableReplica(name, null, peers));
-    }
-    
-    @Test
-    void shouldRejectNullPeers() {
-        // Given
-        String name = "replica-1";
-        NetworkAddress networkAddress = new NetworkAddress("192.168.1.10", 8080);
-        
-        // When & Then
-        assertThrows(IllegalArgumentException.class, () -> 
-            new TestableReplica(name, networkAddress, null));
-    }
-    
-    @Test
-    void shouldAllowEmptyPeersList() {
-        // Given
-        String name = "solo-replica";
-        NetworkAddress networkAddress = new NetworkAddress("192.168.1.10", 8080);
-        List<NetworkAddress> emptyPeers = List.of();
-        
-        // When
-        TestableReplica replica = new TestableReplica(name, networkAddress, emptyPeers);
-        
-        // Then
-        assertTrue(replica.getPeers().isEmpty());
-    }
-    
-    @Test
-    void shouldHaveTickMethodForSimulation() {
-        // Given
-        TestableReplica replica = createTestReplica();
-        long currentTick = 100L;
-        
-        // When & Then - should not throw
-        assertDoesNotThrow(() -> replica.tick());
-    }
-    
-    @Test
-    void shouldProvideEqualityBasedOnNameAndAddress() {
-        // Given
-        String name = "replica-1";
-        NetworkAddress address = new NetworkAddress("192.168.1.10", 8080);
-        List<NetworkAddress> peers1 = List.of(new NetworkAddress("192.168.1.11", 8080));
-        List<NetworkAddress> peers2 = List.of(new NetworkAddress("192.168.1.12", 8080));
-        
-        TestableReplica replica1 = new TestableReplica(name, address, peers1);
-        TestableReplica replica2 = new TestableReplica(name, address, peers2); // same name/address, different peers
-        TestableReplica replica3 = new TestableReplica("different-name", address, peers1);
-        
-        // When & Then
-        assertEquals(replica1, replica2); // Equal based on name + address only
-        assertNotEquals(replica1, replica3);
-        assertEquals(replica1.hashCode(), replica2.hashCode());
-    }
-    
-    private TestableReplica createTestReplica() {
-        return new TestableReplica(
-            "test-replica",
-            new NetworkAddress("127.0.0.1", 8080),
-            List.of(new NetworkAddress("127.0.0.1", 8081))
+    void shouldThrowExceptionForNullName() {
+        // Given/When/Then
+        assertThrows(IllegalArgumentException.class, () ->
+            new TestableReplica(null, address1, peers, serverBus, storage, 10)
         );
     }
     
-    // Test implementation of Replica for testing basic functionality
-    private static class TestableReplica extends Replica {
-        TestableReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers) {
-            super(name, networkAddress, peers, null, null, 10);
-        }
+    @Test
+    void shouldThrowExceptionForNullNetworkAddress() {
+        // Given/When/Then
+        assertThrows(IllegalArgumentException.class, () ->
+            new TestableReplica("test", null, peers, serverBus, storage, 10)
+        );
+    }
+    
+    @Test
+    void shouldThrowExceptionForNullPeers() {
+        // Given/When/Then
+        assertThrows(IllegalArgumentException.class, () ->
+            new TestableReplica("test", address1, null, serverBus, storage, 10)
+        );
+    }
+    
+    @Test
+    void shouldThrowExceptionWhenMessageBusWithoutStorage() {
+        // Given/When/Then
+        assertThrows(IllegalArgumentException.class, () ->
+            new TestableReplica("test", address1, peers, serverBus, null, 10)
+        );
+    }
+    
+    @Test
+    void shouldThrowExceptionWhenStorageWithoutMessageBus() {
+        // Given/When/Then
+        assertThrows(IllegalArgumentException.class, () ->
+            new TestableReplica("test", address1, peers, null, storage, 10)
+        );
+    }
+    
+    @Test
+    void shouldGenerateUniqueRequestIds() {
+        // Given
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
         
+        // When
+        String id1 = replica.generateRequestId();
+        String id2 = replica.generateRequestId();
+        
+        // Then
+        assertNotEquals(id1, id2);
+        assertTrue(id1.startsWith("test-"));
+        assertTrue(id2.startsWith("test-"));
+    }
+
+    @Test
+    void shouldCreateDefensiveCopyOfPeers() {
+        // Given
+        List<NetworkAddress> mutablePeers = new java.util.ArrayList<>(peers);
+        TestableReplica replica = new TestableReplica("test", address1, mutablePeers, serverBus, storage, 10);
+        
+        // When
+        mutablePeers.clear();
+        
+        // Then
+        assertEquals(1, replica.getPeers().size()); // Should not be affected by external changes
+    }
+
+    // Test implementations
+    private static class TestableReplica extends Replica {
+        TestableReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+                       BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
+            super(name, networkAddress, peers, messageBus, storage, requestTimeoutTicks);
+        }
+
         @Override
         public void onMessageReceived(Message message, MessageContext ctx) { }
 
+        // Test helper methods
     }
-} 
+}

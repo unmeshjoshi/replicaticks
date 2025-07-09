@@ -141,21 +141,6 @@ public abstract class Replica implements MessageHandler {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        Replica replica = (Replica) obj;
-        // Equality based on name and network address only (not peers)
-        return Objects.equals(name, replica.name) &&
-                Objects.equals(networkAddress, replica.networkAddress);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(name, networkAddress);
-    }
-
-    @Override
     public String toString() {
         return getClass().getSimpleName() + "{" +
                 "name='" + name + '\'' +
