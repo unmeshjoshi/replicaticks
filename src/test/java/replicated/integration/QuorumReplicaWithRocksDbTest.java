@@ -81,14 +81,14 @@ class QuorumReplicaWithRocksDbTest {
         List<NetworkAddress> peers3 = List.of(address1, address2);  // replica3's peers
         
         // Setup replicas with production storage
-        // Constructor: name, networkAddress, peers, messageBus, storage, requestTimeoutTicks
+        // Constructor: name, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks
         int replicaRequestTimeoutTicks = 1000;
-        replica1 = new QuorumReplica("replica1", address1, peers1, serverBus, storage1, replicaRequestTimeoutTicks);
-        replica2 = new QuorumReplica("replica2", address2, peers2, serverBus, storage2, replicaRequestTimeoutTicks);
-        replica3 = new QuorumReplica("replica3", address3, peers3, serverBus, storage3, replicaRequestTimeoutTicks);
+        replica1 = new QuorumReplica("replica1", address1, peers1, serverBus, codec, storage1, replicaRequestTimeoutTicks);
+        replica2 = new QuorumReplica("replica2", address2, peers2, serverBus, codec, storage2, replicaRequestTimeoutTicks);
+        replica3 = new QuorumReplica("replica3", address3, peers3, serverBus, codec, storage3, replicaRequestTimeoutTicks);
         
         // Setup client (address will be auto-assigned by ClientMessageBus)
-        client = new Client(clientBus);
+        client = new Client(clientBus, codec, List.of(address1, address2, address3));
         
         // Register replica message handlers
         serverBus.registerHandler(address1, replica1);

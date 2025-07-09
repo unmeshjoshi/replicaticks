@@ -36,7 +36,7 @@ class ReplicaTest {
     @Test
     void shouldCreateReplicaBaseWithValidParameters() {
         // Given/When
-        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, new JsonMessageCodec(), storage, 10);
         
         // Then
         assertEquals("test", replica.getName());
@@ -48,7 +48,7 @@ class ReplicaTest {
     void shouldThrowExceptionForNullName() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica(null, address1, peers, serverBus, storage, 10)
+            new TestableReplica(null, address1, peers, serverBus, new JsonMessageCodec(), storage, 10)
         );
     }
     
@@ -56,7 +56,7 @@ class ReplicaTest {
     void shouldThrowExceptionForNullNetworkAddress() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica("test", null, peers, serverBus, storage, 10)
+            new TestableReplica("test", null, peers, serverBus, new JsonMessageCodec(), storage, 10)
         );
     }
     
@@ -64,14 +64,14 @@ class ReplicaTest {
     void shouldThrowExceptionForNullPeers() {
         // Given/When/Then
         assertThrows(IllegalArgumentException.class, () ->
-            new TestableReplica("test", address1, null, serverBus, storage, 10)
+            new TestableReplica("test", address1, null, serverBus, new JsonMessageCodec(), storage, 10)
         );
     }
     
     @Test
     void shouldGenerateUniqueRequestIds() {
         // Given
-        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, peers, serverBus, new JsonMessageCodec(), storage, 10);
         
         // When
         String id1 = replica.generateRequestId();
@@ -87,7 +87,7 @@ class ReplicaTest {
     void shouldCreateDefensiveCopyOfPeers() {
         // Given
         List<NetworkAddress> mutablePeers = new java.util.ArrayList<>(peers);
-        TestableReplica replica = new TestableReplica("test", address1, mutablePeers, serverBus, storage, 10);
+        TestableReplica replica = new TestableReplica("test", address1, mutablePeers, serverBus, new JsonMessageCodec(), storage, 10);
         
         // When
         mutablePeers.clear();
@@ -100,7 +100,7 @@ class ReplicaTest {
     void tickShouldInvokeOnTick() {
         // Given: timeout set to 1 tick for fast expiry
         int timeoutTicks = 1;
-        TestableReplica replica = new TestableReplica("tickTest", address1, peers, serverBus, storage, timeoutTicks);
+        TestableReplica replica = new TestableReplica("tickTest", address1, peers, serverBus, new JsonMessageCodec(), storage, timeoutTicks);
 
         // When: perform tick
         replica.tick();
@@ -113,7 +113,7 @@ class ReplicaTest {
     void shouldRequestWaitingList() {
         // Given: timeout set to 1 tick for fast expiry
         int timeoutTicks = 1;
-        TestableReplica replica = new TestableReplica("tickTest", address1, peers, serverBus, storage, timeoutTicks);
+        TestableReplica replica = new TestableReplica("tickTest", address1, peers, serverBus, new JsonMessageCodec(), storage, timeoutTicks);
         String key = "dummy";
         replica.addDummyPendingRequest(key);
         assertEquals(1, replica.getWaitingListSize());
@@ -128,7 +128,7 @@ class ReplicaTest {
     @Test
     void shouldSerializeAndDeserializePayload() {
         // Given
-        TestableReplica replica = new TestableReplica("serde", address1, peers, serverBus, storage, 10);
+        TestableReplica replica = new TestableReplica("serde", address1, peers, serverBus, new JsonMessageCodec(), storage, 10);
         GetRequest original = new GetRequest("alpha");
         // When
         byte[] bytes = replica.serializePayload(original);
@@ -139,7 +139,7 @@ class ReplicaTest {
 
     @Test
     void shouldReturnAllNodesIncludingSelf() {
-        TestableReplica replica = new TestableReplica("nodes", address1, peers, serverBus, storage, 10);
+        TestableReplica replica = new TestableReplica("nodes", address1, peers, serverBus, new JsonMessageCodec(), storage, 10);
         List<NetworkAddress> allNodes = replica.getAllNodes();
         assertEquals(peers.size() + 1, allNodes.size());
         assertTrue(allNodes.contains(address1));
@@ -150,7 +150,7 @@ class ReplicaTest {
         // Given
         SimulatedNetwork net = new SimulatedNetwork(new Random(123));
         ServerMessageBus bus = new ServerMessageBus(net, new JsonMessageCodec());
-        TestableReplica replica = new TestableReplica("bcast", address1, peers, bus, storage, 10);
+        TestableReplica replica = new TestableReplica("bcast", address1, peers, bus, new JsonMessageCodec(), storage, 10);
 
         // When
         List<String> corrIds = replica.broadcastInternal();
@@ -170,7 +170,7 @@ class ReplicaTest {
     void shouldGenerateDistinctInternalCorrelationIds() {
         SimulatedNetwork net = new SimulatedNetwork(new Random(99));
         ServerMessageBus bus = new ServerMessageBus(net, new JsonMessageCodec());
-        TestableReplica replica = new TestableReplica("cid", address1, peers, bus, storage, 10);
+        TestableReplica replica = new TestableReplica("cid", address1, peers, bus, new JsonMessageCodec(), storage, 10);
         List<String> cids = replica.broadcastInternal();
         List<String> more = replica.broadcastInternal();
         cids.addAll(more);
@@ -183,9 +183,9 @@ class ReplicaTest {
     private static class TestableReplica extends Replica {
         boolean onTickCalled = false;
 
-        TestableReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                        BaseMessageBus bus, Storage storage, int timeoutTicks) {
-            super(name, networkAddress, peers, bus, storage, timeoutTicks);
+        public TestableReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+                               MessageBus bus, MessageCodec codec, Storage storage, int timeoutTicks) {
+            super(name, networkAddress, peers, bus, codec, storage, timeoutTicks);
         }
 
         @Override

@@ -60,16 +60,17 @@ class NetworkMetricsTest {
         Storage s2 = new SimulatedStorage(new Random());
         Storage s3 = new SimulatedStorage(new Random());
 
-        r1 = new QuorumReplica("r1", r1Addr, peersExcept(r1Addr, all), serverBus, s1);
-        r2 = new QuorumReplica("r2", r2Addr, peersExcept(r2Addr, all), serverBus, s2);
-        r3 = new QuorumReplica("r3", r3Addr, peersExcept(r3Addr, all), serverBus, s3);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        r1 = new QuorumReplica("r1", r1Addr, peersExcept(r1Addr, all), serverBus, codec, s1);
+        r2 = new QuorumReplica("r2", r2Addr, peersExcept(r2Addr, all), serverBus, codec, s2);
+        r3 = new QuorumReplica("r3", r3Addr, peersExcept(r3Addr, all), serverBus, codec, s3);
 
         serverBus.registerHandler(r1Addr, r1);
         serverBus.registerHandler(r2Addr, r2);
         serverBus.registerHandler(r3Addr, r3);
 
         // client collaborates via the same MessageBus for simplicity
-        client = new Client(clientBus, List.of(r1Addr, r2Addr, r3Addr));
+        client = new Client(clientBus, codec, List.of(r1Addr, r2Addr, r3Addr));
     }
 
     private List<NetworkAddress> peersExcept(NetworkAddress self, List<NetworkAddress> all) {

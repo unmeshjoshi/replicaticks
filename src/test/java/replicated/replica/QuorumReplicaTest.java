@@ -33,7 +33,8 @@ class QuorumReplicaTest {
         peers = List.of(peer1, peer2);
         
         // Create enhanced replica
-        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, storage);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, codec, storage);
     }
     
     @Test
@@ -49,15 +50,17 @@ class QuorumReplicaTest {
     @Test
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
+        JsonMessageCodec codec = new JsonMessageCodec();
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumReplica("test", replicaAddress, peers, (BaseMessageBus) null, storage));
+            () -> new QuorumReplica("test", replicaAddress, peers, null, codec, storage));
     }
     
     @Test
     void shouldThrowExceptionForNullStorage() {
         // When & Then
+        JsonMessageCodec codec = new JsonMessageCodec();
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumReplica("test", replicaAddress, peers, serverBus, null));
+            () -> new QuorumReplica("test", replicaAddress, peers, serverBus, codec, null));
     }
     
     @Test
@@ -186,7 +189,7 @@ class QuorumReplicaTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - replica with timeout configuration
-        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, storage, 5); // 5 tick timeout
+        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, new JsonMessageCodec(), storage, 5); // 5 tick timeout
         
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
         GetRequest getRequest = new GetRequest("test-key");

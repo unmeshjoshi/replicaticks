@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 
  * This is used by client components that send requests and expect responses.
  */
-public class ClientMessageBus extends BaseMessageBus {
+public class ClientMessageBus extends MessageBus {
     
     private final Map<String, MessageHandler> correlationIdHandlers;
     private final List<MessageHandler> clientHandlers;

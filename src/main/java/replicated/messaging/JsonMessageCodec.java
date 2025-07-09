@@ -19,23 +19,23 @@ public final class JsonMessageCodec implements MessageCodec {
     }
     
     @Override
-    public byte[] encode(Message message) {
-        if (message == null) {
-            throw new RuntimeException("Cannot encode null message");
+    public byte[] encode(Object obj) {
+        if (obj == null) {
+            throw new RuntimeException("Cannot encode null object");
         }
         try {
-            return objectMapper.writeValueAsBytes(message);
+            return objectMapper.writeValueAsBytes(obj);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to encode message", e);
+            throw new RuntimeException("Failed to encode object", e);
         }
     }
     
     @Override
-    public Message decode(byte[] data) {
+    public <T> T decode(byte[] data, Class<T> type) {
         try {
-            return objectMapper.readValue(data, Message.class);
+            return objectMapper.readValue(data, type);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to decode message", e);
+            throw new RuntimeException("Failed to decode to " + type.getSimpleName(), e);
         }
     }
 } 

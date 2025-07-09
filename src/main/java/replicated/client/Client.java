@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class Client implements MessageHandler {
     
-    private final BaseMessageBus messageBus;
+    private final MessageBus messageBus;
+    private final MessageCodec messageCodec;
     private final int requestTimeoutTicks;
     private final String clientId;
     
@@ -42,24 +43,29 @@ public final class Client implements MessageHandler {
      * and discovers the full cluster topology dynamically.
      * 
      * @param messageBus the message bus for communication
+     * @param messageCodec the codec for message and payload serialization
      * @param bootstrapReplicas initial list of replica addresses for cluster discovery
      */
-    public Client(BaseMessageBus messageBus, List<NetworkAddress> bootstrapReplicas) {
-        this(messageBus, bootstrapReplicas, 200);
+    public Client(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas) {
+        this(messageBus, messageCodec, bootstrapReplicas, 200);
     }
     
     /**
      * Full constructor with configurable timeout.
      */
-    public Client(BaseMessageBus messageBus, List<NetworkAddress> bootstrapReplicas, int requestTimeoutTicks) {
+    public Client(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, int requestTimeoutTicks) {
         if (messageBus == null) {
             throw new IllegalArgumentException("MessageBus cannot be null");
+        }
+        if (messageCodec == null) {
+            throw new IllegalArgumentException("MessageCodec cannot be null");
         }
         if (bootstrapReplicas == null || bootstrapReplicas.isEmpty()) {
             throw new IllegalArgumentException("Bootstrap replicas cannot be null or empty");
         }
         
         this.messageBus = messageBus;
+        this.messageCodec = messageCodec;
         this.bootstrapReplicas = new ArrayList<>(bootstrapReplicas);
         this.requestTimeoutTicks = requestTimeoutTicks;
         this.clientId = "client-" + UUID.randomUUID().toString().substring(0, 8);
@@ -74,9 +80,9 @@ public final class Client implements MessageHandler {
     }
     
     // Backward compatibility constructor (for tests)
-    public Client(BaseMessageBus messageBus) {
+    public Client(MessageBus messageBus) {
         // Create a single bootstrap replica for backward compatibility
-        this(messageBus, List.of(new NetworkAddress("127.0.0.1", 8080)));
+        this(messageBus, new JsonMessageCodec(), List.of(new NetworkAddress("127.0.0.1", 8080)));
     }
     
     public String getClientId() {
@@ -87,7 +93,7 @@ public final class Client implements MessageHandler {
      * Gets the message bus used by this client.
      * @return the message bus instance
      */
-    public BaseMessageBus getMessageBus() {
+    public MessageBus getMessageBus() {
         return messageBus;
     }
     
@@ -220,14 +226,14 @@ public final class Client implements MessageHandler {
         System.out.println("Client: Registering client with MessageBus...");
         NetworkAddress actualClientAddress = messageBus.registerClient(this);
         System.out.println("Client: Registered with actual client address: " + actualClientAddress);
-        
+
         // Step 2: Register client as correlation ID handler for this request
         System.out.println("Client: Registering correlation ID handler for: " + correlationId);
         messageBus.registerCorrelationIdHandler(correlationId, this);
         
         // Step 3: Update current client address
         this.currentClientAddress = actualClientAddress;
-        
+
         // Step 4: Send the message using the established connection
         System.out.println("Client: Creating message from " + actualClientAddress + " to " + destination);
         Message message = new Message(actualClientAddress, destination, messageType, serializePayload(request), correlationId);
@@ -447,19 +453,11 @@ public final class Client implements MessageHandler {
 
     
     private byte[] serializePayload(Object payload) {
-        try {
-            return JsonMessageCodec.createConfiguredObjectMapper().writeValueAsBytes(payload);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize payload", e);
-        }
+        return messageCodec.encodePayload(payload);
     }
     
     private <T> T deserializePayload(byte[] data, Class<T> type) {
-        try {
-            return JsonMessageCodec.createConfiguredObjectMapper().readValue(data, type);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize payload", e);
-        }
+        return messageCodec.decodePayload(data, type);
     }
     
     // Inner class for tracking pending requests

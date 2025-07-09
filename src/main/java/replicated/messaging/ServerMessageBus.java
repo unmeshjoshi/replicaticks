@@ -11,7 +11,7 @@ import java.util.*;
  * 
  * This is used by server components like Replicas that listen on specific addresses.
  */
-public class ServerMessageBus extends BaseMessageBus {
+public class ServerMessageBus extends MessageBus {
     
     private final Map<NetworkAddress, MessageHandler> registeredHandlers;
     

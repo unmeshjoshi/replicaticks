@@ -9,19 +9,19 @@ import java.util.List;
  * Base abstract class for message bus implementations.
  * Contains common functionality shared between client and server message buses.
  */
-public abstract class BaseMessageBus {
+public abstract class MessageBus {
     
     protected final Network network;
     protected final MessageCodec messageCodec;
     
     /**
-     * Creates a BaseMessageBus with the given network and codec dependencies.
+     * Creates a MessageBus with the given network and codec dependencies.
      * 
      * @param network the underlying network for message transmission
      * @param messageCodec the codec for message encoding/decoding
      * @throws IllegalArgumentException if either parameter is null
      */
-    protected BaseMessageBus(Network network, MessageCodec messageCodec) {
+    protected MessageBus(Network network, MessageCodec messageCodec) {
         if (network == null) {
             throw new IllegalArgumentException("Network cannot be null");
         }
@@ -46,25 +46,7 @@ public abstract class BaseMessageBus {
         
         network.send(message);
     }
-    
-    /**
-     * Establishes a connection to the destination and returns the actual local address
-     * assigned by the network layer. This delegates to the network implementation.
-     * 
-     * Implementation behavior:
-     * - SimulatedNetwork: Returns localhost with simulated ephemeral port
-     * - NioNetwork: Establishes actual socket connection and returns OS-assigned local address
-     * 
-     * @param destination the destination address to connect to
-     * @return the actual local address assigned for this connection
-     */
-    public NetworkAddress establishConnection(NetworkAddress destination) {
-        // Delegate to the network layer to establish the actual connection
-        // This allows different network implementations to handle connection establishment
-        // appropriately (simulated vs. real socket connections)
-        return network.establishConnection(destination);
-    }
-    
+
     /**
      * Routes received messages to registered handlers.
      * This method implements the reactive Service Layer tick() pattern.

@@ -37,12 +37,13 @@ public class DirectChannelOrderTest {
     @BeforeEach
     void setup() {
         network = new SimulatedNetwork(new Random(1));
-        clientBus = new ClientMessageBus(network, new JsonMessageCodec());
-        serverBus = new ServerMessageBus(network, new JsonMessageCodec());
-        client = new Client(clientBus);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        clientBus = new ClientMessageBus(network, codec);
+        serverBus = new ServerMessageBus(network, codec);
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
+        client = new Client(clientBus, codec, List.of(replicaAddr));
         SimulatedStorage storage = new SimulatedStorage(new Random());
-        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, storage);
+        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, codec, storage);
         serverBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         

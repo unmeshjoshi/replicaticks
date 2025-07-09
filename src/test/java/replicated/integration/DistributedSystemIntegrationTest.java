@@ -67,7 +67,7 @@ class DistributedSystemIntegrationTest {
             // Use a fixed seed for each replica to ensure test isolation
             Storage storage = new SimulatedStorage(new Random(42L + i));
             storages.add(storage);
-            QuorumReplica replica = new QuorumReplica("replica-" + address.port(), address, peers, serverBus, storage);
+            QuorumReplica replica = new QuorumReplica("replica-" + address.port(), address, peers, serverBus, new JsonMessageCodec(), storage);
             replicas.add(replica);
             
             // Register replica with message bus
@@ -76,8 +76,9 @@ class DistributedSystemIntegrationTest {
         
         // Create clients (addresses will be auto-assigned)
         clients = new ArrayList<>();
+        MessageCodec clientCodec = new JsonMessageCodec();
         for (int i = 0; i < 2; i++) { // Create 2 clients
-            Client client = new Client(clientBus);
+            Client client = new Client(clientBus, clientCodec, replicaAddresses);
             clients.add(client);
             // Client handler is auto-registered by ClientMessageBus.sendClientMessage()
         }

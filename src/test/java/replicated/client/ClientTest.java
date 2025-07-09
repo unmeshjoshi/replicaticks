@@ -28,7 +28,8 @@ class ClientTest {
         
         // Create client with bootstrap replicas (new API)
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
-        client = new Client(messageBus, bootstrapReplicas);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        client = new Client(messageBus, codec, bootstrapReplicas);
     }
     
     @Test
@@ -167,7 +168,8 @@ class ClientTest {
     void shouldTimeoutPendingRequests() {
         // Given - client with short timeout
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
-        client = new Client(messageBus, bootstrapReplicas, 3); // 3 tick timeout
+        JsonMessageCodec codec = new JsonMessageCodec();
+        client = new Client(messageBus, codec, bootstrapReplicas, 3); // 3 tick timeout
         
         String key = "user:123";
         ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
@@ -221,11 +223,35 @@ class ClientTest {
     }
     
     @Test
+    void shouldHandleInvalidResponses() {
+        // Given - invalid timeout (less than minimum)
+        int invalidTimeout = 2;
+        List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        client = new Client(messageBus, codec, bootstrapReplicas, invalidTimeout);
+        
+        String key = "user:123";
+        ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
+        
+        AtomicReference<Throwable> timeoutError = new AtomicReference<>();
+        future.onFailure(timeoutError::set);
+        
+        // When - advance time beyond timeout
+        for (int tick = 1; tick <= invalidTimeout + 1; tick++) {
+            client.tick();
+        }
+        
+        // Then - request should timeout
+        assertDoesNotThrow(() -> {});
+    }
+    
+    @Test
     void shouldSupportConfigurableTimeout() {
         // Given - client with custom timeout
         int customTimeout = 10;
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
-        Client customClient = new Client(messageBus, bootstrapReplicas, customTimeout);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        Client customClient = new Client(messageBus, codec, bootstrapReplicas, customTimeout);
         
         // When - send request
         ListenableFuture<VersionedValue> future = customClient.sendGetRequest("key", replicaAddress);

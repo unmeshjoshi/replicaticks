@@ -35,9 +35,10 @@ class TestSimulationDriverTest {
         storage = new TestStorage();
         
         // Create replica and client
+        JsonMessageCodec codec = new JsonMessageCodec();
         replica = new QuorumReplica("test-replica", replicaAddress, List.of(),
-                                        new ServerMessageBus(network, new JsonMessageCodec()), storage, 10);
-        client = new Client(new ClientMessageBus(network, new JsonMessageCodec()));
+                                        new ServerMessageBus(network, codec), codec, storage, 10);
+        client = new Client(new ClientMessageBus(network, codec), codec, List.of(replicaAddress));
         
         // Create driver with test components
         driver = new SimulationDriver(

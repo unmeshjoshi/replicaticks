@@ -19,16 +19,16 @@ public final class QuorumReplica extends Replica {
      * Creates a QuorumBasedReplica with the specified configuration.
      */
     public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                         BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
-        super(name, networkAddress, peers, messageBus, storage, requestTimeoutTicks);
+                         MessageBus messageBus, MessageCodec messageCodec, Storage storage, int requestTimeoutTicks) {
+        super(name, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks);
     }
 
     /**
      * Creates a QuorumBasedReplica with default timeout.
      */
     public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                         BaseMessageBus messageBus, Storage storage) {
-        this(name, networkAddress, peers, messageBus, storage, 1000); // Default 100 ticks timeout
+                         MessageBus messageBus, MessageCodec messageCodec, Storage storage) {
+        this(name, networkAddress, peers, messageBus, messageCodec, storage, 1000); // Default 100 ticks timeout
     }
 
     @Override

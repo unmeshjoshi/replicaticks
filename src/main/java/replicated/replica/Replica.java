@@ -20,7 +20,7 @@ import java.util.function.BiFunction;
  * Responsibilities
  * <ul>
  *   <li>Maintain immutable identity – {@code name} and {@code networkAddress} – and the list of peer replicas.</li>
- *   <li>Require and hold non-null {@link BaseMessageBus} and {@link Storage} dependencies with constructor validation.</li>
+ *   <li>Require and hold non-null {@link MessageBus} and {@link Storage} dependencies with constructor validation.</li>
  *   <li>Manage the event-driven lifecycle through {@link #tick()} method for timeout processing and periodic tasks.</li>
  *   <li>Handle message routing and correlation ID generation for internal replica-to-replica communication.</li>
  *   <li>Provide helper utilities:
@@ -56,7 +56,7 @@ import java.util.function.BiFunction;
  *   <li>Use {@code broadcastToAllReplicas} with {@link AsyncQuorumCallback} to simplify quorum-based RPC flows.</li>
  *   <li>Always handle message processing errors appropriately in {@link #onMessageReceived}.</li>
  *   <li><strong>Tick Orchestration:</strong> Only tick internal implementation details (like {@link RequestWaitingList}). 
- *       Never call {@code tick()} on dependencies like {@link BaseMessageBus} or {@link Storage} - 
+ *       Never call {@code tick()} on dependencies like {@link MessageBus} or {@link Storage} -
  *       that is handled by {@link SimulationDriver} to maintain centralized tick orchestration.</li>
  * </ul>
  * <p>
@@ -111,7 +111,8 @@ public abstract class Replica implements MessageHandler {
     protected final List<NetworkAddress> peers;
 
     // Infrastructure dependencies
-    protected final BaseMessageBus messageBus;
+    protected final MessageBus messageBus;
+    protected final MessageCodec messageCodec;
     protected final Storage storage;
     protected final int requestTimeoutTicks;
     protected final RequestWaitingList waitingList;
@@ -126,24 +127,27 @@ public abstract class Replica implements MessageHandler {
      * @param networkAddress      network address of this replica
      * @param peers               list of peer replica addresses
      * @param messageBus          message bus for communication
+     * @param messageCodec        codec for message and payload serialization
      * @param storage             storage layer for persistence
      * @param requestTimeoutTicks timeout for requests in ticks
      */
     protected Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                      BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
-        checkArguments(name, networkAddress, peers, messageBus, storage);
+                      MessageBus messageBus, MessageCodec messageCodec, Storage storage, int requestTimeoutTicks) {
+        checkArguments(name, networkAddress, peers, messageBus, messageCodec, storage);
 
         this.name = name;
         this.networkAddress = networkAddress;
         this.peers = List.copyOf(peers); // Defensive copy to ensure immutability
         this.messageBus = messageBus;
+        this.messageCodec = messageCodec;
         this.storage = storage;
         this.requestTimeoutTicks = requestTimeoutTicks;
         this.waitingList = new RequestWaitingList(requestTimeoutTicks);
 
     }
 
-    private static void checkArguments(String name, NetworkAddress networkAddress, List<NetworkAddress> peers, BaseMessageBus messageBus, Storage storage) {
+    private static void checkArguments(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+                                       MessageBus messageBus, MessageCodec messageCodec, Storage storage) {
         if (name == null) {
             throw new IllegalArgumentException("Name cannot be null");
         }
@@ -153,9 +157,9 @@ public abstract class Replica implements MessageHandler {
         if (peers == null) {
             throw new IllegalArgumentException("Peers list cannot be null");
         }
-        // Validate dependencies: both messageBus and storage must be provided (non-null)
-        if (messageBus == null || storage == null) {
-            throw new IllegalArgumentException("Both MessageBus and Storage must be provided and non-null");
+        // Validate dependencies: messageBus, messageCodec, and storage must be provided (non-null)
+        if (messageBus == null || messageCodec == null || storage == null) {
+            throw new IllegalArgumentException("MessageBus, MessageCodec, and Storage must be provided and non-null");
         }
     }
 
@@ -213,22 +217,14 @@ public abstract class Replica implements MessageHandler {
      * Serializes a payload object to bytes.
      */
     protected byte[] serializePayload(Object payload) {
-        try {
-            return JsonMessageCodec.createConfiguredObjectMapper().writeValueAsBytes(payload);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize payload", e);
-        }
+        return messageCodec.encodePayload(payload);
     }
 
     /**
      * Deserializes bytes to a payload object.
      */
     protected <T> T deserializePayload(byte[] data, Class<T> type) {
-        try {
-            return JsonMessageCodec.createConfiguredObjectMapper().readValue(data, type);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize payload", e);
-        }
+        return messageCodec.decodePayload(data, type);
     }
 
     @Override

@@ -244,7 +244,7 @@ public class ChainReplicationReplica extends Replica {
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **TigerBeetle**: Inspiration for deterministic simulation and testing approaches
 - **Kent Beck**: For the tidy first system prompt that I used in the cursorrules

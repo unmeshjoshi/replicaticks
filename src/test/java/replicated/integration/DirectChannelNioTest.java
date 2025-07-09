@@ -48,7 +48,8 @@ public class DirectChannelNioTest {
         network.bind(replicaAddr);
         
         storage = new SimulatedStorage(new Random());
-        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, storage);
+        JsonMessageCodec codec = new JsonMessageCodec();
+        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, codec, storage);
         serverBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         

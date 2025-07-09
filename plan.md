@@ -227,7 +227,7 @@ Our design achieves determinism by systematically eliminating the primary source
 - [x] **`shouldHandleReadRepairScenario()`**: Read-time consistency repairs
 
 ### ✅ **TECHNICAL ACHIEVEMENTS**
-- [x] **Enhanced Replica**: Removed the former `storage.tick()` call inside `Replica`; storage is now ticked centrally by `SimulationDriver`.
+- [x] **Enhanced Serialization**: Introduced generic payload encode/decode in `MessageCodec`; Client and Replica now reuse injected codec instead of static ObjectMapper.
 - [x] **Comprehensive Test Framework**: `DistributedSystemIntegrationTest` with 8 advanced scenarios
 - [x] **Deterministic Simulation**: All scenarios reproducible with consistent results
 - [x] **Production-Ready Features**: Handles real-world failure scenarios comprehensively
@@ -660,19 +660,23 @@ Implement a comprehensive TigerBeetle-style SimulationRunner for continuous stre
 
 ### **PLANNED COMPONENTS**
 
-#### **Step 1: Advanced Consensus Algorithms** 🔄
+#### **Step 1: MessageCodec Architecture Improvements** ✅
+- [x] **Unified Serialization Methods**: Refactor MessageCodec to have generic encode/decode methods that work for both Message objects and arbitrary payloads, eliminating the separate encodePayload/decodePayload methods
+- [x] **Direct MessageCodec Injection**: Inject MessageCodec directly into Replica and Client constructors instead of accessing it through messageBus.getMessageCodec(), improving dependency clarity and testability
+
+#### **Step 2: Advanced Consensus Algorithms** 🔄
 - [ ] **Raft Consensus**: Implement Raft algorithm as alternative to quorum-based consensus
 - [ ] **Byzantine Fault Tolerance**: Add PBFT (Practical Byzantine Fault Tolerance) implementation
 - [ ] **Chain Replication**: Implement chain replication for high-performance scenarios
 - [ ] **Algorithm Comparison**: Benchmarking framework for comparing consensus algorithms
 
-#### **Step 2: Performance Optimizations** 🔄
+#### **Step 3: Performance Optimizations** 🔄
 - [ ] **Connection Pooling**: Optimize network layer with connection reuse
 - [ ] **Batch Operations**: Support for batched GET/SET operations
 - [ ] **Compression**: Message compression for network bandwidth optimization
 - [ ] **Zero-Copy Serialization**: Optimize serialization performance
 
-#### **Step 3: Production Features** 🔄
+#### **Step 4: Production Features** 🔄
 - [ ] **Persistence**: Add WAL (Write-Ahead Logging) for durability
 - [ ] **Snapshotting**: Implement periodic state snapshots
 - [ ] **Log Compaction**: Add log compaction for storage efficiency

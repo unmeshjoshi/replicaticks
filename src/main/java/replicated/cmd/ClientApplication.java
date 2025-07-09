@@ -29,7 +29,7 @@ public class ClientApplication {
         ClientMessageBus messageBus = new ClientMessageBus(network, codec);
         
         // Create client with bootstrap replicas
-        this.client = new Client(messageBus, List.of(serverAddr));
+        this.client = new Client(messageBus, codec, List.of(serverAddr));
     }
     
     /**

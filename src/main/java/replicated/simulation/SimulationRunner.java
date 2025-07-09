@@ -175,7 +175,7 @@ public class SimulationRunner {
             
             SimulatedStorage storage = new SimulatedStorage(new Random(seed + 100 + i), 1, 0.0);
             QuorumReplica replica = new QuorumReplica(
-                "replica-" + i, address, peers, serverBus, storage, 50 // 50 tick timeout
+                "replica-" + i, address, peers, serverBus, codec, storage, 50 // 50 tick timeout
             );
             
             storages.add(storage);
@@ -184,7 +184,7 @@ public class SimulationRunner {
         }
         
         // Create client
-        this.client = new Client(clientBus, replicaAddresses, 100); // 100 tick timeout
+        this.client = new Client(clientBus, codec, replicaAddresses, 100); // 100 tick timeout
         
         // Create simulation driver
         this.driver = new SimulationDriver(

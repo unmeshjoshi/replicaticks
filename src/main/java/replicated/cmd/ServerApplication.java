@@ -64,7 +64,7 @@ public class ServerApplication {
 
             // 4. Initialize replica
             System.out.println("Initializing replica with " + peers.size() + " peers...");
-            this.replica = new QuorumReplica(name, myAddress, peers, messageBus, storage);
+            this.replica = new QuorumReplica(name, myAddress, peers, messageBus, codec, storage);
             System.out.println("Replica initialized");
 
             // 5. Register replica as message handler
