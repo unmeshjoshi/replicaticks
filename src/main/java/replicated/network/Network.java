@@ -26,15 +26,7 @@ public interface Network {
      */
     void send(Message message);
     
-    /**
-     * Retrieves all available messages for the given network address.
-     * This is a non-blocking operation that returns immediately.
-     * 
-     * @param address the network address to receive messages for (must not be null)
-     * @return list of messages available for this address (never null, may be empty)
-     * @throws IllegalArgumentException if address is null
-     */
-    List<Message> receive(NetworkAddress address);
+
     
     /**
      * Processes pending network operations in the simulation tick.
@@ -138,4 +130,18 @@ public interface Network {
     default MessageContext getContextFor(Message message) {
         return null;
     }
+    
+    /**
+     * Registers a single callback handler for push-based message delivery.
+     * 
+     * The Network implementation will call the registered callback's onMessage() method
+     * during its tick() cycle when messages are ready for delivery. This eliminates
+     * the need for polling-based receive() calls.
+     * 
+     * Only one callback can be registered at a time. Subsequent calls will replace
+     * the previous callback.
+     * 
+     * @param callback The MessageCallback to be invoked when messages are ready
+     */
+    void registerMessageHandler(MessageCallback callback);
 }

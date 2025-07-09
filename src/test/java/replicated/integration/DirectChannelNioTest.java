@@ -7,6 +7,7 @@ import replicated.client.Client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBusMultiplexer;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.ServerMessageBus;
 import replicated.network.NioNetwork;
@@ -41,6 +42,12 @@ public class DirectChannelNioTest {
         network = new NioNetwork(new JsonMessageCodec());
         clientBus = new ClientMessageBus(network, new JsonMessageCodec());
         serverBus = new ServerMessageBus(network, new JsonMessageCodec());
+        
+        // Setup message bus multiplexer to handle both client and server messages
+        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
+        multiplexer.registerMessageBus(clientBus);
+        multiplexer.registerMessageBus(serverBus);
+        
         client = new Client(clientBus);
         replicaAddr = new NetworkAddress("127.0.0.1", 7000);
         

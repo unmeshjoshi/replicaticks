@@ -193,25 +193,7 @@ public class NioNetwork implements Network {
         System.out.println("NIO: Message added to outbound queue, queue size: " + outboundQueue.size());
     }
     
-    @Override
-    public List<Message> receive(NetworkAddress address) {
-        if (address == null) {
-            throw new IllegalArgumentException("Address cannot be null");
-        }
-        
-        Queue<Message> queue = messageQueues.get(address);
-        if (queue == null) {
-            return List.of();
-        }
-        
-        List<Message> messages = new ArrayList<>();
-        Message message;
-        while ((message = queue.poll()) != null) {
-            messages.add(message);
-        }
-        
-        return messages;
-    }
+
     
     @Override
     public void tick() {
@@ -253,6 +235,9 @@ public class NioNetwork implements Network {
             
             // Process outbound messages
             processOutboundMessages();
+            
+            // Process inbound messages and deliver to callback
+            processInboundMessages();
             
         } catch (IOException e) {
             throw new RuntimeException("Error in network tick", e);
@@ -504,6 +489,39 @@ public class NioNetwork implements Network {
                                       " (channel=" + channel + ", connected=" + 
                                       (channel != null ? channel.isConnected() : "null") + ")");
                 }
+            }
+        }
+    }
+    
+    /**
+     * Process inbound messages from queues and deliver to registered callback.
+     * This implements the push-based delivery model.
+     */
+    private void processInboundMessages() {
+        if (messageCallback == null) {
+            return; // No callback registered
+        }
+        
+        // Process messages from all address queues
+        for (Map.Entry<NetworkAddress, Queue<Message>> entry : messageQueues.entrySet()) {
+            Queue<Message> queue = entry.getValue();
+            Message message;
+            
+            while ((message = queue.poll()) != null) {
+                MessageContext context = messageContexts.get(message);
+                if (context == null) {
+                    // Create a basic context if none exists
+                    context = new MessageContext(message, null, message.source());
+                }
+                
+                try {
+                    messageCallback.onMessage(message, context);
+                } catch (Exception e) {
+                    System.err.println("NIO: Error in message callback: " + e.getMessage());
+                }
+                
+                // Clean up context after delivery
+                messageContexts.remove(message);
             }
         }
     }
@@ -987,5 +1005,15 @@ public class NioNetwork implements Network {
     public Metrics getMetrics() {
         return new Metrics(inboundConnectionCount.get(), outboundConnectionCount.get(), closedConnectionCount.get(),
                            List.copyOf(connectionStats.values()));
+    }
+    
+    private MessageCallback messageCallback;
+    
+    @Override
+    public void registerMessageHandler(MessageCallback callback) {
+        if (callback == null) {
+            throw new IllegalArgumentException("MessageCallback cannot be null");
+        }
+        this.messageCallback = callback;
     }
 }

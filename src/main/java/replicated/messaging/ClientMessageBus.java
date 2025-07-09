@@ -1,12 +1,10 @@
 package replicated.messaging;
 
+import replicated.network.MessageCallback;
 import replicated.network.MessageContext;
 import replicated.network.Network;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -15,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 
  * This is used by client components that send requests and expect responses.
  */
-public class ClientMessageBus extends MessageBus {
+public class ClientMessageBus extends MessageBus implements MessageCallback {
     
     private final Map<String, MessageHandler> correlationIdHandlers;
     private final List<MessageHandler> clientHandlers;
@@ -35,6 +33,8 @@ public class ClientMessageBus extends MessageBus {
         this.clientHandlers = new ArrayList<>();
         this.clientAddresses = new HashMap<>();
         this.clientPortCounter = new AtomicInteger(9000); // Start client ports at 9000
+        
+        // NOTE: Do not register directly with network - use MessageBusMultiplexer instead
     }
     
     /**
@@ -155,29 +155,13 @@ public class ClientMessageBus extends MessageBus {
     }
     
     /**
-     * Routes messages to their respective handlers based on correlation ID.
-     * This implements client-side routing where response messages are delivered to handlers
-     * registered for the specific correlation ID.
+     * Callback method that receives messages from the network.
+     * This is called by the network when messages are available.
      */
     @Override
-    protected void routeMessagesToHandlers() {
-        // Collect all messages from all client addresses
-        List<Message> allMessages = new ArrayList<>();
-        for (NetworkAddress clientAddress : clientAddresses.values()) {
-            List<Message> messages = network.receive(clientAddress);
-            if (!messages.isEmpty()) {
-                System.out.println("ClientMessageBus: Received " + messages.size() + " messages for client " + clientAddress);
-                allMessages.addAll(messages);
-            }
-        }
-
-        // Only print debug info if there are actual messages to process
-        if (!allMessages.isEmpty()) {
-            System.out.println("ClientMessageBus: Processing " + allMessages.size() + " total messages");
-        }
-
-        for (Message message : allMessages) {
-            MessageContext ctx = network.getContextFor(message);
+    public void onMessage(Message message, MessageContext context) {
+        // Only process messages destined for our client addresses
+        if (clientAddresses.containsValue(message.destination())) {
             String correlationId = message.correlationId();
             
             System.out.println("ClientMessageBus: Routing message " + message.messageType() + " from " + message.source() + 
@@ -188,21 +172,31 @@ public class ClientMessageBus extends MessageBus {
                 MessageHandler correlationHandler = correlationIdHandlers.get(correlationId);
                 if (correlationHandler != null) {
                     System.out.println("ClientMessageBus: Delivering response to correlationId handler");
-                    correlationHandler.onMessageReceived(message, ctx);
+                    correlationHandler.onMessageReceived(message, context);
                     // Remove the handler after use (one-time correlation ID handlers)
                     correlationIdHandlers.remove(correlationId);
                 } else {
                     System.out.println("ClientMessageBus: No correlationId handler found for response, delivering to all client handlers");
                     for (MessageHandler clientHandler : clientHandlers) {
-                        clientHandler.onMessageReceived(message, ctx);
+                        clientHandler.onMessageReceived(message, context);
                     }
                 }
             } else {
                 System.out.println("ClientMessageBus: No correlation ID in message, delivering to all client handlers");
                 for (MessageHandler clientHandler : clientHandlers) {
-                    clientHandler.onMessageReceived(message, ctx);
+                    clientHandler.onMessageReceived(message, context);
                 }
             }
         }
+    }
+
+    /**
+     * Routes messages to their respective handlers based on correlation ID.
+     * This method is now called by the network callback instead of polling.
+     */
+    @Override
+    protected void routeMessagesToHandlers() {
+        // This method is now handled by the onMessage callback
+        // The network will call onMessage when messages are available
     }
 } 

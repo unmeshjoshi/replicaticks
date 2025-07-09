@@ -285,10 +285,7 @@ class ClientTest {
             // No-op for testing
         }
         
-        @Override
-        public List<Message> receive(NetworkAddress address) {
-            return List.of();
-        }
+
         
         @Override
         public void tick() {
@@ -324,6 +321,11 @@ class ClientTest {
         @Override
         public void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate) {
             // No-op for testing
+        }
+        
+        @Override
+        public void registerMessageHandler(replicated.network.MessageCallback callback) {
+            // Test implementation - just store the callback for now
         }
     }
 } 

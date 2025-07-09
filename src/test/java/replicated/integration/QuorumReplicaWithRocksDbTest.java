@@ -70,6 +70,11 @@ class QuorumReplicaWithRocksDbTest {
         clientBus = new ClientMessageBus(network, codec);
         serverBus = new ServerMessageBus(network, codec);
         
+        // Setup message bus multiplexer to handle both client and server messages
+        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
+        multiplexer.registerMessageBus(clientBus);
+        multiplexer.registerMessageBus(serverBus);
+        
         // Setup persistent storage for each replica
         storage1 = new RocksDbStorage(tempDir.resolve("replica1-db").toString());
         storage2 = new RocksDbStorage(tempDir.resolve("replica2-db").toString());
@@ -120,10 +125,8 @@ class QuorumReplicaWithRocksDbTest {
         assertNotNull(replica3);
         assertNotNull(client);
         
-        // Network should be operational
-        assertTrue(network.receive(address1).isEmpty());
-        assertTrue(network.receive(address2).isEmpty());
-        assertTrue(network.receive(address3).isEmpty());
+        // Network should be operational (no need to check for messages with callback approach)
+        assertDoesNotThrow(() -> network.tick());
     }
     
     @Test

@@ -6,6 +6,7 @@ import replicated.client.Client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBusMultiplexer;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.ServerMessageBus;
 import replicated.network.SimulatedNetwork;
@@ -43,6 +44,11 @@ class DirectChannelResponseTest {
         JsonMessageCodec codec = new JsonMessageCodec();
         clientBus = new ClientMessageBus(network, codec);
         serverBus = new ServerMessageBus(network, codec);
+        
+        // Setup message bus multiplexer to handle both client and server messages
+        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
+        multiplexer.registerMessageBus(clientBus);
+        multiplexer.registerMessageBus(serverBus);
         
         // Setup addresses
         clientAddress = new NetworkAddress("127.0.0.1", 9000);

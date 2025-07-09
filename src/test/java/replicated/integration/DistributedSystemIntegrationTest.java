@@ -46,6 +46,11 @@ class DistributedSystemIntegrationTest {
         clientBus = new ClientMessageBus(network, new JsonMessageCodec());
         serverBus = new ServerMessageBus(network, new JsonMessageCodec());
         
+        // Setup message bus multiplexer to handle both client and server messages
+        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
+        multiplexer.registerMessageBus(clientBus);
+        multiplexer.registerMessageBus(serverBus);
+        
         // Setup replica addresses
         replicaAddresses = List.of(
             new NetworkAddress("192.168.1.1", 8080),
@@ -494,15 +499,8 @@ class DistributedSystemIntegrationTest {
         // Use SimulationDriver to orchestrate all component ticking
         simulationDriver.runSimulation(ticks);
         
-        // Debug: Check message queue states after simulation
-        System.out.println("Debug: Completed processDistributedOperation - checking final system state");
-        for (int i = 0; i < replicaAddresses.size(); i++) {
-            NetworkAddress addr = replicaAddresses.get(i);
-            List<Message> messages = network.receive(addr);
-            if (!messages.isEmpty()) {
-                System.out.println("Debug: Replica " + addr + " has " + messages.size() + " unprocessed messages");
-            }
-        }
+        // Debug: Simulation completed (callback-based approach handles message delivery automatically)
+        System.out.println("Debug: Completed processDistributedOperation - callback-based system processed messages");
         
         System.out.println("Debug: Completed processDistributedOperation");
     }

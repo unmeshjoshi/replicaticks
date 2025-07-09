@@ -39,6 +39,10 @@ class SimpleNioIntegrationTest {
         codec = new JsonMessageCodec();
         messageBus = new ServerMessageBus(network, codec);
         
+        // Setup message bus multiplexer to handle message delivery
+        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
+        multiplexer.registerMessageBus(messageBus);
+        
         // Bind network addresses
         network.bind(address1);
         network.bind(address2);

@@ -89,22 +89,22 @@ class NioNetworkTest {
     }
     
     @Test
-    void shouldReceiveEmptyListWhenNoMessagesAvailable() {
+    void shouldSupportMessageCallbackRegistration() {
         // Given
-        network.bind(address1);
+        TestMessageHandler handler = new TestMessageHandler();
         
-        // When
-        List<Message> messages = network.receive(address1);
-        
-        // Then
-        assertNotNull(messages);
-        assertTrue(messages.isEmpty());
+        // When/Then - should not throw
+        assertDoesNotThrow(() -> network.registerMessageHandler(handler));
     }
     
-    @Test
-    void shouldThrowExceptionForNullAddressInReceive() {
-        // Given/When/Then
-        assertThrows(IllegalArgumentException.class, () -> network.receive(null));
+    /**
+     * Test message handler for callback testing.
+     */
+    private static class TestMessageHandler implements MessageCallback {
+        @Override
+        public void onMessage(Message message, MessageContext context) {
+            // Test implementation - no-op
+        }
     }
     
     @Test

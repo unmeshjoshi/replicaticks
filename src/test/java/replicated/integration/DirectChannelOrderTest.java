@@ -6,6 +6,7 @@ import replicated.client.Client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBusMultiplexer;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.ServerMessageBus;
 import replicated.network.MessageContext;
@@ -40,6 +41,12 @@ public class DirectChannelOrderTest {
         JsonMessageCodec codec = new JsonMessageCodec();
         clientBus = new ClientMessageBus(network, codec);
         serverBus = new ServerMessageBus(network, codec);
+        
+        // Setup message bus multiplexer to handle both client and server messages
+        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
+        multiplexer.registerMessageBus(clientBus);
+        multiplexer.registerMessageBus(serverBus);
+        
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
         client = new Client(clientBus, codec, List.of(replicaAddr));
         SimulatedStorage storage = new SimulatedStorage(new Random());

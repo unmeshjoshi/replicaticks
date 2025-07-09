@@ -656,7 +656,67 @@ Implement a comprehensive TigerBeetle-style SimulationRunner for continuous stre
 
 ---
 
-## Phase 20: Next Steps & Future Enhancements 🔄 **PLANNED**
+## Phase 20: Channel-Based Client Architecture 🔄 **IN PROGRESS**
+
+### **SCOPE**
+Redesign the client-server communication architecture to eliminate the need for client source addresses and implement true channel-based routing with push-based callback message delivery.
+
+### **IMPLEMENTATION STEPS**
+
+#### **Step 1: Create MessageCallback Interface (TDD)** 🔄
+- [ ] **Write failing test**: Test that demonstrates MessageCallback interface usage
+- [ ] **Create MessageCallback interface**: Define `void onMessage(Message message, MessageContext context)` method
+- [ ] **Update Network interface**: Add `registerMessageHandler(MessageCallback callback)` method
+- [ ] **Make tests pass**: Implement basic callback registration in network implementations
+
+#### **Step 2: Update Message Record for Null Source (TDD)** 🔄
+- [ ] **Write failing test**: Test Message creation with null source addresses for client messages
+- [ ] **Update Message validation**: Allow null source addresses for CLIENT_* message types
+- [ ] **Update existing tests**: Fix any tests that break due to null source address support
+- [ ] **Verify all tests pass**: Ensure Message record works with null sources
+
+#### **Step 3: Implement Push-Based Network Delivery (TDD)** 🔄
+- [ ] **Write failing test**: Test that Network.tick() calls registered callbacks with messages
+- [ ] **Remove receive() method**: Remove receive(NetworkAddress) from Network interface
+- [ ] **Implement callback-driven tick()**: Network.tick() processes queues and calls callbacks
+- [ ] **Update SimulatedNetwork**: Implement callback-based message delivery
+- [ ] **Update NioNetwork**: Implement callback-based message delivery
+
+#### **Step 4: Update MessageBus to Use Callbacks (TDD)** 🔄
+- [ ] **Write failing test**: Test MessageBus receives messages via callback, not polling
+- [ ] **Remove receive() calls**: Remove all network.receive() calls from MessageBus
+- [ ] **Implement callback handler**: MessageBus implements MessageCallback interface
+- [ ] **Register with network**: MessageBus registers itself as callback handler with network
+- [ ] **Update tick() method**: MessageBus.tick() no longer polls network
+
+#### **Step 5: Update Client to Use Null Source Addresses (TDD)** 🔄
+- [ ] **Write failing test**: Test client messages are created with null source addresses
+- [ ] **Remove source address logic**: Client no longer assigns source addresses to messages
+- [ ] **Update connection logic**: Client connection purely for channel creation, not addressing
+- [ ] **Verify correlation ID routing**: Ensure responses work via correlation ID, not addresses
+
+#### **Step 6: Update QuorumReplica Response Routing (TDD)** 🔄
+- [ ] **Write failing test**: Test replica responses use MessageContext.getSourceChannel() for routing
+- [ ] **Update response methods**: Use MessageContext for response routing instead of message.source()
+- [ ] **Verify channel-based routing**: Ensure responses work via channels, not addresses
+- [ ] **Test with null source messages**: Verify replica handles client messages with null sources
+
+### **ARCHITECTURAL BENEFITS**
+- [ ] **Simplified Client Model**: Clients don't need network addresses, only correlation IDs
+- [ ] **True Channel-Based Routing**: Responses routed via actual network channels, not addresses
+- [ ] **Push-Based Message Delivery**: Network proactively delivers messages via callbacks during tick()
+- [ ] **Production Network Alignment**: Matches how real TCP/socket programming works
+- [ ] **Cleaner Abstractions**: Separation between logical addressing and physical channel routing
+
+### **EXPECTED OUTCOMES**
+- [ ] **No Client Source Addresses**: Client messages can have completely null source addresses
+- [ ] **Channel-Based Responses**: All responses routed via MessageContext channels
+- [ ] **Push-Based Architecture**: Network.tick() drives message delivery via callbacks, no polling
+- [ ] **Simplified Network Interface**: Cleaner, more intuitive network abstraction
+
+---
+
+## Phase 21: Next Steps & Future Enhancements 🔄 **PLANNED**
 
 ### **PLANNED COMPONENTS**
 

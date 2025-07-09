@@ -25,6 +25,7 @@ public class SimulatedNetwork implements Network {
     private final PriorityQueue<QueuedMessage> pendingMessages = new PriorityQueue<>();
     private final Map<NetworkAddress, List<Message>> deliveredMessages = new HashMap<>();
     private final Map<Message, MessageContext> messageContexts = new HashMap<>();
+    private MessageCallback messageCallback;
     
     // Internal counter for delivery timing (TigerBeetle pattern)
     private long currentTick = 0;
@@ -92,15 +93,7 @@ public class SimulatedNetwork implements Network {
         queueForDelivery(message, deliveryTick);
     }
     
-    @Override
-    public List<Message> receive(NetworkAddress address) {
-        if (address == null) {
-            throw new IllegalArgumentException("Address cannot be null");
-        }
-        
-        List<Message> messages = deliveredMessages.remove(address);
-        return messages == null ? List.of() : new ArrayList<>(messages);
-    }
+
     
     @Override
     public MessageContext getContextFor(Message message) {
@@ -182,11 +175,21 @@ public class SimulatedNetwork implements Network {
                pendingMessages.peek().deliveryTick <= tickTime) {
             
             QueuedMessage queuedMessage = pendingMessages.poll();
-            deliveredMessages.computeIfAbsent(queuedMessage.message.destination(), k -> new ArrayList<>()).add(queuedMessage.message);
-            messageContexts.put(queuedMessage.message, new MessageContext(queuedMessage.message));
-            lastDeliveredMessage = queuedMessage.message;
+            Message message = queuedMessage.message;
+            MessageContext context = new MessageContext(message);
+            
+            // Store message for polling-based receive() (backward compatibility)
+            deliveredMessages.computeIfAbsent(message.destination(), k -> new ArrayList<>()).add(message);
+            messageContexts.put(message, context);
+            lastDeliveredMessage = message;
+            
+            // Call registered callback for push-based delivery
+            if (messageCallback != null) {
+                messageCallback.onMessage(message, context);
+            }
+            
             if (DebugConfig.ENABLED) {
-                System.out.println("SimNet: delivered " + queuedMessage.message);
+                System.out.println("SimNet: delivered " + message);
             }
         }
     }
@@ -277,6 +280,14 @@ public class SimulatedNetwork implements Network {
      */
     public Message getLastDeliveredMessage() {
         return lastDeliveredMessage;
+    }
+    
+    @Override
+    public void registerMessageHandler(MessageCallback callback) {
+        if (callback == null) {
+            throw new IllegalArgumentException("MessageCallback cannot be null");
+        }
+        this.messageCallback = callback;
     }
     
     /**

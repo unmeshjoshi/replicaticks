@@ -1,5 +1,6 @@
 package replicated.messaging;
 
+import replicated.network.MessageCallback;
 import replicated.network.MessageContext;
 import replicated.network.Network;
 
@@ -11,7 +12,7 @@ import java.util.*;
  * 
  * This is used by server components like Replicas that listen on specific addresses.
  */
-public class ServerMessageBus extends MessageBus {
+public class ServerMessageBus extends MessageBus implements MessageCallback {
     
     private final Map<NetworkAddress, MessageHandler> registeredHandlers;
     
@@ -25,6 +26,8 @@ public class ServerMessageBus extends MessageBus {
     public ServerMessageBus(Network network, MessageCodec messageCodec) {
         super(network, messageCodec);
         this.registeredHandlers = new HashMap<>();
+        
+        // NOTE: Do not register directly with network - use MessageBusMultiplexer instead
     }
     
     /**
@@ -59,32 +62,13 @@ public class ServerMessageBus extends MessageBus {
     }
     
     /**
-     * Routes messages to their respective handlers based on destination address.
-     * This implements server-side routing where messages are delivered to handlers
-     * registered for the destination address.
+     * Callback method that receives messages from the network.
+     * This is called by the network when messages are available.
      */
     @Override
-    protected void routeMessagesToHandlers() {
-        // Collect all messages from all registered addresses
-        Set<NetworkAddress> allAddresses = new HashSet<>(registeredHandlers.keySet());
-        
-        List<Message> allMessages = new ArrayList<>();
-        for (NetworkAddress address : allAddresses) {
-            List<Message> messages = network.receive(address);
-            if (!messages.isEmpty()) {
-                System.out.println("ServerMessageBus: Received " + messages.size() + " messages for " + address);
-                allMessages.addAll(messages);
-            }
-        }
-
-        // Only print debug info if there are actual messages to process
-        if (!allMessages.isEmpty()) {
-            System.out.println("ServerMessageBus: Processing " + allMessages.size() + " total messages");
-        }
-
-        for (Message message : allMessages) {
-            MessageContext ctx = network.getContextFor(message);
-            
+    public void onMessage(Message message, MessageContext context) {
+        // Only process messages destined for our registered addresses
+        if (registeredHandlers.containsKey(message.destination())) {
             System.out.println("ServerMessageBus: Routing message " + message.messageType() + " from " + message.source() + 
                               " to " + message.destination() + " (correlationId=" + message.correlationId() + ")");
             
@@ -92,10 +76,20 @@ public class ServerMessageBus extends MessageBus {
             MessageHandler addressHandler = registeredHandlers.get(message.destination());
             if (addressHandler != null) {
                 System.out.println("ServerMessageBus: Delivering message to address handler for " + message.destination());
-                addressHandler.onMessageReceived(message, ctx);
+                addressHandler.onMessageReceived(message, context);
             } else {
                 System.out.println("ServerMessageBus: No address handler found for message to " + message.destination());
             }
         }
+    }
+
+    /**
+     * Routes messages to their respective handlers based on destination address.
+     * This method is now called by the network callback instead of polling.
+     */
+    @Override
+    protected void routeMessagesToHandlers() {
+        // This method is now handled by the onMessage callback
+        // The network will call onMessage when messages are available
     }
 } 

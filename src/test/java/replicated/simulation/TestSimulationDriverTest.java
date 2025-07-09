@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import replicated.client.Client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
+import replicated.network.MessageCallback;
 import replicated.network.Network;
 import replicated.replica.QuorumReplica;
 import replicated.storage.Storage;
@@ -93,10 +94,7 @@ class TestSimulationDriverTest {
             // No-op for testing
         }
         
-        @Override
-        public List<Message> receive(NetworkAddress address) {
-            return List.of();
-        }
+
         
         @Override
         public void tick() {
@@ -127,6 +125,11 @@ class TestSimulationDriverTest {
         
         @Override
         public void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate) {}
+        
+        @Override
+        public void registerMessageHandler(MessageCallback callback) {
+            // Test implementation - just store the callback for now
+        }
     }
     
     private static class TestStorage implements Storage {
