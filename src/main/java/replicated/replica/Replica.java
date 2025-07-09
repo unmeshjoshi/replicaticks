@@ -55,6 +55,9 @@ import java.util.function.BiFunction;
  *   <li>Subclasses <b>must</b> call {@code super.tick()} if they override {@code tick()}.</li>
  *   <li>Use {@code broadcastToAllReplicas} with {@link AsyncQuorumCallback} to simplify quorum-based RPC flows.</li>
  *   <li>Always handle message processing errors appropriately in {@link #onMessageReceived}.</li>
+ *   <li><strong>Tick Orchestration:</strong> Only tick internal implementation details (like {@link RequestWaitingList}). 
+ *       Never call {@code tick()} on dependencies like {@link BaseMessageBus} or {@link Storage} - 
+ *       that is handled by {@link SimulationDriver} to maintain centralized tick orchestration.</li>
  * </ul>
  * <p>
  * Thread Safety and Concurrency
@@ -96,7 +99,7 @@ import java.util.function.BiFunction;
  * }
  * }</pre>
  *
- * @see QuorumBasedReplica
+ * @see QuorumReplica
  * @see MessageBus
  * @see AsyncQuorumCallback
  */

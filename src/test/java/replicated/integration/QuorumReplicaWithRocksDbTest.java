@@ -8,7 +8,8 @@ import replicated.client.Client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumBasedReplica;
+import replicated.replica.QuorumReplica;
+import replicated.simulation.SimulationDriver;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.VersionedValue;
 
@@ -16,20 +17,20 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration test for QuorumBasedReplica using production storage components:
- * - SimulatedNetwork for reliable deterministic messaging (NIO is for real deployments)
+ * Integration test for QuorumReplica using RocksDb storage components:
+ * - SimulatedNetwork for reliable deterministic messaging
  * - RocksDbStorage for persistent storage
  * - Multiple replicas forming a quorum
  * 
- * This test verifies the quorum consensus works with persistent storage.
+ * This test verifies the quorum storage works with persistent storage.
  */
-class ProductionQuorumIntegrationTest {
+class QuorumReplicaWithRocksDbTest {
     
     @TempDir
     Path tempDir;
@@ -40,9 +41,9 @@ class ProductionQuorumIntegrationTest {
     private ServerMessageBus serverBus;
     
     // Three replicas for quorum consensus
-    private QuorumBasedReplica replica1;
-    private QuorumBasedReplica replica2;
-    private QuorumBasedReplica replica3;
+    private QuorumReplica replica1;
+    private QuorumReplica replica2;
+    private QuorumReplica replica3;
     
     private RocksDbStorage storage1;
     private RocksDbStorage storage2;
@@ -54,7 +55,8 @@ class ProductionQuorumIntegrationTest {
     private Client client;
     
     private long currentTick = 0;
-    
+    private SimulationDriver simulationDiver;
+
     @BeforeEach
     void setUp() {
         // Setup network addresses
@@ -80,9 +82,10 @@ class ProductionQuorumIntegrationTest {
         
         // Setup replicas with production storage
         // Constructor: name, networkAddress, peers, messageBus, storage, requestTimeoutTicks
-        replica1 = new QuorumBasedReplica("replica1", address1, peers1, serverBus, storage1, 10);
-        replica2 = new QuorumBasedReplica("replica2", address2, peers2, serverBus, storage2, 10);
-        replica3 = new QuorumBasedReplica("replica3", address3, peers3, serverBus, storage3, 10);
+        int replicaRequestTimeoutTicks = 1000;
+        replica1 = new QuorumReplica("replica1", address1, peers1, serverBus, storage1, replicaRequestTimeoutTicks);
+        replica2 = new QuorumReplica("replica2", address2, peers2, serverBus, storage2, replicaRequestTimeoutTicks);
+        replica3 = new QuorumReplica("replica3", address3, peers3, serverBus, storage3, replicaRequestTimeoutTicks);
         
         // Setup client (address will be auto-assigned by ClientMessageBus)
         client = new Client(clientBus);
@@ -91,6 +94,8 @@ class ProductionQuorumIntegrationTest {
         serverBus.registerHandler(address1, replica1);
         serverBus.registerHandler(address2, replica2);
         serverBus.registerHandler(address3, replica3);
+
+        simulationDiver = new SimulationDriver(List.of(network), List.of(storage1, storage2, storage3), List.of(replica1, replica2, replica3), List.of(client), List.of(clientBus, serverBus));
         // Client handler is auto-registered by MessageBus.sendClientMessage()
     }
     
@@ -102,44 +107,9 @@ class ProductionQuorumIntegrationTest {
         if (storage3 != null) storage3.close();
     }
     
-    /**
-     * Utility method to run ticks until a condition is met or timeout occurs.
-     * This processes both network and storage operations for all components.
-     */
-    private void runUntil(Supplier<Boolean> condition, long timeoutMs) {
-        long startTime = System.currentTimeMillis();
-        while (!condition.get()) {
-            currentTick++;
-            
-            // Tick all components to process pending operations
-            clientBus.tick(); // This ticks network and routes client messages
-            serverBus.tick(); // This ticks network and routes server messages
-            storage1.tick();
-            storage2.tick();
-            storage3.tick();
-            
-            replica1.tick();
-            replica2.tick();
-            replica3.tick();
-            
-            client.tick();
-            
-            if (System.currentTimeMillis() - startTime > timeoutMs) {
-                fail("Timeout waiting for condition to be met");
-            }
-            
-            // Small yield to prevent busy waiting
-            Thread.yield();
-        }
-    }
+
     
-    /**
-     * Convenience method with default timeout of 10 seconds.
-     */
-    private void runUntil(Supplier<Boolean> condition) {
-        runUntil(condition, 10000);
-    }
-    
+
     @Test
     void shouldCreateProductionQuorumSystemSuccessfully() {
         // Given/When - setup completed in @BeforeEach
@@ -193,7 +163,18 @@ class ProductionQuorumIntegrationTest {
         
         assertTrue(replicasWithValue >= 1, "At least 1 replica should have the value");
     }
-    
+
+    long timeoutTicks = 1000;
+    private void runUntil(Callable<Boolean> condition) {
+        try {
+            while (!condition.call() && simulationDiver.getTicks() < timeoutTicks) {
+                simulationDiver.runSimulation(100);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     void shouldPerformBasicQuorumGetOperation() {
         // Given - store a value first
@@ -207,7 +188,7 @@ class ProductionQuorumIntegrationTest {
         storage3.set(key.getBytes(), versionedValue);
         
         // Wait for storage operations to complete
-        runUntil(() -> true, 500);
+        simulationDiver.runSimulation(10);
         
         // When - client sends get request to replica1
         AtomicReference<VersionedValue> result = new AtomicReference<>();
@@ -306,7 +287,7 @@ class ProductionQuorumIntegrationTest {
         System.out.println("  - " + address1 + " partitioned from " + address3);
         
         // Wait a bit for partition to take effect
-        runUntil(() -> true, 100);
+        simulationDiver.runSimulation(5);
         
         // Then - remaining replicas (2 and 3) should still form a quorum
         // Send request to replica2 which should still work with replica3
@@ -326,7 +307,7 @@ class ProductionQuorumIntegrationTest {
         
         // Wait for quorum consensus and response with shorter timeout
         System.out.println("Waiting for GET request to complete...");
-        runUntil(() -> getResult.get() != null || getError.get() != null, 5000);
+        runUntil(() -> getResult.get() != null || getError.get() != null);
         
         // Check what happened
         if (getError.get() != null) {
@@ -346,8 +327,8 @@ class ProductionQuorumIntegrationTest {
         System.out.println("Partitions healed");
         
         // Wait for healing to take effect
-        runUntil(() -> true, 100);
-        
+        simulationDiver.runSimulation(5);
+
         // Then - all replicas should work together again
         String newValue = "healed-value";
         AtomicReference<Boolean> healedResult = new AtomicReference<>();
@@ -387,9 +368,14 @@ class ProductionQuorumIntegrationTest {
         storage1.get(key.getBytes()).onSuccess(persistedValue1::set);
         storage2.get(key.getBytes()).onSuccess(persistedValue2::set);
         storage3.get(key.getBytes()).onSuccess(persistedValue3::set);
-        
+
+
         // Wait for storage operations to complete
-        runUntil(() -> persistedValue1.get() != null || persistedValue2.get() != null || persistedValue3.get() != null);
+        while(valuesAreNotRead(persistedValue1, persistedValue2, persistedValue3)) {
+            storage1.tick();
+            storage2.tick();
+            storage3.tick();
+        }
         
         // At least 1 replica should have persisted the data
         int replicasWithPersistedData = 0;
@@ -399,7 +385,11 @@ class ProductionQuorumIntegrationTest {
         
         assertTrue(replicasWithPersistedData >= 1, "At least 1 replica should have persisted data");
     }
-    
+
+    private static boolean valuesAreNotRead(AtomicReference<VersionedValue> persistedValue1, AtomicReference<VersionedValue> persistedValue2, AtomicReference<VersionedValue> persistedValue3) {
+        return persistedValue1.get() == null && persistedValue2.get() == null && persistedValue3.get() == null;
+    }
+
     @Test
     void shouldHandleConcurrentOperations() {
         // Given

@@ -6,7 +6,7 @@ import replicated.messaging.NetworkAddress;
 import replicated.messaging.ServerMessageBus;
 import replicated.network.Network;
 import replicated.network.NioNetwork;
-import replicated.replica.QuorumBasedReplica;
+import replicated.replica.QuorumReplica;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.Storage;
 
@@ -27,7 +27,7 @@ public class ServerApplication {
     private Network network;
     private Storage storage;
     private ServerMessageBus messageBus;
-    private QuorumBasedReplica replica;
+    private QuorumReplica replica;
     private volatile boolean running = false;
     
     public ServerApplication(String name, String ipAddress, int port, List<NetworkAddress> peers, String storagePath) {
@@ -64,7 +64,7 @@ public class ServerApplication {
 
             // 4. Initialize replica
             System.out.println("Initializing replica with " + peers.size() + " peers...");
-            this.replica = new QuorumBasedReplica(name, myAddress, peers, messageBus, storage);
+            this.replica = new QuorumReplica(name, myAddress, peers, messageBus, storage);
             System.out.println("Replica initialized");
 
             // 5. Register replica as message handler

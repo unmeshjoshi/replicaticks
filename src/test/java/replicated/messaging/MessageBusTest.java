@@ -58,8 +58,9 @@ class MessageBusTest {
         
         // When
         messageBus.sendMessage(message);
-        messageBus.tick();
-        
+        tick();
+
+
         // Then - message should be available through network
         List<Message> received = network.receive(nodeB);
         assertEquals(1, received.size());
@@ -100,8 +101,9 @@ class MessageBusTest {
         // When
         messageBus.sendMessage(messageToA);
         messageBus.sendMessage(messageToB);
-        messageBus.tick();
-        
+
+        tick();
+
         // Then
         assertEquals(1, handlerA.getReceivedMessages().size());
         assertEquals(messageToA, handlerA.getReceivedMessages().get(0));
@@ -109,7 +111,12 @@ class MessageBusTest {
         assertEquals(1, handlerB.getReceivedMessages().size());
         assertEquals(messageToB, handlerB.getReceivedMessages().get(0));
     }
-    
+
+    private void tick() {
+        network.tick();
+        messageBus.tick();
+    }
+
     @Test
     void shouldHandleUnregisteredAddresses() {
         // Given
@@ -117,8 +124,8 @@ class MessageBusTest {
         
         // When
         messageBus.sendMessage(message);
-        messageBus.tick();
-        
+        tick();
+
         // Then - should not throw exception, message just won't be routed
         // Message should still be available through direct network access
         List<Message> received = network.receive(nodeB);
@@ -133,8 +140,8 @@ class MessageBusTest {
         messageBus.sendMessage(message);
         
         // When
-        messageBus.tick();
-        
+        tick();
+
         // Then - message should be processed by underlying network
         List<Message> received = network.receive(nodeB);
         assertEquals(1, received.size());
@@ -156,8 +163,8 @@ class MessageBusTest {
         
         // When
         messageBus.broadcast(nodeA, recipients, MessageType.INTERNAL_GET_REQUEST, "broadcast".getBytes());
-        messageBus.tick();
-        
+        tick();
+
         // Then - all recipients except sender should receive the message
         assertEquals(0, handlerA.getReceivedMessages().size()); // sender doesn't receive
         assertEquals(1, handlerB.getReceivedMessages().size());
@@ -180,8 +187,9 @@ class MessageBusTest {
         
         Message message = new Message(nodeB, nodeA, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id-6");
         messageBus.sendMessage(message);
-        messageBus.tick();
-        
+
+        tick();
+
         // Then - handler should not receive message
         assertTrue(handler.getReceivedMessages().isEmpty());
         
@@ -204,8 +212,9 @@ class MessageBusTest {
         messageBus.sendMessage(message1);
         messageBus.sendMessage(message2);
         messageBus.sendMessage(message3);
-        messageBus.tick();
-        
+
+        tick();
+
         // Then - all messages should be delivered to handler
         List<Message> received = handler.getReceivedMessages();
         assertEquals(3, received.size());
@@ -226,8 +235,9 @@ class MessageBusTest {
         // When - send in specific order
         messageBus.sendMessage(message1);
         messageBus.sendMessage(message2);
-        messageBus.tick();
-        
+
+        tick();
+
         // Then - should receive in same order
         List<Message> received = handler.getReceivedMessages();
         assertEquals(2, received.size());

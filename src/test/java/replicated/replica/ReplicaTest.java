@@ -154,6 +154,7 @@ class ReplicaTest {
 
         // When
         List<String> corrIds = replica.broadcastInternal();
+        net.tick();
         bus.tick(); // advance bus which ticks network
 
         // Then: each destination should have exactly one pending message

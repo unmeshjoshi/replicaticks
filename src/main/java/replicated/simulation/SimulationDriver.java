@@ -41,8 +41,8 @@ public class SimulationDriver {
      * Order follows TigerBeetle pattern:
      * 1. Clients (application layer - proactive work)
      * 2. Replicas (application layer - proactive work) 
-     * 3. MessageBuses (service layer - message routing)
-     * 4. Networks (service layer - reactive I/O processing)
+     * 3. Networks (service layer - deliver messages from previous sends)
+     * 4. MessageBuses (service layer - route delivered messages to handlers)
      * 5. Storage (service layer - reactive I/O processing)
      */
     public void tick() {
@@ -50,9 +50,9 @@ public class SimulationDriver {
         clients.forEach(Client::tick);
         replicas.forEach(Replica::tick);
         
-        // 2. Service Layer - Message routing and I/O processing
-        messageBuses.forEach(BaseMessageBus::tick);
+        // 2. Service Layer - Deliver messages, then route them, then process storage I/O
         networks.forEach(Network::tick);
+        messageBuses.forEach(BaseMessageBus::tick);
         storages.forEach(Storage::tick);
     }
 
@@ -62,7 +62,13 @@ public class SimulationDriver {
      */
     public void runSimulation(int maxTicks) {
         for (int i = 0; i < maxTicks; i++) {
+            ticks++;
             tick();
         }
     }
-} 
+
+    long ticks = 0;
+    public long getTicks() {
+        return ticks;
+    }
+}

@@ -66,14 +66,17 @@ public abstract class BaseMessageBus {
     }
     
     /**
-     * Advances the simulation and routes received messages to registered handlers.
+     * Routes received messages to registered handlers.
      * This method implements the reactive Service Layer tick() pattern.
+     * 
+     * Note: This method does NOT tick the network - that is handled by the centralized
+     * SimulationDriver to maintain proper tick orchestration. This method only processes
+     * messages that were delivered in previous ticks.
      */
     public void tick() {
-        // First, advance the network simulation
-        network.tick();
-        
-        // Then, route messages to registered handlers (implemented by subclasses)
+        // Route messages to registered handlers (implemented by subclasses)
+        // The network is ticked separately by SimulationDriver to maintain
+        // centralized tick orchestration and deterministic ordering
         routeMessagesToHandlers();
     }
     

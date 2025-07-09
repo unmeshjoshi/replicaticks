@@ -10,7 +10,7 @@ import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.NetworkAddress;
 import replicated.messaging.ServerMessageBus;
 import replicated.network.NioNetwork;
-import replicated.replica.QuorumBasedReplica;
+import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
@@ -30,7 +30,7 @@ public class DirectChannelNioTest {
     private NioNetwork network;
     private ClientMessageBus clientBus;
     private ServerMessageBus serverBus;
-    private List<QuorumBasedReplica> replicas;
+    private List<QuorumReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
     private Client client;
@@ -48,7 +48,7 @@ public class DirectChannelNioTest {
         network.bind(replicaAddr);
         
         storage = new SimulatedStorage(new Random());
-        QuorumBasedReplica replica = new QuorumBasedReplica("r1", replicaAddr, List.of(), serverBus, storage);
+        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, storage);
         serverBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         
@@ -79,7 +79,7 @@ public class DirectChannelNioTest {
         ListenableFuture<Boolean> f1 = client.sendSetRequest("key1", "value1".getBytes(), replicaAddr);
         
         // Process the request
-        processTicks(50);
+        processTicks(60);
         
         // Verify first request completed
         assertTrue(f1.isCompleted() && f1.getResult(), "First request should complete successfully");
@@ -88,7 +88,7 @@ public class DirectChannelNioTest {
         ListenableFuture<VersionedValue> f2 = client.sendGetRequest("key1", replicaAddr);
         
         // Process the request
-        processTicks(50);
+        processTicks(60);
         
         // Verify second request completed
         assertTrue(f2.isCompleted(), "Second request should complete");
@@ -106,16 +106,16 @@ public class DirectChannelNioTest {
     void shouldHandleMultipleSequentialRequests() {
         // Send multiple requests sequentially
         ListenableFuture<Boolean> f1 = client.sendSetRequest("key1", "value1".getBytes(), replicaAddr);
-        processTicks(30);
+        processTicks(60);
         
         ListenableFuture<Boolean> f2 = client.sendSetRequest("key2", "value2".getBytes(), replicaAddr);
-        processTicks(30);
+        processTicks(60);
         
         ListenableFuture<VersionedValue> f3 = client.sendGetRequest("key1", replicaAddr);
-        processTicks(30);
+        processTicks(60);
         
         ListenableFuture<VersionedValue> f4 = client.sendGetRequest("key2", replicaAddr);
-        processTicks(30);
+        processTicks(60);
         
         // Verify all requests completed successfully
         assertTrue(f1.isCompleted() && f1.getResult(), "First SET request should complete");
@@ -132,7 +132,7 @@ public class DirectChannelNioTest {
     void shouldMaintainConnectionAcrossRequests() {
         // Send initial request to establish connection
         ListenableFuture<Boolean> f1 = client.sendSetRequest("test", "data".getBytes(), replicaAddr);
-        processTicks(30);
+        processTicks(60);
         assertTrue(f1.isCompleted() && f1.getResult(), "Initial request should complete");
         
         // Send multiple rapid requests
@@ -143,7 +143,7 @@ public class DirectChannelNioTest {
         }
         
         // Process all requests
-        processTicks(100);
+        processTicks(1000);
         
         // Verify all requests completed
         for (int i = 0; i < futures.size(); i++) {

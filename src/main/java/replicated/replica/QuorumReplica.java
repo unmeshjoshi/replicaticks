@@ -13,22 +13,22 @@ import java.util.Map;
  * Quorum-based replica implementation for distributed key-value store.
  * This implementation uses majority quorum consensus for read and write operations.
  */
-public final class QuorumBasedReplica extends Replica {
+public final class QuorumReplica extends Replica {
 
     /**
      * Creates a QuorumBasedReplica with the specified configuration.
      */
-    public QuorumBasedReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                              BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
+    public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+                         BaseMessageBus messageBus, Storage storage, int requestTimeoutTicks) {
         super(name, networkAddress, peers, messageBus, storage, requestTimeoutTicks);
     }
 
     /**
      * Creates a QuorumBasedReplica with default timeout.
      */
-    public QuorumBasedReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                              BaseMessageBus messageBus, Storage storage) {
-        this(name, networkAddress, peers, messageBus, storage, 100); // Default 100 ticks timeout
+    public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+                         BaseMessageBus messageBus, Storage storage) {
+        this(name, networkAddress, peers, messageBus, storage, 1000); // Default 100 ticks timeout
     }
 
     @Override

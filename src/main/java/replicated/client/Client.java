@@ -45,7 +45,7 @@ public final class Client implements MessageHandler {
      * @param bootstrapReplicas initial list of replica addresses for cluster discovery
      */
     public Client(BaseMessageBus messageBus, List<NetworkAddress> bootstrapReplicas) {
-        this(messageBus, bootstrapReplicas, 10);
+        this(messageBus, bootstrapReplicas, 200);
     }
     
     /**

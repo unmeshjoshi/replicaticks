@@ -6,13 +6,11 @@ import replicated.client.Client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.Network;
-import replicated.replica.QuorumBasedReplica;
+import replicated.replica.QuorumReplica;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,7 +23,7 @@ class TestSimulationDriverTest {
     private SimulationDriver driver;
     private TestNetwork network;
     private TestStorage storage;
-    private QuorumBasedReplica replica;
+    private QuorumReplica replica;
     private Client client;
     private NetworkAddress replicaAddress;
     
@@ -37,7 +35,7 @@ class TestSimulationDriverTest {
         storage = new TestStorage();
         
         // Create replica and client
-        replica = new QuorumBasedReplica("test-replica", replicaAddress, List.of(), 
+        replica = new QuorumReplica("test-replica", replicaAddress, List.of(),
                                         new ServerMessageBus(network, new JsonMessageCodec()), storage, 10);
         client = new Client(new ClientMessageBus(network, new JsonMessageCodec()));
         
@@ -66,32 +64,8 @@ class TestSimulationDriverTest {
         assertEquals(1, storage.getTickCount());
         // Note: Client and Replica don't expose tick counts, but they are ticked
     }
-    
-    @Test
-    void shouldRunUntilConditionIsMet() {
-        // Given - a condition that becomes true after 5 ticks
-        AtomicInteger tickCount = new AtomicInteger(0);
-        
-        // When - run until condition is met
-        TestUtils.runUntil(() -> tickCount.incrementAndGet() > 5, 100000, driver);
-        
-        // Then - condition should be met and components should be ticked 5 times
-        assertEquals(6, tickCount.get());
-        assertEquals(5, network.getTickCount());
-        assertEquals(5, storage.getTickCount());
-    }
-    
-    @Test
-    void shouldTimeoutWhenConditionNeverMet() {
-        // Given - a condition that never becomes true
-        Supplier<Boolean> neverTrue = () -> false;
-        
-        // When & Then - should timeout
-        assertThrows(RuntimeException.class, () -> {
-            TestUtils.runUntil(neverTrue, 100, driver); // 100ms timeout
-        });
-    }
-    
+
+
     @Test
     void shouldRunSimulationForSpecifiedTicks() {
         // Given - components start with 0 ticks

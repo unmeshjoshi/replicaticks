@@ -67,6 +67,7 @@ class SimpleNioIntegrationTest {
         long startTime = System.currentTimeMillis();
         while (!condition.get()) {
             messageBus.tick();
+            network.tick();
             
             if (System.currentTimeMillis() - startTime > timeoutMs) {
                 fail("Timeout waiting for condition to be met");

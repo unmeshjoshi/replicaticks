@@ -8,7 +8,7 @@ import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.Network;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumBasedReplica;
+import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.Storage;
@@ -31,7 +31,7 @@ class DistributedSystemIntegrationTest {
     private Network network;
     private ClientMessageBus clientBus;
     private ServerMessageBus serverBus;
-    private List<QuorumBasedReplica> replicas;
+    private List<QuorumReplica> replicas;
     private List<Client> clients;
     private List<NetworkAddress> replicaAddresses;
     private Random random;
@@ -67,7 +67,7 @@ class DistributedSystemIntegrationTest {
             // Use a fixed seed for each replica to ensure test isolation
             Storage storage = new SimulatedStorage(new Random(42L + i));
             storages.add(storage);
-            QuorumBasedReplica replica = new QuorumBasedReplica("replica-" + address.port(), address, peers, serverBus, storage);
+            QuorumReplica replica = new QuorumReplica("replica-" + address.port(), address, peers, serverBus, storage);
             replicas.add(replica);
             
             // Register replica with message bus

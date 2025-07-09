@@ -12,11 +12,11 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class QuorumBasedReplicaTest {
+class QuorumReplicaTest {
     
     private ServerMessageBus serverBus;
     private Storage storage;
-    private QuorumBasedReplica replica;
+    private QuorumReplica replica;
     private NetworkAddress replicaAddress;
     private List<NetworkAddress> peers;
     
@@ -33,7 +33,7 @@ class QuorumBasedReplicaTest {
         peers = List.of(peer1, peer2);
         
         // Create enhanced replica
-        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, serverBus, storage);
+        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, storage);
     }
     
     @Test
@@ -50,14 +50,14 @@ class QuorumBasedReplicaTest {
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumBasedReplica("test", replicaAddress, peers, (BaseMessageBus) null, storage));
+            () -> new QuorumReplica("test", replicaAddress, peers, (BaseMessageBus) null, storage));
     }
     
     @Test
     void shouldThrowExceptionForNullStorage() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumBasedReplica("test", replicaAddress, peers, serverBus, null));
+            () -> new QuorumReplica("test", replicaAddress, peers, serverBus, null));
     }
     
     @Test
@@ -186,7 +186,7 @@ class QuorumBasedReplicaTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - replica with timeout configuration
-        replica = new QuorumBasedReplica("replica1", replicaAddress, peers, serverBus, storage, 5); // 5 tick timeout
+        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, storage, 5); // 5 tick timeout
         
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
         GetRequest getRequest = new GetRequest("test-key");

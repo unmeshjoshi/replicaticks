@@ -3,7 +3,7 @@ package replicated.simulation;
 import replicated.client.Client;
 import replicated.messaging.*;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumBasedReplica;
+import replicated.replica.QuorumReplica;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
 import replicated.future.ListenableFuture;
@@ -33,7 +33,7 @@ public class SimulationRunner {
     private final SimulatedNetwork network;
     private final ClientMessageBus clientBus;
     private final ServerMessageBus serverBus;
-    private final List<QuorumBasedReplica> replicas;
+    private final List<QuorumReplica> replicas;
     private final List<SimulatedStorage> storages;
     private final List<NetworkAddress> replicaAddresses;
     private final Client client;
@@ -174,7 +174,7 @@ public class SimulationRunner {
             peers.remove(address); // Remove self from peers
             
             SimulatedStorage storage = new SimulatedStorage(new Random(seed + 100 + i), 1, 0.0);
-            QuorumBasedReplica replica = new QuorumBasedReplica(
+            QuorumReplica replica = new QuorumReplica(
                 "replica-" + i, address, peers, serverBus, storage, 50 // 50 tick timeout
             );
             
