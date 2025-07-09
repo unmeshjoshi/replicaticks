@@ -7,6 +7,7 @@ import replicated.util.Timeout;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiFunction;
 
 /**
  * Base class for all replica implementations containing common building blocks.
@@ -149,4 +150,36 @@ public abstract class Replica implements MessageHandler {
                 '}';
     }
 
+    /**
+     * Generates a unique correlation ID for internal messages.
+     */
+    private String generateCorrelationId() {
+        return "internal-" + UUID.randomUUID();
+        //internal correlation ID should be UUID as it should not use System.currentTimeMillis
+        //Multiple internal messages can be sent at the same millisecond.
+    }
+
+    /**
+     * Gets all nodes in the cluster (peers + self).
+     */
+    protected List<NetworkAddress> getAllNodes() {
+        List<NetworkAddress> allNodes = new ArrayList<>(peers);
+        allNodes.add(networkAddress);
+        return allNodes;
+    }
+
+    /**
+     * Generic helper to broadcast an internal request to all nodes (peers + self).
+     * It handles correlation ID generation, waiting list registration and message sending.
+     */
+    protected <T> void sendInternalRequests(AsyncQuorumCallback<T> quorumCallback,
+                                            BiFunction<NetworkAddress, String, Message> messageBuilder) {
+        for (NetworkAddress node : getAllNodes()) {
+            String internalCorrelationId = generateCorrelationId();
+            waitingList.add(internalCorrelationId, quorumCallback);
+
+            Message internalMessage = messageBuilder.apply(node, internalCorrelationId);
+            messageBus.sendMessage(internalMessage);
+        }
+    }
 }

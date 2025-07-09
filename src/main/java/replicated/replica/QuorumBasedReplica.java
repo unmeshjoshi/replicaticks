@@ -6,10 +6,8 @@ import replicated.network.MessageContext;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Quorum-based replica implementation for distributed key-value store.
@@ -54,15 +52,6 @@ public final class QuorumBasedReplica extends Replica {
     }
 
 
-    /**
-     * Generates a unique correlation ID for internal messages.
-     */
-    private String generateCorrelationId() {
-        return "internal-" + UUID.randomUUID();
-        //internal correlation ID should be UUID as it should not use System.currentTimeMillis
-        //Multiple internal messages can be sent at the same millisecond.
-    }
-
     // Quorum-specific message handlers
 
     private void handleClientGetRequest(Message message, MessageContext ctx) {
@@ -76,7 +65,13 @@ public final class QuorumBasedReplica extends Replica {
         quorumCallback.onSuccess(responses -> sendSuccessGetResponse(clientRequest, correlationId, clientAddress, ctx, responses))
                      .onFailure(error -> sendFailureGetResponse(clientRequest, correlationId, clientAddress, ctx, error));
 
-        sendInternalGetRequests(clientRequest.key(), quorumCallback);
+        sendInternalRequests(quorumCallback, (node, correlationId1) -> {
+            InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), correlationId1);
+            return new Message(
+                    networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
+                    serializePayload(internalRequest), correlationId1
+            );
+        });
     }
 
     private AsyncQuorumCallback<InternalGetResponse> createGetQuorumCallback() {
@@ -129,52 +124,6 @@ public final class QuorumBasedReplica extends Replica {
                 ", error: " + error.getMessage() + ", correlationId: " + correlationId);
     }
 
-    private void sendInternalGetRequests(String key, AsyncQuorumCallback<InternalGetResponse> quorumCallback) {
-        List<NetworkAddress> allNodes = getAllNodes();
-        
-        for (NetworkAddress node : allNodes) {
-            String internalCorrelationId = generateCorrelationId();
-            waitingList.add(internalCorrelationId, quorumCallback);
-
-            InternalGetRequest internalRequest = new InternalGetRequest(key, internalCorrelationId);
-            Message internalMessage = new Message(
-                    networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
-                    serializePayload(internalRequest), internalCorrelationId
-            );
-            messageBus.sendMessage(internalMessage);
-        }
-    }
-
-    /**
-     * Gets all nodes in the cluster (peers + self).
-     * Extracted to eliminate duplication across methods.
-     */
-    private List<NetworkAddress> getAllNodes() {
-        List<NetworkAddress> allNodes = new ArrayList<>(peers);
-        allNodes.add(networkAddress);
-        return allNodes;
-    }
-
-    /**
-     * Extracts the latest value from quorum responses.
-     */
-    private VersionedValue getLatestValueFromResponses(Map<NetworkAddress, InternalGetResponse> responses) {
-        VersionedValue latestValue = null;
-        long latestTimestamp = -1;
-
-        for (InternalGetResponse response : responses.values()) {
-            if (response != null && response.value() != null) {
-                VersionedValue value = response.value();
-                if (value.timestamp() > latestTimestamp) {
-                    latestValue = value;
-                    latestTimestamp = value.timestamp();
-                }
-            }
-        }
-
-        return latestValue;
-    }
-
     private void handleClientSetRequest(Message message, MessageContext ctx) {
         String correlationId = message.correlationId();
         SetRequest clientRequest = deserializePayload(message.payload(), SetRequest.class);
@@ -187,8 +136,16 @@ public final class QuorumBasedReplica extends Replica {
         quorumCallback.onSuccess(responses -> sendSuccessSetResponseToClient(clientRequest, correlationId, clientAddress, ctx))
                      .onFailure(error -> sendFailureSetResponseToClient(clientRequest, correlationId, clientAddress, ctx, error));
 
-       sendInternalSetRequests(quorumCallback, clientRequest);
+       sendInternalRequests(quorumCallback, (node, correlationId1) -> {
+           InternalSetRequest internalRequest = new InternalSetRequest(
+                   clientRequest.key(), clientRequest.value(), 0, correlationId1
+           );
 
+           return new Message(
+                   networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
+                   serializePayload(internalRequest), correlationId1
+           );
+       });
     }
 
     // SET helper methods
@@ -241,22 +198,24 @@ public final class QuorumBasedReplica extends Replica {
                 ", error: " + error.getMessage() + ", correlationId: " + correlationId);
     }
 
-    private void sendInternalSetRequests(AsyncQuorumCallback<InternalSetResponse> quorumCallback, SetRequest setRequest) {
-        List<NetworkAddress> allNodes = getAllNodes();
-        for (NetworkAddress node : allNodes) {
-            String internalCorrelationId = generateCorrelationId();
-            waitingList.add(internalCorrelationId, quorumCallback);
+    /**
+     * Extracts the latest value from quorum responses.
+     */
+    private VersionedValue getLatestValueFromResponses(Map<NetworkAddress, InternalGetResponse> responses) {
+        VersionedValue latestValue = null;
+        long latestTimestamp = -1;
 
-            InternalSetRequest internalRequest = new InternalSetRequest(
-                    setRequest.key(), setRequest.value(), 0, internalCorrelationId
-            );
-
-            Message internalMessage = new Message(
-                    networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
-                    serializePayload(internalRequest), internalCorrelationId
-            );
-            messageBus.sendMessage(internalMessage);
+        for (InternalGetResponse response : responses.values()) {
+            if (response != null && response.value() != null) {
+                VersionedValue value = response.value();
+                if (value.timestamp() > latestTimestamp) {
+                    latestValue = value;
+                    latestTimestamp = value.timestamp();
+                }
+            }
         }
+
+        return latestValue;
     }
 
     private void handleInternalGetRequest(Message message) {
@@ -340,4 +299,5 @@ public final class QuorumBasedReplica extends Replica {
                 ", from: " + message.source());
         waitingList.handleResponse(message.correlationId(), response, message.source());
     }
+
 }
