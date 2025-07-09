@@ -124,7 +124,7 @@ Our design achieves determinism by systematically eliminating the primary source
 
 - [x] **Integration Testing**:
   - [x] `SimpleNioIntegrationTest`: 3 tests for basic NIO messaging scenarios
-  - [x] `ProductionQuorumIntegrationTest`: 7 tests for production quorum with RocksDB storage  
+  - [x] `QuorumBasedReplicaWithRocksDbTest`: integration tests for quorum consensus using persistent RocksDB storage  
   - [x] **All NIO tests now passing**: Fixed the "1 out of 3 messages" issue and flaky behavior
   - [x] **End-to-End Production Stack**: Full NIO + RocksDB + Quorum consensus working reliably
 
@@ -227,7 +227,7 @@ Our design achieves determinism by systematically eliminating the primary source
 - [x] **`shouldHandleReadRepairScenario()`**: Read-time consistency repairs
 
 ### ✅ **TECHNICAL ACHIEVEMENTS**
-- [x] **Enhanced Replica**: Added `storage.tick()` integration for proper storage processing
+- [x] **Enhanced Replica**: Removed the former `storage.tick()` call inside `Replica`; storage is now ticked centrally by `SimulationDriver`.
 - [x] **Comprehensive Test Framework**: `DistributedSystemIntegrationTest` with 8 advanced scenarios
 - [x] **Deterministic Simulation**: All scenarios reproducible with consistent results
 - [x] **Production-Ready Features**: Handles real-world failure scenarios comprehensively
@@ -337,7 +337,7 @@ Our design achieves determinism by systematically eliminating the primary source
 
 ### ✅ **CENTRALIZED TICK ORCHESTRATION**
 - [x] **SimulationDriver**: Created centralized tick orchestration following TigerBeetle's approach
-- [x] **Deterministic Order**: Components ticked in order: Clients → Replicas → MessageBuses → Networks → Storage
+- [x] **Deterministic Order**: Components ticked in order: Clients → Replicas → Networks → MessageBuses → Storage
 - [x] **MessageBus Support**: Extended SimulationDriver to include MessageBus ticking for proper message routing
 - [x] **Integration Updates**: Updated DistributedSystemIntegrationTest and DirectChannelOrderTest to use SimulationDriver
 - [x] **Test Utilities**: Added TestUtils.runUntil() for test scenarios that need to wait for conditions

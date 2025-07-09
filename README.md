@@ -8,12 +8,12 @@ This project implements a **deterministic simulation** of a distributed key-valu
 
 ###  Key Features
 
-- ** Quorum Support**: Majority-based consensus ensuring data consistency across replicas
-- ** Dual Network Support**: Both simulated (deterministic) and real NIO-based networking
-- ** Pluggable Storage**: Simulated storage for testing, RocksDB for production
-- ** TigerBeetle-Style Testing**: Continuous stress testing with failure injection
-- ** Real-Time Monitoring**: Live performance metrics and statistics
-- ** Production Ready**: Fat JARs, CLI tools, cluster orchestration
+- **Quorum Support**: Majority-based consensus ensuring data consistency across replicas
+- **Dual Network Support**: Both simulated (deterministic) and real NIO-based networking
+- **Pluggable Storage**: Simulated storage for testing, RocksDB for production
+- **TigerBeetle-Style Testing**: Continuous stress testing with failure injection
+- **Real-Time Monitoring**: Live performance metrics and statistics
+- **Production Ready**: Fat JARs, CLI tools, cluster orchestration
 
 ## Architecture
 
