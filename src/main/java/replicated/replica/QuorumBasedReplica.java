@@ -65,7 +65,7 @@ public final class QuorumBasedReplica extends Replica {
         quorumCallback.onSuccess(responses -> sendSuccessGetResponse(clientRequest, correlationId, clientAddress, ctx, responses))
                      .onFailure(error -> sendFailureGetResponse(clientRequest, correlationId, clientAddress, ctx, error));
 
-        sendInternalRequests(quorumCallback, (node, correlationId1) -> {
+        broadcastToAllReplicas(quorumCallback, (node, correlationId1) -> {
             InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), correlationId1);
             return new Message(
                     networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
@@ -136,7 +136,7 @@ public final class QuorumBasedReplica extends Replica {
         quorumCallback.onSuccess(responses -> sendSuccessSetResponseToClient(clientRequest, correlationId, clientAddress, ctx))
                      .onFailure(error -> sendFailureSetResponseToClient(clientRequest, correlationId, clientAddress, ctx, error));
 
-       sendInternalRequests(quorumCallback, (node, correlationId1) -> {
+       broadcastToAllReplicas(quorumCallback, (node, correlationId1) -> {
            InternalSetRequest internalRequest = new InternalSetRequest(
                    clientRequest.key(), clientRequest.value(), 0, correlationId1
            );
