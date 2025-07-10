@@ -18,15 +18,17 @@ public class ClientApplication {
     
     private final String serverAddress;
     private final QuorumClient quorumClient;
-    
+    private final NioNetwork network;
+    private final MessageBus messageBus;
+
     public ClientApplication(String serverAddress) {
         this.serverAddress = serverAddress;
         NetworkAddress serverAddr = NetworkAddress.parse(serverAddress);
         
         // Create network and unified message bus for the client
-        NioNetwork network = new NioNetwork();
+        network = new NioNetwork();
         JsonMessageCodec codec = new JsonMessageCodec();
-        MessageBus messageBus = new MessageBus(network, codec);
+        messageBus = new MessageBus(network, codec);
         
         // Register message bus directly with network (no multiplexer needed)
         network.registerMessageHandler(messageBus);
@@ -94,18 +96,9 @@ public class ClientApplication {
             System.out.println("Getting key: " + key + " from server: " + serverAddress);
             
             ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key);
-            
-            // Poll for completion (simple approach for command-line client)
-            int maxAttempts = 100; // 10 seconds with 100ms intervals
-            int attempts = 0;
-            while (future.isPending() && attempts < maxAttempts) {
-                // Process network events and incoming messages
-                quorumClient.getMessageBus().tick();
-                
-                Thread.sleep(100);
-                attempts++;
-            }
-            
+
+            tickMessageBus(future, 100);
+
             if (future.isCompleted()) {
                 VersionedValue result = future.getResult();
                 if (result != null) {
@@ -125,7 +118,20 @@ public class ClientApplication {
             throw new RuntimeException("GET operation failed", e);
         }
     }
-    
+
+    private void tickMessageBus(ListenableFuture<?> future, int maxAttempts) throws InterruptedException {
+        // Poll for completion (simple approach for command-line client)
+        int attempts = 0;
+        while (future.isPending() && attempts < maxAttempts) {
+            // Process network events and incoming messages
+            network.tick();
+            messageBus.tick();
+
+            Thread.sleep(100);
+            attempts++;
+        }
+    }
+
     /**
      * Performs a SET operation.
      * @param key The key to set
@@ -138,26 +144,10 @@ public class ClientApplication {
             
             ListenableFuture<Boolean> future = quorumClient.sendSetRequest(key, value);
             System.out.println("DEBUG: SET request sent, future created. Starting polling...");
-            
-            // Poll for completion (simple approach for command-line client)
-            int maxAttempts = 100; // 10 seconds with 100ms intervals
-            int attempts = 0;
-            while (future.isPending() && attempts < maxAttempts) {
-                // Process network events and incoming messages
-                quorumClient.getMessageBus().tick();
-                
-                Thread.sleep(100);
-                attempts++;
-                if (attempts % 10 == 0) { // Log every second
-                    System.out.println("DEBUG: Polling attempt " + attempts + "/" + maxAttempts + 
-                                      " - future state: " + (future.isPending() ? "PENDING" : 
-                                      future.isCompleted() ? "COMPLETED" : "FAILED"));
-                }
-            }
-            
-            System.out.println("DEBUG: Polling finished. Final state - Pending: " + future.isPending() + 
-                              ", Completed: " + future.isCompleted() + ", Failed: " + future.isFailed());
-            
+
+            int maxTicks = 100;
+            tickMessageBus(future, maxTicks);
+
             if (future.isCompleted()) {
                 Boolean success = future.getResult();
                 if (success) {
@@ -169,7 +159,7 @@ public class ClientApplication {
                 System.out.println("DEBUG: Future failed with exception: " + future.getException());
                 throw new RuntimeException("SET operation failed: " + future.getException().getMessage());
             } else {
-                System.out.println("DEBUG: Future still pending after " + maxAttempts + " attempts");
+                System.out.println("DEBUG: Future still pending after " + maxTicks + " attempts");
                 throw new RuntimeException("SET operation timed out");
             }
             

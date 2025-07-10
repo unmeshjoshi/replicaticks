@@ -219,14 +219,14 @@ public abstract class Replica implements MessageHandler {
      * Serializes a payload object to bytes.
      */
     protected byte[] serializePayload(Object payload) {
-        return messageCodec.encodePayload(payload);
+        return messageCodec.encode(payload);
     }
 
     /**
      * Deserializes bytes to a payload object.
      */
     protected <T> T deserializePayload(byte[] data, Class<T> type) {
-        return messageCodec.decodePayload(data, type);
+        return messageCodec.decode(data, type);
     }
 
     @Override

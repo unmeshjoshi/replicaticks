@@ -18,7 +18,7 @@ class MessageCodecTest {
         
         // When
         byte[] encoded = codec.encode(originalMessage);
-        Message decodedMessage = codec.decode(encoded);
+        Message decodedMessage = codec.decode(encoded, Message.class);
         
         // Then
         assertNotNull(encoded);
@@ -38,7 +38,7 @@ class MessageCodecTest {
         
         // When
         byte[] encoded = codec.encode(originalMessage);
-        Message decodedMessage = codec.decode(encoded);
+        Message decodedMessage = codec.decode(encoded, Message.class);
         
         // Then
         assertEquals(originalMessage, decodedMessage);
@@ -59,7 +59,7 @@ class MessageCodecTest {
         
         // When
         byte[] encoded = codec.encode(originalMessage);
-        Message decodedMessage = codec.decode(encoded);
+        Message decodedMessage = codec.decode(encoded, Message.class);
         
         // Then
         assertEquals(originalMessage, decodedMessage);
@@ -73,7 +73,7 @@ class MessageCodecTest {
         byte[] invalidData = "not valid JSON".getBytes();
         
         // When & Then
-        assertThrows(RuntimeException.class, () -> codec.decode(invalidData));
+        assertThrows(RuntimeException.class, () -> codec.decode(invalidData, Message.class));
     }
     
     @Test

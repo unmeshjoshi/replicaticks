@@ -22,7 +22,7 @@ class MessagePayloadSerializationTest {
         
         // When - Serialize and deserialize the entire message
         byte[] encodedMessage = messageCodec.encode(message);
-        Message decodedMessage = messageCodec.decode(encodedMessage);
+        Message decodedMessage = messageCodec.decode(encodedMessage, Message.class);
         
         // Then - Extract and deserialize the payload back to GetRequest
         GetRequest decodedRequest = jsonMapper.readValue(decodedMessage.payload(), GetRequest.class);
@@ -41,7 +41,7 @@ class MessagePayloadSerializationTest {
         
         // When
         byte[] encodedMessage = messageCodec.encode(message);
-        Message decodedMessage = messageCodec.decode(encodedMessage);
+        Message decodedMessage = messageCodec.decode(encodedMessage, Message.class);
         
         // Then
         SetRequest decodedRequest = jsonMapper.readValue(decodedMessage.payload(), SetRequest.class);
@@ -62,7 +62,7 @@ class MessagePayloadSerializationTest {
         
         // When
         byte[] encodedMessage = messageCodec.encode(message);
-        Message decodedMessage = messageCodec.decode(encodedMessage);
+        Message decodedMessage = messageCodec.decode(encodedMessage, Message.class);
         
         // Then
         GetResponse decodedResponse = jsonMapper.readValue(decodedMessage.payload(), GetResponse.class);
