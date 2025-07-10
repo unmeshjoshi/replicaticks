@@ -6,7 +6,7 @@ import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumReplica;
+import replicated.algorithms.quorum.QuorumReplica;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
 

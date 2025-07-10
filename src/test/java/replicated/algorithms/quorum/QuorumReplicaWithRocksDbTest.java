@@ -1,4 +1,4 @@
-package replicated.integration;
+package replicated.algorithms.quorum;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,7 +11,6 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.VersionedValue;

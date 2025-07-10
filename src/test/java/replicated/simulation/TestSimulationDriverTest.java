@@ -10,7 +10,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.MessageCallback;
 import replicated.network.Network;
-import replicated.replica.QuorumReplica;
+import replicated.algorithms.quorum.QuorumReplica;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
 

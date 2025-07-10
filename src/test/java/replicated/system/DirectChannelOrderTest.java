@@ -1,4 +1,4 @@
-package replicated.integration;
+package replicated.system;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,7 +9,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.MessageContext;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumReplica;
+import replicated.algorithms.quorum.QuorumReplica;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;

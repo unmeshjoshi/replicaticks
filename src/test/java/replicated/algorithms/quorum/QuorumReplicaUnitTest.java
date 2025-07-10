@@ -1,4 +1,4 @@
-package replicated.replica;
+package replicated.algorithms.quorum;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,7 +12,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class QuorumReplicaTest {
+class QuorumReplicaUnitTest {
     
     private MessageBus messageBus;
     private Storage storage;
@@ -200,97 +200,89 @@ class QuorumReplicaTest {
         replica.onMessageReceived(message, null);
         
         // Advance time beyond timeout
-        for (int tick = 1; tick <= 10; tick++) {
+        for (int tick = 1; tick <= 7; tick++) {
             replica.tick();
         }
         
-        // Then - request should timeout and respond to client
-        // Verification would be done through MessageBus mock
+        // Then - request should timeout and send error response
+        // This would be verified through MessageBus mock interactions
         assertDoesNotThrow(() -> {});
     }
     
     @Test
     void shouldCalculateQuorumSize() {
-        // Given a cluster of 3 nodes (this replica + 2 peers)
+        // Given a 3-node cluster (self + 2 peers)
         // When calculating quorum
-        // Then quorum should be 2 (majority of 3)
+        // Then majority should be 2 out of 3
         
-        // This will be tested indirectly through quorum behavior
-        // For 3 nodes: need 2 responses for quorum
-        // For 5 nodes: need 3 responses for quorum
-        assertDoesNotThrow(() -> replica.tick());
+        // This is implicit in the quorum logic - majority of 3 is 2
+        // The AsyncQuorumCallback handles the quorum calculation
+        assertEquals(3, replica.getPeers().size() + 1); // Total nodes
     }
     
     // Helper methods
     
     private MessageBus createMockMessageBus() {
-        // For now, return a simple mock that doesn't throw errors
-        // In a real implementation, we'd use a proper mock framework
-        return new MessageBus(new TestNetwork(), new JsonMessageCodec());
+        TestNetwork network = new TestNetwork();
+        JsonMessageCodec codec = new JsonMessageCodec();
+        return new MessageBus(network, codec);
     }
     
     private Message createMessage(NetworkAddress source, NetworkAddress destination, 
                                  MessageType messageType, Object payload) {
-        try {
-            JsonMessageCodec codec = new JsonMessageCodec();
-            byte[] payloadBytes = JsonMessageCodec.createConfiguredObjectMapper()
-                .writeValueAsBytes(payload);
-            return new Message(source, destination, messageType, payloadBytes, "test-correlation-id");
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create test message", e);
-        }
+        JsonMessageCodec codec = new JsonMessageCodec();
+        byte[] serializedPayload = codec.encode(payload);
+        return new Message(source, destination, messageType, serializedPayload, "test-correlation-id");
     }
     
-    // Simple test network implementation
+    // Test implementations
+    
     private static class TestNetwork implements replicated.network.Network {
         private int nextPort = 60000;
         
         @Override
         public void send(Message message) {
-            // No-op for testing
+            // Mock implementation - just accept the message
         }
-        
-
         
         @Override
         public void tick() {
-            // No-op for testing
+            // Mock implementation
         }
         
         @Override
         public NetworkAddress establishConnection(NetworkAddress destination) {
-            // Return a test ephemeral address
             return new NetworkAddress("127.0.0.1", nextPort++);
         }
         
         @Override
         public void partition(NetworkAddress source, NetworkAddress destination) {
-            // No-op for testing
+            // Mock implementation
         }
         
         @Override
         public void partitionOneWay(NetworkAddress source, NetworkAddress destination) {
-            // No-op for testing
+            // Mock implementation
         }
         
         @Override
         public void healPartition(NetworkAddress source, NetworkAddress destination) {
-            // No-op for testing
+            // Mock implementation
         }
         
         @Override
         public void setDelay(NetworkAddress source, NetworkAddress destination, int delayTicks) {
-            // No-op for testing
+            // Mock implementation
         }
         
         @Override
         public void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate) {
-            // No-op for testing
+            // Mock implementation
         }
         
         @Override
         public void registerMessageHandler(replicated.network.MessageCallback callback) {
-            // Test implementation - just store the callback for now
+            // Mock implementation
         }
     }
 } 

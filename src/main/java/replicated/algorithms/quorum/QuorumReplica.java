@@ -1,8 +1,9 @@
-package replicated.replica;
+package replicated.algorithms.quorum;
 
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
+import replicated.replica.Replica;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
 
@@ -12,6 +13,9 @@ import java.util.Map;
 /**
  * Quorum-based replica implementation for distributed key-value store.
  * This implementation uses majority quorum consensus for read and write operations.
+ * 
+ * This is an example implementation of the replication framework, demonstrating
+ * how to build a specific consensus algorithm using the framework's abstractions.
  */
 public final class QuorumReplica extends Replica {
 
@@ -28,7 +32,7 @@ public final class QuorumReplica extends Replica {
      */
     public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
                          MessageBus messageBus, MessageCodec messageCodec, Storage storage) {
-        this(name, networkAddress, peers, messageBus, messageCodec, storage, 1000); // Default 100 ticks timeout
+        this(name, networkAddress, peers, messageBus, messageCodec, storage, 1000); // Default 1000 ticks timeout
     }
 
     @Override
@@ -299,5 +303,4 @@ public final class QuorumReplica extends Replica {
                 ", from: " + message.source());
         waitingList.handleResponse(message.correlationId(), response, message.source());
     }
-
-}
+} 

@@ -6,7 +6,7 @@ import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
 import replicated.network.Network;
 import replicated.network.NioNetwork;
-import replicated.replica.QuorumReplica;
+import replicated.algorithms.quorum.QuorumReplica;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.Storage;
 

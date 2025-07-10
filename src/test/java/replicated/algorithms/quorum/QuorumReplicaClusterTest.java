@@ -1,4 +1,4 @@
-package replicated.integration;
+package replicated.algorithms.quorum;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,7 +11,6 @@ import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
 import replicated.network.Network;
 import replicated.network.SimulatedNetwork;
-import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.Storage;
@@ -29,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests end-to-end functionality, partition tolerance, failure recovery,
  * read/write quorums, and conflict resolution.
  */
-class DistributedSystemIntegrationTest {
+class QuorumReplicaClusterTest {
     
     private Network network;
     private MessageBus messageBus;
