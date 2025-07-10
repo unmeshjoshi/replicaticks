@@ -1,16 +1,18 @@
 package replicated.simulation;
 
-import replicated.client.Client;
-import replicated.messaging.*;
+import replicated.client.QuorumClient;
+import replicated.future.ListenableFuture;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBus;
+import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
 import replicated.replica.QuorumReplica;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
-import replicated.future.ListenableFuture;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * TigerBeetle-style SimulationRunner for testing distributed system robustness.
@@ -35,7 +37,7 @@ public class SimulationRunner {
     private final List<QuorumReplica> replicas;
     private final List<SimulatedStorage> storages;
     private final List<NetworkAddress> replicaAddresses;
-    private final Client client;
+    private final QuorumClient quorumClient;
     
     // Simulation state
     private final SimulationDriver driver;
@@ -185,14 +187,14 @@ public class SimulationRunner {
         }
         
         // Create client
-        this.client = new Client(messageBus, codec, replicaAddresses, 100); // 100 tick timeout
+        this.quorumClient = new QuorumClient(messageBus, codec, replicaAddresses, 100); // 100 tick timeout
         
         // Create simulation driver
         this.driver = new SimulationDriver(
             List.of(network),
             List.copyOf(storages),
             List.copyOf(replicas),
-            List.of(client),
+            List.of(quorumClient),
             List.of(messageBus)
         );
         
@@ -406,7 +408,7 @@ public class SimulationRunner {
             String key = keys[random.nextInt(keys.length)];
             String expectedValue = expectedValues.get(key);
             
-            ListenableFuture<VersionedValue> future = client.sendGetRequest(key);
+            ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key);
             
             // Set up callback to track results
             future.onSuccess(result -> {
@@ -432,7 +434,7 @@ public class SimulationRunner {
             
             expectedValues.put(key, value);
             
-            ListenableFuture<Boolean> future = client.sendSetRequest(key, value.getBytes());
+            ListenableFuture<Boolean> future = quorumClient.sendSetRequest(key, value.getBytes());
             
             // Set up callback to track results
             future.onSuccess(result -> {

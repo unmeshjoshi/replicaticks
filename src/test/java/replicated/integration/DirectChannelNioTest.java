@@ -3,7 +3,7 @@ package replicated.integration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
@@ -31,7 +31,7 @@ public class DirectChannelNioTest {
     private List<QuorumReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
-    private Client client;
+    private QuorumClient quorumClient;
     private SimulatedStorage storage;
 
     @BeforeEach
@@ -43,7 +43,7 @@ public class DirectChannelNioTest {
         network.registerMessageHandler(messageBus);
         
         replicaAddr = new NetworkAddress("127.0.0.1", 7000);
-        client = new Client(messageBus, new JsonMessageCodec(), List.of(replicaAddr));
+        quorumClient = new QuorumClient(messageBus, new JsonMessageCodec(), List.of(replicaAddr));
         
         // Bind the network to the replica address
         network.bind(replicaAddr);
@@ -59,7 +59,7 @@ public class DirectChannelNioTest {
             List.of(network),
             List.of(storage),
             replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
-            List.of(client),
+            List.of(quorumClient),
             List.of(messageBus)
         );
     }
@@ -74,7 +74,7 @@ public class DirectChannelNioTest {
     @Test
     void shouldSendResponsesOnSameChannel() {
         // Send first request
-        ListenableFuture<Boolean> f1 = client.sendSetRequest("key1", "value1".getBytes(), replicaAddr);
+        ListenableFuture<Boolean> f1 = quorumClient.sendSetRequest("key1", "value1".getBytes(), replicaAddr);
         
         // Process the request
         processTicks(60);
@@ -83,7 +83,7 @@ public class DirectChannelNioTest {
         assertTrue(f1.isCompleted() && f1.getResult(), "First request should complete successfully");
         
         // Send second request
-        ListenableFuture<VersionedValue> f2 = client.sendGetRequest("key1", replicaAddr);
+        ListenableFuture<VersionedValue> f2 = quorumClient.sendGetRequest("key1", replicaAddr);
         
         // Process the request
         processTicks(60);
@@ -103,16 +103,16 @@ public class DirectChannelNioTest {
     @Test
     void shouldHandleMultipleSequentialRequests() {
         // Send multiple requests sequentially
-        ListenableFuture<Boolean> f1 = client.sendSetRequest("key1", "value1".getBytes(), replicaAddr);
+        ListenableFuture<Boolean> f1 = quorumClient.sendSetRequest("key1", "value1".getBytes(), replicaAddr);
         processTicks(60);
         
-        ListenableFuture<Boolean> f2 = client.sendSetRequest("key2", "value2".getBytes(), replicaAddr);
+        ListenableFuture<Boolean> f2 = quorumClient.sendSetRequest("key2", "value2".getBytes(), replicaAddr);
         processTicks(60);
         
-        ListenableFuture<VersionedValue> f3 = client.sendGetRequest("key1", replicaAddr);
+        ListenableFuture<VersionedValue> f3 = quorumClient.sendGetRequest("key1", replicaAddr);
         processTicks(60);
         
-        ListenableFuture<VersionedValue> f4 = client.sendGetRequest("key2", replicaAddr);
+        ListenableFuture<VersionedValue> f4 = quorumClient.sendGetRequest("key2", replicaAddr);
         processTicks(60);
         
         // Verify all requests completed successfully
@@ -129,14 +129,14 @@ public class DirectChannelNioTest {
     @Test
     void shouldMaintainConnectionAcrossRequests() {
         // Send initial request to establish connection
-        ListenableFuture<Boolean> f1 = client.sendSetRequest("test", "data".getBytes(), replicaAddr);
+        ListenableFuture<Boolean> f1 = quorumClient.sendSetRequest("test", "data".getBytes(), replicaAddr);
         processTicks(60);
         assertTrue(f1.isCompleted() && f1.getResult(), "Initial request should complete");
         
         // Send multiple rapid requests
         List<ListenableFuture<Boolean>> futures = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            ListenableFuture<Boolean> future = client.sendSetRequest("key" + i, ("value" + i).getBytes(), replicaAddr);
+            ListenableFuture<Boolean> future = quorumClient.sendSetRequest("key" + i, ("value" + i).getBytes(), replicaAddr);
             futures.add(future);
         }
         

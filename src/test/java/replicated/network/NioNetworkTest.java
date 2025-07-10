@@ -7,7 +7,6 @@ import replicated.messaging.Message;
 import replicated.messaging.MessageType;
 import replicated.messaging.NetworkAddress;
 
-import java.util.List;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;

@@ -3,9 +3,12 @@ package replicated.integration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
-import replicated.messaging.*;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBus;
+import replicated.messaging.MessageCodec;
+import replicated.messaging.NetworkAddress;
 import replicated.network.Network;
 import replicated.network.SimulatedNetwork;
 import replicated.replica.QuorumReplica;
@@ -31,7 +34,7 @@ class DistributedSystemIntegrationTest {
     private Network network;
     private MessageBus messageBus;
     private List<QuorumReplica> replicas;
-    private List<Client> clients;
+    private List<QuorumClient> quorumClients;
     private List<NetworkAddress> replicaAddresses;
     private Random random;
     private SimulationDriver simulationDriver;
@@ -76,11 +79,11 @@ class DistributedSystemIntegrationTest {
         }
         
         // Create clients (addresses will be auto-assigned)
-        clients = new ArrayList<>();
+        quorumClients = new ArrayList<>();
         MessageCodec clientCodec = new JsonMessageCodec();
         for (int i = 0; i < 2; i++) { // Create 2 clients
-            Client client = new Client(messageBus, clientCodec, replicaAddresses);
-            clients.add(client);
+            QuorumClient quorumClient = new QuorumClient(messageBus, clientCodec, replicaAddresses);
+            quorumClients.add(quorumClient);
             // Client handler is auto-registered by MessageBus correlation routing
         }
         
@@ -89,7 +92,7 @@ class DistributedSystemIntegrationTest {
             List.of(network),
             storages,
             replicas.stream().map(replica -> (replicated.replica.Replica) replica).toList(),
-            clients,
+                quorumClients,
             List.of(messageBus)
         );
     }
@@ -130,14 +133,14 @@ class DistributedSystemIntegrationTest {
         // Given - A distributed system with 5 replicas
         String key = "user:123";
         byte[] value = "John Doe".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         NetworkAddress coordinatorReplica = replicaAddresses.get(0);
         
         AtomicReference<Boolean> setResult = new AtomicReference<>();
         AtomicReference<VersionedValue> getResult = new AtomicReference<>();
         
         // When - Client performs SET operation
-        ListenableFuture<Boolean> setFuture = client.sendSetRequest(key, value, coordinatorReplica);
+        ListenableFuture<Boolean> setFuture = quorumClient.sendSetRequest(key, value, coordinatorReplica);
         setFuture.onSuccess(setResult::set);
         
         // Process the distributed operation
@@ -147,7 +150,7 @@ class DistributedSystemIntegrationTest {
         assertTrue(setResult.get(), "SET operation should succeed with quorum");
         
         // When - Client performs GET operation
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, coordinatorReplica);
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, coordinatorReplica);
         getFuture.onSuccess(getResult::set);
         
         // Process the distributed operation
@@ -163,7 +166,7 @@ class DistributedSystemIntegrationTest {
         // Given - A distributed system with 5 replicas
         String key = "partition:test";
         byte[] value = "partition value".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         
         // When - Create a partition isolating 2 replicas from 3 replicas
         NetworkAddress isolatedReplica1 = replicaAddresses.get(0);
@@ -179,7 +182,7 @@ class DistributedSystemIntegrationTest {
         
         // Try to write to the majority partition (should succeed)
         AtomicReference<Boolean> majoritySetResult = new AtomicReference<>();
-        ListenableFuture<Boolean> majoritySetFuture = client.sendSetRequest(key, value, majorityReplica);
+        ListenableFuture<Boolean> majoritySetFuture = quorumClient.sendSetRequest(key, value, majorityReplica);
         majoritySetFuture.onSuccess(majoritySetResult::set);
         
         processDistributedOperation(20); // Allow extra time for partition
@@ -191,7 +194,7 @@ class DistributedSystemIntegrationTest {
         AtomicReference<Boolean> minoritySetResult = new AtomicReference<>();
         AtomicReference<Throwable> minoritySetError = new AtomicReference<>();
         
-        ListenableFuture<Boolean> minoritySetFuture = client.sendSetRequest(key + ":minority", value, isolatedReplica1);
+        ListenableFuture<Boolean> minoritySetFuture = quorumClient.sendSetRequest(key + ":minority", value, isolatedReplica1);
         minoritySetFuture.onSuccess(minoritySetResult::set);
         minoritySetFuture.onFailure(minoritySetError::set);
         
@@ -207,7 +210,7 @@ class DistributedSystemIntegrationTest {
         // Given - A distributed system with 5 replicas
         String key = "failure:test";
         byte[] value = "failure value".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         
         // When - Simulate replica failure by removing it from message bus
         NetworkAddress failedReplica = replicaAddresses.get(0);
@@ -216,7 +219,7 @@ class DistributedSystemIntegrationTest {
         // Try to perform operations through remaining replicas
         NetworkAddress workingReplica = replicaAddresses.get(1);
         AtomicReference<Boolean> setResult = new AtomicReference<>();
-        ListenableFuture<Boolean> setFuture = client.sendSetRequest(key, value, workingReplica);
+        ListenableFuture<Boolean> setFuture = quorumClient.sendSetRequest(key, value, workingReplica);
         setFuture.onSuccess(setResult::set);
         
         processDistributedOperation(20); // Allow extra time for failure handling
@@ -226,7 +229,7 @@ class DistributedSystemIntegrationTest {
         
         // When - Try to read the value
         AtomicReference<VersionedValue> getResult = new AtomicReference<>();
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, workingReplica);
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, workingReplica);
         getFuture.onSuccess(getResult::set);
         
         processDistributedOperation(20);
@@ -248,13 +251,13 @@ class DistributedSystemIntegrationTest {
         // When - Multiple clients write different keys concurrently
         for (int i = 0; i < 10; i++) {
             String key = baseKey + i;
-            Client client = clients.get(i % clients.size());
+            QuorumClient quorumClient = quorumClients.get(i % quorumClients.size());
             NetworkAddress replica = replicaAddresses.get(i % replicaAddresses.size());
             
             AtomicReference<Boolean> result = new AtomicReference<>();
             setResults.add(result);
             
-            ListenableFuture<Boolean> future = client.sendSetRequest(key, value, replica);
+            ListenableFuture<Boolean> future = quorumClient.sendSetRequest(key, value, replica);
             future.onSuccess(result::set);
             setFutures.add(future);
         }
@@ -285,7 +288,7 @@ class DistributedSystemIntegrationTest {
         // Given - A 5-replica system (quorum = 3)
         String key = "quorum:test";
         byte[] value = "quorum value".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         
         // When - Partition network so only 2 replicas can communicate (less than quorum)
         // Isolate 3 replicas from the other 2
@@ -299,7 +302,7 @@ class DistributedSystemIntegrationTest {
         AtomicReference<Boolean> minorityResult = new AtomicReference<>();
         AtomicReference<Throwable> minorityError = new AtomicReference<>();
         
-        ListenableFuture<Boolean> minorityFuture = client.sendSetRequest(key, value, replicaAddresses.get(3));
+        ListenableFuture<Boolean> minorityFuture = quorumClient.sendSetRequest(key, value, replicaAddresses.get(3));
         minorityFuture.onSuccess(minorityResult::set);
         minorityFuture.onFailure(minorityError::set);
         
@@ -314,7 +317,7 @@ class DistributedSystemIntegrationTest {
         AtomicReference<Throwable> majorityError = new AtomicReference<>();
         
         System.out.println("Debug: Starting majority partition write to " + replicaAddresses.get(0));
-        ListenableFuture<Boolean> majorityFuture = client.sendSetRequest(key, value, replicaAddresses.get(0));
+        ListenableFuture<Boolean> majorityFuture = quorumClient.sendSetRequest(key, value, replicaAddresses.get(0));
         majorityFuture.onSuccess((r) -> majorityResult.set(r));
         majorityFuture.onFailure(error -> {
             System.out.println("Debug: Majority operation failed with error: " + error.getMessage());
@@ -344,7 +347,7 @@ class DistributedSystemIntegrationTest {
         String key = "conflict:test";
         byte[] value1 = "value from partition 1".getBytes();
         byte[] value2 = "value from partition 2".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         
         // Create a partition: 3 replicas vs 2 replicas
         for (int i = 0; i < 3; i++) {
@@ -355,7 +358,7 @@ class DistributedSystemIntegrationTest {
         
         // When - Write to majority partition (should succeed)
         AtomicReference<Boolean> majorityResult = new AtomicReference<>();
-        ListenableFuture<Boolean> majorityFuture = client.sendSetRequest(key, value1, replicaAddresses.get(0));
+        ListenableFuture<Boolean> majorityFuture = quorumClient.sendSetRequest(key, value1, replicaAddresses.get(0));
         majorityFuture.onSuccess(majorityResult::set);
         
         processDistributedOperation(20);
@@ -375,7 +378,7 @@ class DistributedSystemIntegrationTest {
         
         // Then - Should be able to read consistent value from any replica
         AtomicReference<VersionedValue> getResult = new AtomicReference<>();
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, replicaAddresses.get(4));
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, replicaAddresses.get(4));
         getFuture.onSuccess(getResult::set);
         
         processDistributedOperation(20);
@@ -391,11 +394,11 @@ class DistributedSystemIntegrationTest {
         String key = "eventual:test";
         byte[] initialValue = "initial value".getBytes();
         byte[] updatedValue = "updated value".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         
         // When - Write initial value to system
         AtomicReference<Boolean> initialWriteResult = new AtomicReference<>();
-        ListenableFuture<Boolean> initialWriteFuture = client.sendSetRequest(key, initialValue, replicaAddresses.get(0));
+        ListenableFuture<Boolean> initialWriteFuture = quorumClient.sendSetRequest(key, initialValue, replicaAddresses.get(0));
         initialWriteFuture.onSuccess(initialWriteResult::set);
         
         processDistributedOperation(15);
@@ -411,7 +414,7 @@ class DistributedSystemIntegrationTest {
         
         // Write updated value to majority partition
         AtomicReference<Boolean> updateResult = new AtomicReference<>();
-        ListenableFuture<Boolean> updateFuture = client.sendSetRequest(key, updatedValue, replicaAddresses.get(0));
+        ListenableFuture<Boolean> updateFuture = quorumClient.sendSetRequest(key, updatedValue, replicaAddresses.get(0));
         updateFuture.onSuccess(updateResult::set);
         
         processDistributedOperation(20);
@@ -429,7 +432,7 @@ class DistributedSystemIntegrationTest {
         
         // Then - All replicas should eventually have the same value
         AtomicReference<VersionedValue> replicaResult = new AtomicReference<>();
-        ListenableFuture<VersionedValue> replicaFuture = client.sendGetRequest(key, replicaAddresses.get(4));
+        ListenableFuture<VersionedValue> replicaFuture = quorumClient.sendGetRequest(key, replicaAddresses.get(4));
         replicaFuture.onSuccess(replicaResult::set);
         
         processDistributedOperation(20);
@@ -445,14 +448,14 @@ class DistributedSystemIntegrationTest {
         String key = "read:repair";
         byte[] staleValue = "stale value".getBytes();
         byte[] freshValue = "fresh value".getBytes();
-        Client client = clients.get(0);
+        QuorumClient quorumClient = quorumClients.get(0);
         
         // When - Write stale value with network partition
         network.partition(replicaAddresses.get(3), replicaAddresses.get(0));
         network.partition(replicaAddresses.get(4), replicaAddresses.get(0));
         
         AtomicReference<Boolean> staleWriteResult = new AtomicReference<>();
-        ListenableFuture<Boolean> staleWriteFuture = client.sendSetRequest(key, staleValue, replicaAddresses.get(0));
+        ListenableFuture<Boolean> staleWriteFuture = quorumClient.sendSetRequest(key, staleValue, replicaAddresses.get(0));
         staleWriteFuture.onSuccess(staleWriteResult::set);
         
         processDistributedOperation(20);
@@ -468,7 +471,7 @@ class DistributedSystemIntegrationTest {
         processDistributedOperation(5);
         
         AtomicReference<Boolean> freshWriteResult = new AtomicReference<>();
-        ListenableFuture<Boolean> freshWriteFuture = client.sendSetRequest(key, freshValue, replicaAddresses.get(0));
+        ListenableFuture<Boolean> freshWriteFuture = quorumClient.sendSetRequest(key, freshValue, replicaAddresses.get(0));
         freshWriteFuture.onSuccess(freshWriteResult::set);
         
         processDistributedOperation(20);
@@ -478,7 +481,7 @@ class DistributedSystemIntegrationTest {
         
         // When - Read from different replicas
         AtomicReference<VersionedValue> readResult = new AtomicReference<>();
-        ListenableFuture<VersionedValue> readFuture = client.sendGetRequest(key, replicaAddresses.get(3));
+        ListenableFuture<VersionedValue> readFuture = quorumClient.sendGetRequest(key, replicaAddresses.get(3));
         readFuture.onSuccess(readResult::set);
         
         processDistributedOperation(20);

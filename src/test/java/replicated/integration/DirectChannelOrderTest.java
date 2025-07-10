@@ -2,7 +2,7 @@ package replicated.integration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
@@ -30,7 +30,7 @@ public class DirectChannelOrderTest {
     private List<QuorumReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
-    private Client client;
+    private QuorumClient quorumClient;
 
     @BeforeEach
     void setup() {
@@ -42,7 +42,7 @@ public class DirectChannelOrderTest {
         network.registerMessageHandler(messageBus);
         
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
-        client = new Client(messageBus, codec, List.of(replicaAddr));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddr));
         SimulatedStorage storage = new SimulatedStorage(new Random());
         QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), messageBus, codec, storage);
         messageBus.registerHandler(replicaAddr, replica);
@@ -53,7 +53,7 @@ public class DirectChannelOrderTest {
             List.of(network),
             List.of(storage),
             replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
-            List.of(client),
+            List.of(quorumClient),
             List.of(messageBus)
         );
     }
@@ -64,7 +64,7 @@ public class DirectChannelOrderTest {
         // No need to recreate it here
 
         // send first request
-        ListenableFuture<Boolean> f1 = client.sendSetRequest("k", "v1".getBytes(), replicaAddr);
+        ListenableFuture<Boolean> f1 = quorumClient.sendSetRequest("k", "v1".getBytes(), replicaAddr);
         // advance ticks to process
         // Use SimulationDriver to orchestrate all component ticking
         simulationDriver.runSimulation(100);
@@ -76,7 +76,7 @@ public class DirectChannelOrderTest {
         assertNotNull(ctx1);
 
         // second request
-        ListenableFuture<VersionedValue> f2 = client.sendGetRequest("k", replicaAddr);
+        ListenableFuture<VersionedValue> f2 = quorumClient.sendGetRequest("k", replicaAddr);
         // Use SimulationDriver to orchestrate all component ticking
         simulationDriver.runSimulation(10);
         assertEquals("v1", new String(Objects.requireNonNull(f2.getResult()).value()));

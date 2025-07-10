@@ -2,9 +2,12 @@ package replicated.simulation;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
-import replicated.messaging.*;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.Message;
+import replicated.messaging.MessageBus;
+import replicated.messaging.NetworkAddress;
 import replicated.network.MessageCallback;
 import replicated.network.Network;
 import replicated.replica.QuorumReplica;
@@ -14,7 +17,6 @@ import replicated.storage.VersionedValue;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for SimulationDriver to verify tick orchestration and TestUtils.runUntil functionality.
@@ -25,7 +27,7 @@ class TestSimulationDriverTest {
     private TestNetwork network;
     private TestStorage storage;
     private QuorumReplica replica;
-    private Client client;
+    private QuorumClient quorumClient;
     private NetworkAddress replicaAddress;
     
     @BeforeEach
@@ -39,14 +41,14 @@ class TestSimulationDriverTest {
         JsonMessageCodec codec = new JsonMessageCodec();
         replica = new QuorumReplica("test-replica", replicaAddress, List.of(),
                                         new MessageBus(network, codec), codec, storage, 10);
-        client = new Client(new MessageBus(network, codec), codec, List.of(replicaAddress));
+        quorumClient = new QuorumClient(new MessageBus(network, codec), codec, List.of(replicaAddress));
         
         // Create driver with test components
         driver = new SimulationDriver(
             List.of(network),
             List.of(storage),
             List.of(replica),
-            List.of(client),
+            List.of(quorumClient),
             List.of() // No message buses needed for this test
         );
     }

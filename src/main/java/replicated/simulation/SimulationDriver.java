@@ -1,6 +1,6 @@
 package replicated.simulation;
 
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.messaging.MessageBus;
 import replicated.network.Network;
 import replicated.replica.Replica;
@@ -16,7 +16,7 @@ public class SimulationDriver {
     private final List<Network> networks;
     private final List<Storage> storages;
     private final List<Replica> replicas;
-    private final List<Client> clients;
+    private final List<QuorumClient> quorumClients;
     private final List<MessageBus> messageBuses;
 
     /**
@@ -24,14 +24,14 @@ public class SimulationDriver {
      * @param networks List of network components
      * @param storages List of storage components
      * @param replicas List of replica components
-     * @param clients List of client components
+     * @param quorumClients List of client components
      * @param messageBuses List of message bus components
      */
-    public SimulationDriver(List<Network> networks, List<Storage> storages, List<Replica> replicas, List<Client> clients, List<MessageBus> messageBuses) {
+    public SimulationDriver(List<Network> networks, List<Storage> storages, List<Replica> replicas, List<QuorumClient> quorumClients, List<MessageBus> messageBuses) {
         this.networks = networks;
         this.storages = storages;
         this.replicas = replicas;
-        this.clients = clients;
+        this.quorumClients = quorumClients;
         this.messageBuses = messageBuses;
     }
 
@@ -47,7 +47,7 @@ public class SimulationDriver {
      */
     public void tick() {
         // 1. Application Layer - Proactive work (clients and replicas)
-        clients.forEach(Client::tick);
+        quorumClients.forEach(QuorumClient::tick);
         replicas.forEach(Replica::tick);
         
         // 2. Service Layer - Deliver messages, then route them, then process storage I/O

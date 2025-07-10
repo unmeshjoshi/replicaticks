@@ -12,11 +12,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ClientTest {
+class QuorumClientTest {
     
     private MessageBus messageBus;
     private NetworkAddress replicaAddress;
-    private Client client;
+    private QuorumClient quorumClient;
     
     @BeforeEach
     void setUp() {
@@ -29,29 +29,29 @@ class ClientTest {
         // Create client with bootstrap replicas (new API)
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        client = new Client(messageBus, codec, bootstrapReplicas);
+        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas);
     }
     
     @Test
     void shouldCreateClientWithDependencies() {
         // Given dependencies are provided in setUp()
         // Then client should be created successfully
-        assertNotNull(client);
-        assertNotNull(client.getClientId());
-        assertTrue(client.getClientId().startsWith("client-"));
+        assertNotNull(quorumClient);
+        assertNotNull(quorumClient.getClientId());
+        assertTrue(quorumClient.getClientId().startsWith("quorum-client-"));
     }
     
     @Test
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new Client(null));
+            () -> new QuorumClient( null, new JsonMessageCodec(), List.of(replicaAddress)));
     }
     
     @Test
     void shouldImplementMessageHandler() {
         // Then client should be a MessageHandler
-        assertTrue(client instanceof MessageHandler);
+        assertTrue(quorumClient instanceof MessageHandler);
     }
     
     @Test
@@ -60,13 +60,13 @@ class ClientTest {
         String key = "user:123";
         
         // When
-        ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
         
         // Then
         assertNotNull(future);
         // Verify request is tracked internally
         // This will be verified through message sending and state inspection
-        assertDoesNotThrow(() -> client.tick());
+        assertDoesNotThrow(() -> quorumClient.tick());
     }
     
     @Test
@@ -76,12 +76,12 @@ class ClientTest {
         byte[] value = "John Doe".getBytes();
         
         // When
-        ListenableFuture<Boolean> future = client.sendSetRequest(key, value, replicaAddress);
+        ListenableFuture<Boolean> future = quorumClient.sendSetRequest(key, value, replicaAddress);
         
         // Then
         assertNotNull(future);
         // Verify request is tracked internally
-        assertDoesNotThrow(() -> client.tick());
+        assertDoesNotThrow(() -> quorumClient.tick());
     }
     
     @Test
@@ -90,9 +90,9 @@ class ClientTest {
         String key = "test-key";
         
         // When - send multiple requests
-        ListenableFuture<VersionedValue> future1 = client.sendGetRequest(key, replicaAddress);
-        ListenableFuture<VersionedValue> future2 = client.sendGetRequest(key, replicaAddress);
-        ListenableFuture<VersionedValue> future3 = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future1 = quorumClient.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future2 = quorumClient.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future3 = quorumClient.sendGetRequest(key, replicaAddress);
         
         // Then - each should have unique futures (implying unique correlation IDs)
         assertNotSame(future1, future2);
@@ -104,7 +104,7 @@ class ClientTest {
     void shouldHandleGetResponse() {
         // Given - send a request first
         String key = "user:123";
-        ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
         
         AtomicReference<VersionedValue> receivedValue = new AtomicReference<>();
         future.onSuccess(receivedValue::set);
@@ -117,11 +117,11 @@ class ClientTest {
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_GET_RESPONSE, response);
         
-        client.onMessageReceived(responseMessage, null);
+        quorumClient.onMessageReceived(responseMessage, null);
         
         // Then - future should be completed
         // Note: In actual implementation, correlation ID matching will be tested
-        assertDoesNotThrow(() -> client.tick());
+        assertDoesNotThrow(() -> quorumClient.tick());
     }
     
     @Test
@@ -129,7 +129,7 @@ class ClientTest {
         // Given - send a set request first
         String key = "user:123";
         byte[] value = "John Doe".getBytes();
-        ListenableFuture<Boolean> future = client.sendSetRequest(key, value, replicaAddress);
+        ListenableFuture<Boolean> future = quorumClient.sendSetRequest(key, value, replicaAddress);
         
         AtomicReference<Boolean> receivedResult = new AtomicReference<>();
         future.onSuccess(receivedResult::set);
@@ -139,10 +139,10 @@ class ClientTest {
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_SET_RESPONSE, response);
         
-        client.onMessageReceived(responseMessage, null);
+        quorumClient.onMessageReceived(responseMessage, null);
         
         // Then - future should be completed
-        assertDoesNotThrow(() -> client.tick());
+        assertDoesNotThrow(() -> quorumClient.tick());
     }
     
     @Test
@@ -152,8 +152,8 @@ class ClientTest {
         String key2 = "user:456"; 
         
         // When - send multiple requests
-        ListenableFuture<VersionedValue> future1 = client.sendGetRequest(key1, replicaAddress);
-        ListenableFuture<VersionedValue> future2 = client.sendGetRequest(key2, replicaAddress);
+        ListenableFuture<VersionedValue> future1 = quorumClient.sendGetRequest(key1, replicaAddress);
+        ListenableFuture<VersionedValue> future2 = quorumClient.sendGetRequest(key2, replicaAddress);
         
         // Then - both should be tracked
         assertNotNull(future1);
@@ -161,7 +161,7 @@ class ClientTest {
         assertNotSame(future1, future2);
         
         // Should handle multiple pending requests
-        assertDoesNotThrow(() -> client.tick());
+        assertDoesNotThrow(() -> quorumClient.tick());
     }
     
     @Test
@@ -169,17 +169,17 @@ class ClientTest {
         // Given - client with short timeout
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        client = new Client(messageBus, codec, bootstrapReplicas, 3); // 3 tick timeout
+        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, 3); // 3 tick timeout
         
         String key = "user:123";
-        ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
         
         AtomicReference<Throwable> timeoutError = new AtomicReference<>();
         future.onFailure(timeoutError::set);
         
         // When - advance time beyond timeout
         for (int tick = 1; tick <= 5; tick++) {
-            client.tick();
+            quorumClient.tick();
         }
         
         // Then - request should timeout
@@ -197,14 +197,14 @@ class ClientTest {
             MessageType.CLIENT_GET_RESPONSE, response);
         
         // Then - should not throw exception
-        assertDoesNotThrow(() -> client.onMessageReceived(responseMessage, null));
+        assertDoesNotThrow(() -> quorumClient.onMessageReceived(responseMessage, null));
     }
     
     @Test
     void shouldCleanupCompletedRequests() {
         // Given - send request and complete it
         String key = "user:123";
-        ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
         
         // When - complete the request and tick
         VersionedValue value = new VersionedValue("data".getBytes(), 1L);
@@ -212,12 +212,12 @@ class ClientTest {
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
             MessageType.CLIENT_GET_RESPONSE, response);
         
-        client.onMessageReceived(responseMessage, null);
-        client.tick();
+        quorumClient.onMessageReceived(responseMessage, null);
+        quorumClient.tick();
         
         // Then - should not cause issues with subsequent operations
         assertDoesNotThrow(() -> {
-            ListenableFuture<VersionedValue> newFuture = client.sendGetRequest(key, replicaAddress);
+            ListenableFuture<VersionedValue> newFuture = quorumClient.sendGetRequest(key, replicaAddress);
             assertNotNull(newFuture);
         });
     }
@@ -228,17 +228,17 @@ class ClientTest {
         int invalidTimeout = 2;
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        client = new Client(messageBus, codec, bootstrapReplicas, invalidTimeout);
+        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, invalidTimeout);
         
         String key = "user:123";
-        ListenableFuture<VersionedValue> future = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
         
         AtomicReference<Throwable> timeoutError = new AtomicReference<>();
         future.onFailure(timeoutError::set);
         
         // When - advance time beyond timeout
         for (int tick = 1; tick <= invalidTimeout + 1; tick++) {
-            client.tick();
+            quorumClient.tick();
         }
         
         // Then - request should timeout
@@ -251,14 +251,14 @@ class ClientTest {
         int customTimeout = 10;
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        Client customClient = new Client(messageBus, codec, bootstrapReplicas, customTimeout);
+        QuorumClient customQuorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, customTimeout);
         
         // When - send request
-        ListenableFuture<VersionedValue> future = customClient.sendGetRequest("key", replicaAddress);
+        ListenableFuture<VersionedValue> future = customQuorumClient.sendGetRequest("key", replicaAddress);
         
         // Then - should work without timeout for ticks < customTimeout
         for (int tick = 1; tick < customTimeout; tick++) {
-            assertDoesNotThrow(() -> customClient.tick());
+            assertDoesNotThrow(() -> customQuorumClient.tick());
         }
     }
     

@@ -2,7 +2,7 @@ package replicated.integration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
@@ -26,7 +26,7 @@ class DirectChannelResponseTest {
     
     private SimulatedNetwork network;
     private MessageBus messageBus;
-    private Client client;
+    private QuorumClient quorumClient;
     private QuorumReplica replica;
     private SimulatedStorage storage;
     private SimulationDriver simulationDriver;
@@ -56,14 +56,14 @@ class DirectChannelResponseTest {
         messageBus.registerHandler(replicaAddress, replica);
         
         // Setup client
-        client = new Client(messageBus, codec, List.of(replicaAddress));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddress));
         
         // Setup simulation driver
         simulationDriver = new SimulationDriver(
             List.of(network),
             List.of(storage),
             List.of(replica),
-            List.of(client),
+            List.of(quorumClient),
             List.of(messageBus)
         );
     }
@@ -76,7 +76,7 @@ class DirectChannelResponseTest {
         
         // When - client sends a set request
         AtomicReference<Boolean> setResult = new AtomicReference<>();
-        ListenableFuture<Boolean> setFuture = client.sendSetRequest(key, value.getBytes(), replicaAddress);
+        ListenableFuture<Boolean> setFuture = quorumClient.sendSetRequest(key, value.getBytes(), replicaAddress);
         setFuture.onSuccess(setResult::set);
         
         // Process the request through the system
@@ -88,7 +88,7 @@ class DirectChannelResponseTest {
         
         // When - client sends a get request
         AtomicReference<VersionedValue> getResult = new AtomicReference<>();
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, replicaAddress);
         getFuture.onSuccess(getResult::set);
         
         // Process the request through the system
@@ -117,8 +117,8 @@ class DirectChannelResponseTest {
         AtomicReference<Boolean> set1Result = new AtomicReference<>();
         AtomicReference<Boolean> set2Result = new AtomicReference<>();
         
-        ListenableFuture<Boolean> set1Future = client.sendSetRequest(key1, value1.getBytes(), replicaAddress);
-        ListenableFuture<Boolean> set2Future = client.sendSetRequest(key2, value2.getBytes(), replicaAddress);
+        ListenableFuture<Boolean> set1Future = quorumClient.sendSetRequest(key1, value1.getBytes(), replicaAddress);
+        ListenableFuture<Boolean> set2Future = quorumClient.sendSetRequest(key2, value2.getBytes(), replicaAddress);
         
         set1Future.onSuccess(set1Result::set);
         set2Future.onSuccess(set2Result::set);
@@ -134,8 +134,8 @@ class DirectChannelResponseTest {
         AtomicReference<VersionedValue> get1Result = new AtomicReference<>();
         AtomicReference<VersionedValue> get2Result = new AtomicReference<>();
         
-        ListenableFuture<VersionedValue> get1Future = client.sendGetRequest(key1, replicaAddress);
-        ListenableFuture<VersionedValue> get2Future = client.sendGetRequest(key2, replicaAddress);
+        ListenableFuture<VersionedValue> get1Future = quorumClient.sendGetRequest(key1, replicaAddress);
+        ListenableFuture<VersionedValue> get2Future = quorumClient.sendGetRequest(key2, replicaAddress);
         
         get1Future.onSuccess(get1Result::set);
         get2Future.onSuccess(get2Result::set);
@@ -164,12 +164,12 @@ class DirectChannelResponseTest {
         AtomicReference<Boolean> setResult = new AtomicReference<>();
         AtomicReference<VersionedValue> getResult = new AtomicReference<>();
         
-        ListenableFuture<Boolean> setFuture = client.sendSetRequest(key, value.getBytes(), replicaAddress);
+        ListenableFuture<Boolean> setFuture = quorumClient.sendSetRequest(key, value.getBytes(), replicaAddress);
         setFuture.onSuccess(setResult::set);
         
         simulationDriver.runSimulation(50);
         
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, replicaAddress);
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, replicaAddress);
         getFuture.onSuccess(getResult::set);
         
         simulationDriver.runSimulation(50);

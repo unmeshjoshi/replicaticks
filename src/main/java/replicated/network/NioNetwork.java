@@ -1,10 +1,6 @@
 package replicated.network;
 
-import replicated.messaging.JsonMessageCodec;
-import replicated.messaging.Message;
-import replicated.messaging.MessageCodec;
-import replicated.messaging.MessageType;
-import replicated.messaging.NetworkAddress;
+import replicated.messaging.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

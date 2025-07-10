@@ -2,7 +2,7 @@ package replicated.integration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
@@ -34,7 +34,7 @@ class NetworkMetricsTest {
     private QuorumReplica r2;
     private QuorumReplica r3;
 
-    private Client client;
+    private QuorumClient quorumClient;
 
     @BeforeEach
     void setUp() {
@@ -70,7 +70,7 @@ class NetworkMetricsTest {
         messageBus.registerHandler(r3Addr, r3);
 
         // client collaborates via the same MessageBus for simplicity
-        client = new Client(messageBus, codec, List.of(r1Addr, r2Addr, r3Addr));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(r1Addr, r2Addr, r3Addr));
     }
 
     private List<NetworkAddress> peersExcept(NetworkAddress self, List<NetworkAddress> all) {
@@ -89,7 +89,7 @@ class NetworkMetricsTest {
 
         // Send a few requests to drive traffic and connection establishment
         for (int i = 0; i < 5; i++) {
-            client.sendSetRequest("k" + i, ("v" + i).getBytes(), r1Addr);
+            quorumClient.sendSetRequest("k" + i, ("v" + i).getBytes(), r1Addr);
         }
 
         // Drive the system for a while so sockets can connect and responses flow
@@ -98,7 +98,7 @@ class NetworkMetricsTest {
             r1.tick();
             r2.tick();
             r3.tick();
-            client.tick();
+            quorumClient.tick();
         }
 
         var m = network.getMetrics();

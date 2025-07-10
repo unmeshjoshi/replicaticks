@@ -1,6 +1,6 @@
 package replicated.cmd;
 
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
@@ -17,7 +17,7 @@ import java.util.List;
 public class ClientApplication {
     
     private final String serverAddress;
-    private final Client client;
+    private final QuorumClient quorumClient;
     
     public ClientApplication(String serverAddress) {
         this.serverAddress = serverAddress;
@@ -32,7 +32,7 @@ public class ClientApplication {
         network.registerMessageHandler(messageBus);
         
         // Create client with bootstrap replicas
-        this.client = new Client(messageBus, codec, List.of(serverAddr));
+        this.quorumClient = new QuorumClient(messageBus, codec, List.of(serverAddr));
     }
     
     /**
@@ -93,14 +93,14 @@ public class ClientApplication {
         try {
             System.out.println("Getting key: " + key + " from server: " + serverAddress);
             
-            ListenableFuture<VersionedValue> future = client.sendGetRequest(key);
+            ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key);
             
             // Poll for completion (simple approach for command-line client)
             int maxAttempts = 100; // 10 seconds with 100ms intervals
             int attempts = 0;
             while (future.isPending() && attempts < maxAttempts) {
                 // Process network events and incoming messages
-                client.getMessageBus().tick();
+                quorumClient.getMessageBus().tick();
                 
                 Thread.sleep(100);
                 attempts++;
@@ -136,7 +136,7 @@ public class ClientApplication {
             System.out.println("Setting key: " + key + " = " + new String(value) + " on server: " + serverAddress);
             System.out.println("DEBUG: Creating SET request...");
             
-            ListenableFuture<Boolean> future = client.sendSetRequest(key, value);
+            ListenableFuture<Boolean> future = quorumClient.sendSetRequest(key, value);
             System.out.println("DEBUG: SET request sent, future created. Starting polling...");
             
             // Poll for completion (simple approach for command-line client)
@@ -144,7 +144,7 @@ public class ClientApplication {
             int attempts = 0;
             while (future.isPending() && attempts < maxAttempts) {
                 // Process network events and incoming messages
-                client.getMessageBus().tick();
+                quorumClient.getMessageBus().tick();
                 
                 Thread.sleep(100);
                 attempts++;

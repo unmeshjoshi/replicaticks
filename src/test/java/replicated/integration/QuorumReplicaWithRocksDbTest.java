@@ -4,9 +4,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import replicated.client.Client;
+import replicated.client.QuorumClient;
 import replicated.future.ListenableFuture;
-import replicated.messaging.*;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBus;
+import replicated.messaging.MessageCodec;
+import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
 import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
@@ -51,7 +54,7 @@ class QuorumReplicaWithRocksDbTest {
     private NetworkAddress address1;
     private NetworkAddress address2;
     private NetworkAddress address3;
-    private Client client;
+    private QuorumClient quorumClient;
     
     private long currentTick = 0;
     private SimulationDriver simulationDiver;
@@ -89,14 +92,14 @@ class QuorumReplicaWithRocksDbTest {
         replica3 = new QuorumReplica("replica3", address3, peers3, messageBus, codec, storage3, replicaRequestTimeoutTicks);
         
         // Setup client (address will be auto-assigned by MessageBus)
-        client = new Client(messageBus, codec, List.of(address1, address2, address3));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(address1, address2, address3));
         
         // Register replica message handlers
         messageBus.registerHandler(address1, replica1);
         messageBus.registerHandler(address2, replica2);
         messageBus.registerHandler(address3, replica3);
 
-        simulationDiver = new SimulationDriver(List.of(network), List.of(storage1, storage2, storage3), List.of(replica1, replica2, replica3), List.of(client), List.of(messageBus));
+        simulationDiver = new SimulationDriver(List.of(network), List.of(storage1, storage2, storage3), List.of(replica1, replica2, replica3), List.of(quorumClient), List.of(messageBus));
         // Client handler is auto-registered by MessageBus.sendClientMessage()
     }
     
@@ -119,7 +122,7 @@ class QuorumReplicaWithRocksDbTest {
         assertNotNull(replica1);
         assertNotNull(replica2);
         assertNotNull(replica3);
-        assertNotNull(client);
+        assertNotNull(quorumClient);
         
         // Network should be operational (no need to check for messages with callback approach)
         assertDoesNotThrow(() -> network.tick());
@@ -133,7 +136,7 @@ class QuorumReplicaWithRocksDbTest {
         AtomicReference<Boolean> result = new AtomicReference<>();
         
         // When - client sends set request to replica1
-        ListenableFuture<Boolean> setFuture = client.sendSetRequest(key, value.getBytes(), address1);
+        ListenableFuture<Boolean> setFuture = quorumClient.sendSetRequest(key, value.getBytes(), address1);
         setFuture.onSuccess(result::set);
         
         // Wait for quorum consensus and response
@@ -191,7 +194,7 @@ class QuorumReplicaWithRocksDbTest {
         
         // When - client sends get request to replica1
         AtomicReference<VersionedValue> result = new AtomicReference<>();
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, address1);
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, address1);
         getFuture.onSuccess(result::set);
         
         // Wait for quorum consensus and response
@@ -214,7 +217,7 @@ class QuorumReplicaWithRocksDbTest {
         AtomicReference<Boolean> setResult2 = new AtomicReference<>();
         
         // When - perform consecutive set operations
-        ListenableFuture<Boolean> setFuture1 = client.sendSetRequest(key1, value1.getBytes(), address1);
+        ListenableFuture<Boolean> setFuture1 = quorumClient.sendSetRequest(key1, value1.getBytes(), address1);
         setFuture1.onSuccess(setResult1::set);
         
         // Wait for first operation to complete
@@ -222,7 +225,7 @@ class QuorumReplicaWithRocksDbTest {
         assertTrue(setResult1.get());
         
         // Perform second set operation
-        ListenableFuture<Boolean> setFuture2 = client.sendSetRequest(key2, value2.getBytes(), address2);
+        ListenableFuture<Boolean> setFuture2 = quorumClient.sendSetRequest(key2, value2.getBytes(), address2);
         setFuture2.onSuccess(setResult2::set);
         
         // Wait for second operation to complete
@@ -233,8 +236,8 @@ class QuorumReplicaWithRocksDbTest {
         AtomicReference<VersionedValue> getValue1 = new AtomicReference<>();
         AtomicReference<VersionedValue> getValue2 = new AtomicReference<>();
         
-        client.sendGetRequest(key1, address1).onSuccess(getValue1::set);
-        client.sendGetRequest(key2, address2).onSuccess(getValue2::set);
+        quorumClient.sendGetRequest(key1, address1).onSuccess(getValue1::set);
+        quorumClient.sendGetRequest(key2, address2).onSuccess(getValue2::set);
         
         // Wait for get operations to complete
         runUntil(() -> getValue1.get() != null && getValue2.get() != null);
@@ -250,14 +253,14 @@ class QuorumReplicaWithRocksDbTest {
         String value = "partition-test-value";
         
         System.out.println("Starting network partition test...");
-        System.out.println("Client: " + client);
+        System.out.println("Client: " + quorumClient);
         System.out.println("Replica addresses: " + address1 + ", " + address2 + ", " + address3);
         
         AtomicReference<Boolean> initialResult = new AtomicReference<>();
         AtomicReference<Throwable> initialError = new AtomicReference<>();
         
         System.out.println("Sending initial SET request to replica1: " + address1);
-        ListenableFuture<Boolean> initialFuture = client.sendSetRequest(key, value.getBytes(), address1);
+        ListenableFuture<Boolean> initialFuture = quorumClient.sendSetRequest(key, value.getBytes(), address1);
         initialFuture.onSuccess(result -> {
             System.out.println("Initial SET completed successfully: " + result);
             initialResult.set(result);
@@ -294,7 +297,7 @@ class QuorumReplicaWithRocksDbTest {
         AtomicReference<Throwable> getError = new AtomicReference<>();
         
         System.out.println("Sending GET request to replica2: " + address2);
-        ListenableFuture<VersionedValue> getFuture = client.sendGetRequest(key, address2);
+        ListenableFuture<VersionedValue> getFuture = quorumClient.sendGetRequest(key, address2);
         getFuture.onSuccess(result -> {
             System.out.println("GET request succeeded: " + result);
             getResult.set(result);
@@ -331,7 +334,7 @@ class QuorumReplicaWithRocksDbTest {
         // Then - all replicas should work together again
         String newValue = "healed-value";
         AtomicReference<Boolean> healedResult = new AtomicReference<>();
-        client.sendSetRequest(key, newValue.getBytes(), address1).onSuccess(healedResult::set);
+        quorumClient.sendSetRequest(key, newValue.getBytes(), address1).onSuccess(healedResult::set);
         runUntil(() -> healedResult.get() != null);
         
         assertTrue(healedResult.get());
@@ -345,7 +348,7 @@ class QuorumReplicaWithRocksDbTest {
         String value = "persistence-test-value";
         
         AtomicReference<Boolean> setResult = new AtomicReference<>();
-        client.sendSetRequest(key, value.getBytes(), address1).onSuccess(setResult::set);
+        quorumClient.sendSetRequest(key, value.getBytes(), address1).onSuccess(setResult::set);
         runUntil(() -> setResult.get() != null);
         assertTrue(setResult.get());
         
@@ -413,7 +416,7 @@ class QuorumReplicaWithRocksDbTest {
                 default -> address3;
             };
             
-            client.sendSetRequest(key, value.getBytes(), targetReplica).onSuccess(result::set);
+            quorumClient.sendSetRequest(key, value.getBytes(), targetReplica).onSuccess(result::set);
         }
         
         // Wait for all operations to complete
@@ -437,7 +440,7 @@ class QuorumReplicaWithRocksDbTest {
                 default -> address3;
             };
             
-            client.sendGetRequest(key, targetReplica).onSuccess(getResult::set);
+            quorumClient.sendGetRequest(key, targetReplica).onSuccess(getResult::set);
         }
         
         // Wait for all get operations to complete

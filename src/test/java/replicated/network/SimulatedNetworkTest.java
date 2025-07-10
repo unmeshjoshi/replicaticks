@@ -1,13 +1,16 @@
 package replicated.network;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import replicated.messaging.Message;
+import replicated.messaging.MessageType;
+import replicated.messaging.NetworkAddress;
 
-import replicated.messaging.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for SimulatedNetwork using callback-based message delivery.

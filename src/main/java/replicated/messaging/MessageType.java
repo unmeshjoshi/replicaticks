@@ -1,7 +1,5 @@
 package replicated.messaging;
 
-import java.util.concurrent.TimeUnit;
-
 /**
  * Message types for the replicated key-value store.
  *
