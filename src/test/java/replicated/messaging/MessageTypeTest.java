@@ -9,7 +9,7 @@ class MessageTypeTest {
     @Test
     void shouldContainAllRequiredMessageTypes() {
         // Given & When & Then
-        assertEquals(11, MessageType.values().length);
+        assertEquals(18, MessageType.values().length);
         
         // Verify all required message types exist
         assertNotNull(MessageType.CLIENT_GET_REQUEST);
@@ -25,6 +25,15 @@ class MessageTypeTest {
         assertNotNull(MessageType.PING_REQUEST);
         assertNotNull(MessageType.PING_RESPONSE);
         assertNotNull(MessageType.FAILURE_RESPONSE);
+        
+        // Verify Paxos message types
+        assertNotNull(MessageType.PAXOS_PROPOSE_REQUEST);
+        assertNotNull(MessageType.PAXOS_PROPOSE_RESPONSE);
+        assertNotNull(MessageType.PAXOS_PREPARE_REQUEST);
+        assertNotNull(MessageType.PAXOS_PROMISE_RESPONSE);
+        assertNotNull(MessageType.PAXOS_ACCEPT_REQUEST);
+        assertNotNull(MessageType.PAXOS_ACCEPTED_RESPONSE);
+        assertNotNull(MessageType.PAXOS_COMMIT_REQUEST);
 
     }
     

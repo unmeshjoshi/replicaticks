@@ -35,7 +35,27 @@ public enum MessageType {
     PING_RESPONSE(Category.SYSTEM_RESPONSE),
     
     /** Generic failure response */
-    FAILURE_RESPONSE(Category.SYSTEM_RESPONSE);
+    FAILURE_RESPONSE(Category.SYSTEM_RESPONSE),
+    
+    // === PAXOS MESSAGE TYPES ===
+    
+    /** Client request to propose a value via Paxos */
+    PAXOS_PROPOSE_REQUEST(Category.CLIENT_REQUEST),
+    /** Response to client propose request */
+    PAXOS_PROPOSE_RESPONSE(Category.CLIENT_RESPONSE),
+    
+    /** Paxos Phase 1a: Prepare request */
+    PAXOS_PREPARE_REQUEST(Category.INTERNAL_REQUEST),
+    /** Paxos Phase 1b: Promise response */
+    PAXOS_PROMISE_RESPONSE(Category.INTERNAL_RESPONSE),
+    
+    /** Paxos Phase 2a: Accept request */
+    PAXOS_ACCEPT_REQUEST(Category.INTERNAL_REQUEST),
+    /** Paxos Phase 2b: Accepted response */
+    PAXOS_ACCEPTED_RESPONSE(Category.INTERNAL_RESPONSE),
+    
+    /** Paxos commit notification */
+    PAXOS_COMMIT_REQUEST(Category.INTERNAL_REQUEST);
     
     // === ENUM FIELDS ===
     
