@@ -177,8 +177,8 @@ public final class Client implements MessageHandler {
         );
         pendingRequests.put(correlationId, pendingRequest);
         
-        // Establish connection for this request
-        establishConnectionAndSend(replicaAddress, MessageType.CLIENT_GET_REQUEST, new GetRequest(key), correlationId);
+        // Send client message for this request
+        sendClientMessage(replicaAddress, MessageType.CLIENT_GET_REQUEST, new GetRequest(key), correlationId);
 
         return future;
     }
@@ -200,46 +200,31 @@ public final class Client implements MessageHandler {
         
         System.out.println("Client: SET request registered with pendingRequests, size: " + pendingRequests.size());
         
-        // Establish connection for this request
-        System.out.println("Client: Establishing connection and sending SET request...");
-        establishConnectionAndSend(replicaAddress, MessageType.CLIENT_SET_REQUEST, new SetRequest(key, value), correlationId);
+        // Send client message for this request
+        System.out.println("Client: Sending SET request...");
+        sendClientMessage(replicaAddress, MessageType.CLIENT_SET_REQUEST, new SetRequest(key, value), correlationId);
         
         System.out.println("Client: SET request sent successfully");
         return future;
     }
     
     /**
-     * Establishes connection and sends message - following the pattern of creating
-     * connections per request rather than per-client registration.
-     * 
-     * This method:
-     * 1. Registers the client with MessageBus to receive responses
-     * 2. Registers the client as a correlation ID handler for this specific request
-     * 3. Gets the actual local address assigned by the network
-     * 4. Sends the message
+     * Sends a client message with correlation ID handling.
+     * Uses the pure correlation-based routing approach.
      */
-    private void establishConnectionAndSend(NetworkAddress destination, MessageType messageType, Object request, String correlationId) {
-        System.out.println("Client: establishConnectionAndSend - destination: " + destination + 
+    private void sendClientMessage(NetworkAddress destination, MessageType messageType, Object request, String correlationId) {
+        System.out.println("Client: sendClientMessage - destination: " + destination + 
                           ", messageType: " + messageType + ", correlationId: " + correlationId);
         
-        // Step 1: Register client with MessageBus to receive responses
-        System.out.println("Client: Registering client with MessageBus...");
-        NetworkAddress actualClientAddress = messageBus.registerClient(this);
-        System.out.println("Client: Registered with actual client address: " + actualClientAddress);
-
-        // Step 2: Register client as correlation ID handler for this request
+        // Register client as correlation ID handler for this specific request
         System.out.println("Client: Registering correlation ID handler for: " + correlationId);
         messageBus.registerCorrelationIdHandler(correlationId, this);
         
-        // Step 3: Update current client address
-        this.currentClientAddress = actualClientAddress;
-
-        // Step 4: Send the message using the established connection
-        System.out.println("Client: Creating message from " + actualClientAddress + " to " + destination);
-        Message message = new Message(actualClientAddress, destination, messageType, serializePayload(request), correlationId);
+        // Send message with null source (pure correlation routing)
+        Message message = new Message(null, destination, messageType, serializePayload(request), correlationId);
         System.out.println("Client: Sending message via MessageBus...");
         messageBus.sendMessage(message);
-        System.out.println("Client: Message sent via MessageBus");
+        System.out.println("Client: Message sent successfully");
     }
     
 

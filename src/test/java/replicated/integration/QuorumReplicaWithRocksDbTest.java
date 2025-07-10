@@ -37,8 +37,7 @@ class QuorumReplicaWithRocksDbTest {
     
     private SimulatedNetwork network;
     private MessageCodec codec;
-    private ClientMessageBus clientBus;
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
     
     // Three replicas for quorum consensus
     private QuorumReplica replica1;
@@ -67,13 +66,10 @@ class QuorumReplicaWithRocksDbTest {
         // Setup network and messaging with deterministic behavior
         network = new SimulatedNetwork(new Random(42), 0, 0.0); // No delay, no packet loss
         codec = new JsonMessageCodec();
-        clientBus = new ClientMessageBus(network, codec);
-        serverBus = new ServerMessageBus(network, codec);
+        messageBus = new MessageBus(network, codec);
         
-        // Setup message bus multiplexer to handle both client and server messages
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(clientBus);
-        multiplexer.registerMessageBus(serverBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         // Setup persistent storage for each replica
         storage1 = new RocksDbStorage(tempDir.resolve("replica1-db").toString());
@@ -88,19 +84,19 @@ class QuorumReplicaWithRocksDbTest {
         // Setup replicas with production storage
         // Constructor: name, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks
         int replicaRequestTimeoutTicks = 1000;
-        replica1 = new QuorumReplica("replica1", address1, peers1, serverBus, codec, storage1, replicaRequestTimeoutTicks);
-        replica2 = new QuorumReplica("replica2", address2, peers2, serverBus, codec, storage2, replicaRequestTimeoutTicks);
-        replica3 = new QuorumReplica("replica3", address3, peers3, serverBus, codec, storage3, replicaRequestTimeoutTicks);
+        replica1 = new QuorumReplica("replica1", address1, peers1, messageBus, codec, storage1, replicaRequestTimeoutTicks);
+        replica2 = new QuorumReplica("replica2", address2, peers2, messageBus, codec, storage2, replicaRequestTimeoutTicks);
+        replica3 = new QuorumReplica("replica3", address3, peers3, messageBus, codec, storage3, replicaRequestTimeoutTicks);
         
-        // Setup client (address will be auto-assigned by ClientMessageBus)
-        client = new Client(clientBus, codec, List.of(address1, address2, address3));
+        // Setup client (address will be auto-assigned by MessageBus)
+        client = new Client(messageBus, codec, List.of(address1, address2, address3));
         
         // Register replica message handlers
-        serverBus.registerHandler(address1, replica1);
-        serverBus.registerHandler(address2, replica2);
-        serverBus.registerHandler(address3, replica3);
+        messageBus.registerHandler(address1, replica1);
+        messageBus.registerHandler(address2, replica2);
+        messageBus.registerHandler(address3, replica3);
 
-        simulationDiver = new SimulationDriver(List.of(network), List.of(storage1, storage2, storage3), List.of(replica1, replica2, replica3), List.of(client), List.of(clientBus, serverBus));
+        simulationDiver = new SimulationDriver(List.of(network), List.of(storage1, storage2, storage3), List.of(replica1, replica2, replica3), List.of(client), List.of(messageBus));
         // Client handler is auto-registered by MessageBus.sendClientMessage()
     }
     

@@ -1,9 +1,9 @@
 package replicated.cmd;
 
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBus;
 import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
-import replicated.messaging.ServerMessageBus;
 import replicated.network.Network;
 import replicated.network.NioNetwork;
 import replicated.replica.QuorumReplica;
@@ -26,7 +26,7 @@ public class ServerApplication {
 
     private Network network;
     private Storage storage;
-    private ServerMessageBus messageBus;
+    private MessageBus messageBus;
     private QuorumReplica replica;
     private volatile boolean running = false;
     
@@ -56,10 +56,13 @@ public class ServerApplication {
             this.storage = new RocksDbStorage(storagePath);
             System.out.println("Storage initialized");
 
-            // 3. Initialize message bus
-            System.out.println("Initializing message bus...");
+            // 3. Initialize unified message bus
+            System.out.println("Initializing unified message bus...");
             MessageCodec codec = new JsonMessageCodec();
-            this.messageBus = new ServerMessageBus(network, codec);
+            this.messageBus = new MessageBus(network, codec);
+            
+            // Register message bus directly with network (no multiplexer needed)
+            network.registerMessageHandler(messageBus);
             System.out.println("Message bus initialized");
 
             // 4. Initialize replica

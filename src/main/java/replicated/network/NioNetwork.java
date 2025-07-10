@@ -3,6 +3,7 @@ package replicated.network;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.Message;
 import replicated.messaging.MessageCodec;
+import replicated.messaging.MessageType;
 import replicated.messaging.NetworkAddress;
 
 import java.io.IOException;
@@ -826,7 +827,8 @@ public class NioNetwork implements Network {
     }
     
     private String linkKey(NetworkAddress source, NetworkAddress destination) {
-        return source.toString() + "->" + destination.toString();
+        return source != null ? source.toString() + "->" + destination.toString()
+                :"->" + destination.toString();
     }
     
     /**
@@ -910,25 +912,47 @@ public class NioNetwork implements Network {
     private void routeInboundMessage(MessageContext messageContext) {
         Message message = messageContext.getMessage();
         
-        // Store request context for response correlation
-        if (messageContext.isRequest()) {
-            String correlationId = generateCorrelationId(message);
-            messageContext.setCorrelationId(correlationId);
-            pendingRequests.put(correlationId, messageContext);
-            System.out.println("NIO: Stored request context for correlation: " + correlationId + 
-                              ", context: " + messageContext);
+        System.out.println("NIO: routeInboundMessage called for " + message.messageType() + " from " + 
+                          message.source() + " to " + message.destination());
+        
+        try {
+            // Store request context for response correlation
+            if (messageContext.isRequest()) {
+                System.out.println("NIO: Message is a request, storing context");
+                String correlationId = generateCorrelationId(message);
+                messageContext.setCorrelationId(correlationId);
+                pendingRequests.put(correlationId, messageContext);
+                System.out.println("NIO: Stored request context for correlation: " + correlationId + 
+                                  ", context: " + messageContext);
+            } else {
+                System.out.println("NIO: Message is not a request, skipping context storage");
+            }
+            
+            System.out.println("NIO: Creating queue for destination: " + message.destination());
+            
+            // Add to destination queue for processing
+            // For CLIENT_RESPONSE messages with null destination (channel-based routing), use a special key
+            NetworkAddress queueKey = message.destination();
+            if (queueKey == null && message.messageType() == MessageType.CLIENT_RESPONSE) {
+                // Use a special marker address for channel-based client responses
+                queueKey = new NetworkAddress("__CLIENT_RESPONSE__", 65535);
+            }
+            
+            // Create queue dynamically if it doesn't exist (for client addresses)
+            Queue<Message> queue = messageQueues.computeIfAbsent(queueKey, 
+                k -> new ConcurrentLinkedQueue<>());
+            
+            System.out.println("NIO: Queue created/retrieved for key: " + queueKey + ", adding message");
+            
+            queue.offer(message);
+            // store context for upper layers
+            messageContexts.put(message, messageContext);
+            System.out.println("NIO: Message added to receive queue for " + message.destination() + 
+                              ", queue size: " + queue.size() + ", context: " + messageContext);
+        } catch (Exception e) {
+            System.err.println("NIO: Exception in routeInboundMessage: " + e.getMessage());
+            e.printStackTrace();
         }
-        
-        // Add to destination queue for processing
-        // Create queue dynamically if it doesn't exist (for client addresses)
-        Queue<Message> queue = messageQueues.computeIfAbsent(message.destination(), 
-            k -> new ConcurrentLinkedQueue<>());
-        
-        queue.offer(message);
-        // store context for upper layers
-        messageContexts.put(message, messageContext);
-        System.out.println("NIO: Message added to receive queue for " + message.destination() + 
-                          ", queue size: " + queue.size() + ", context: " + messageContext);
     }
     
     @Override

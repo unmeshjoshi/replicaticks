@@ -11,11 +11,24 @@ public record Message(
     String correlationId
 ) {
     public Message {
-        Objects.requireNonNull(source, "Source address cannot be null");
-        Objects.requireNonNull(destination, "Destination address cannot be null");
+        // Validate source address - allow null for client-originated messages
+        if (source == null && !isClientOriginatedMessage(messageType)) {
+            throw new NullPointerException("Source address cannot be null (except for client-originated messages)");
+        }
+        
+        // Validate destination address - allow null for CLIENT_RESPONSE messages (uses channel-based routing)
+        if (destination == null && messageType != MessageType.CLIENT_RESPONSE) {
+            throw new NullPointerException("Destination address cannot be null (except for CLIENT_RESPONSE messages)");
+        }
+        
         Objects.requireNonNull(messageType, "Message type cannot be null");
         Objects.requireNonNull(payload, "Payload cannot be null");
         Objects.requireNonNull(correlationId, "Correlation ID cannot be null");
+    }
+    
+    private static boolean isClientOriginatedMessage(MessageType messageType) {
+        return messageType == MessageType.CLIENT_GET_REQUEST || 
+               messageType == MessageType.CLIENT_SET_REQUEST;
     }
     
     @Override

@@ -4,11 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.client.Client;
 import replicated.future.ListenableFuture;
-import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
-import replicated.messaging.MessageBusMultiplexer;
+import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
-import replicated.messaging.ServerMessageBus;
 import replicated.network.MessageContext;
 import replicated.network.SimulatedNetwork;
 import replicated.replica.QuorumReplica;
@@ -28,8 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class DirectChannelOrderTest {
     private SimulatedNetwork network;
-    private ClientMessageBus clientBus;
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
     private List<QuorumReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
@@ -39,19 +36,16 @@ public class DirectChannelOrderTest {
     void setup() {
         network = new SimulatedNetwork(new Random(1));
         JsonMessageCodec codec = new JsonMessageCodec();
-        clientBus = new ClientMessageBus(network, codec);
-        serverBus = new ServerMessageBus(network, codec);
+        messageBus = new MessageBus(network, codec);
         
-        // Setup message bus multiplexer to handle both client and server messages
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(clientBus);
-        multiplexer.registerMessageBus(serverBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
-        client = new Client(clientBus, codec, List.of(replicaAddr));
+        client = new Client(messageBus, codec, List.of(replicaAddr));
         SimulatedStorage storage = new SimulatedStorage(new Random());
-        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, codec, storage);
-        serverBus.registerHandler(replicaAddr, replica);
+        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), messageBus, codec, storage);
+        messageBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         
         // Create SimulationDriver to orchestrate all component ticking
@@ -60,7 +54,7 @@ public class DirectChannelOrderTest {
             List.of(storage),
             replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
             List.of(client),
-            List.of(clientBus, serverBus)
+            List.of(messageBus)
         );
     }
 

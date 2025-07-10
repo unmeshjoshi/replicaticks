@@ -1,18 +1,31 @@
 package replicated.messaging;
 
+import replicated.network.MessageCallback;
 import replicated.network.MessageContext;
 import replicated.network.Network;
 
-import java.util.List;
+import java.util.*;
 
 /**
- * Base abstract class for message bus implementations.
- * Contains common functionality shared between client and server message buses.
+ * Unified MessageBus that handles both correlation ID and address-based routing.
+ * This replaces the separate ClientMessageBus and ServerMessageBus classes.
+ * 
+ * Routing Priority:
+ * 1. Correlation ID-based routing (for client responses)
+ * 2. Address-based routing (for server requests)
+ * 
+ * If a message has both correlation ID and destination address:
+ * - Correlation ID takes priority (client response pattern)
+ * - Address routing is used as fallback if no correlation handler exists
  */
-public abstract class MessageBus {
+public class MessageBus implements MessageCallback {
     
     protected final Network network;
     protected final MessageCodec messageCodec;
+    
+    // Dual routing maps
+    private final Map<String, MessageHandler> correlationIdHandlers;
+    private final Map<NetworkAddress, MessageHandler> addressHandlers;
     
     /**
      * Creates a MessageBus with the given network and codec dependencies.
@@ -21,7 +34,7 @@ public abstract class MessageBus {
      * @param messageCodec the codec for message encoding/decoding
      * @throws IllegalArgumentException if either parameter is null
      */
-    protected MessageBus(Network network, MessageCodec messageCodec) {
+    public MessageBus(Network network, MessageCodec messageCodec) {
         if (network == null) {
             throw new IllegalArgumentException("Network cannot be null");
         }
@@ -31,6 +44,8 @@ public abstract class MessageBus {
         
         this.network = network;
         this.messageCodec = messageCodec;
+        this.correlationIdHandlers = new HashMap<>();
+        this.addressHandlers = new HashMap<>();
     }
     
     /**
@@ -47,6 +62,128 @@ public abstract class MessageBus {
         network.send(message);
     }
 
+    // === CORRELATION ID ROUTING (Client Response Pattern) ===
+    
+    /**
+     * Registers a message handler for the given correlation ID.
+     * When messages with this correlation ID are received, they will be routed to the handler.
+     * This is the client pattern - for components that send requests and expect responses.
+     * 
+     * @param correlationId the correlation ID to register the handler for
+     * @param handler the message handler to receive messages
+     */
+    public void registerHandler(String correlationId, MessageHandler handler) {
+        if (correlationId == null) {
+            throw new IllegalArgumentException("Correlation ID cannot be null");
+        }
+        if (handler == null) {
+            throw new IllegalArgumentException("Handler cannot be null");
+        }
+        correlationIdHandlers.put(correlationId, handler);
+    }
+    
+    /**
+     * Unregisters the message handler for the given correlation ID.
+     * Messages with this correlation ID will no longer be routed to any handler.
+     * 
+     * @param correlationId the correlation ID to unregister
+     */
+    public void unregisterHandler(String correlationId) {
+        if (correlationId == null) {
+            throw new IllegalArgumentException("Correlation ID cannot be null");
+        }
+        correlationIdHandlers.remove(correlationId);
+    }
+    
+    // === ADDRESS ROUTING (Server Request Pattern) ===
+    
+    /**
+     * Registers a message handler for the given network address.
+     * When messages are received for this address, they will be routed to the handler.
+     * This is the server pattern - for components that listen on specific addresses.
+     * 
+     * @param address the network address to register the handler for
+     * @param handler the message handler to receive messages
+     */
+    public void registerHandler(NetworkAddress address, MessageHandler handler) {
+        if (address == null) {
+            throw new IllegalArgumentException("Address cannot be null");
+        }
+        if (handler == null) {
+            throw new IllegalArgumentException("Handler cannot be null");
+        }
+        addressHandlers.put(address, handler);
+    }
+    
+    /**
+     * Unregisters the message handler for the given network address.
+     * Messages sent to this address will no longer be routed to any handler.
+     * 
+     * @param address the network address to unregister
+     */
+    public void unregisterHandler(NetworkAddress address) {
+        if (address == null) {
+            throw new IllegalArgumentException("Address cannot be null");
+        }
+        addressHandlers.remove(address);
+    }
+    
+    // === UNIFIED ROUTING LOGIC ===
+    
+    /**
+     * Callback method that receives messages from the network.
+     * This is called by the network when messages are available.
+     * 
+     * Routing Priority:
+     * 1. Check correlation ID first (client response pattern)
+     * 2. Fall back to address routing (server request pattern)
+     * 3. Log unroutable messages (no crash)
+     */
+    @Override
+    public void onMessage(Message message, MessageContext context) {
+        String correlationId = message.correlationId();
+        NetworkAddress destination = message.destination();
+        
+        System.out.println("MessageBus: Routing message " + message.messageType() + " from " + message.source() + 
+                          " to " + destination + " (correlationId=" + correlationId + ")");
+        
+        // PRIORITY 1: Correlation ID routing (client responses)
+        //If the message is sent in response to an earlier message sent with a specific correlation ID,
+        //then it should be routed to the corresponding handler for that correlation ID
+        if (isResponse(message, correlationId)) {
+            MessageHandler correlationHandler = correlationIdHandlers.get(correlationId);
+            if (correlationHandler != null) {
+                System.out.println("MessageBus: Delivering to correlation ID handler (" + correlationId + ")");
+                correlationHandler.onMessageReceived(message, context);
+                // Remove the handler after use (one-time correlation ID handlers)
+                correlationIdHandlers.remove(correlationId);
+                return;
+            }
+        }
+        
+        // PRIORITY 2: Address routing (server requests)
+        if (isMessageFor(destination)) {
+            MessageHandler addressHandler = addressHandlers.get(destination);
+            if (addressHandler != null) {
+                System.out.println("MessageBus: Delivering to address handler (" + destination + ")");
+                addressHandler.onMessageReceived(message, context);
+                return;
+            }
+        }
+        
+        // PRIORITY 3: Unroutable message (log but don't crash)
+        System.out.println("MessageBus: No handler found for message " + message.messageType() + 
+                          " (correlationId=" + correlationId + ", destination=" + destination + ")");
+    }
+
+    private static boolean isMessageFor(NetworkAddress destination) {
+        return destination != null;
+    }
+
+    private static boolean isResponse(Message message, String correlationId) {
+        return correlationId != null && message.messageType().isResponse();
+    }
+
     /**
      * Routes received messages to registered handlers.
      * This method implements the reactive Service Layer tick() pattern.
@@ -56,17 +193,20 @@ public abstract class MessageBus {
      * messages that were delivered in previous ticks.
      */
     public void tick() {
-        // Route messages to registered handlers (implemented by subclasses)
+        // Route messages to registered handlers (now handled by onMessage callback)
         // The network is ticked separately by SimulationDriver to maintain
         // centralized tick orchestration and deterministic ordering
         routeMessagesToHandlers();
     }
     
     /**
-     * Routes messages to their respective handlers.
-     * This is implemented by subclasses based on their specific routing logic.
+     * Routes messages to their respective handlers based on correlation ID or destination address.
+     * This method is now called by the network callback instead of polling.
      */
-    protected abstract void routeMessagesToHandlers();
+    protected void routeMessagesToHandlers() {
+        // This method is now handled by the onMessage callback
+        // The network will call onMessage when messages are available
+    }
     
     /**
      * Broadcasts a message from the source to all recipients in the list.
@@ -88,11 +228,13 @@ public abstract class MessageBus {
         }
     }
     
+    private static final java.util.concurrent.atomic.AtomicLong correlationIdCounter = new java.util.concurrent.atomic.AtomicLong(0);
+    
     /**
      * Generates a unique correlation ID for message tracking.
      */
     protected String generateCorrelationId() {
-        return "msg-" + System.currentTimeMillis() + "-" + Thread.currentThread().getId();
+        return "msg-" + System.currentTimeMillis() + "-" + correlationIdCounter.incrementAndGet();
     }
     
     /**
@@ -110,29 +252,23 @@ public abstract class MessageBus {
         }
     }
     
-    // === CLIENT-SPECIFIC METHODS (implemented by ClientMessageBus) ===
+    // === LEGACY CLIENT-SPECIFIC METHODS (for backward compatibility) ===
     
-    /**
-     * Registers a client handler and assigns it a network address.
-     * This is a client-specific method implemented by ClientMessageBus.
-     */
-    public NetworkAddress registerClient(MessageHandler clientHandler) {
-        throw new UnsupportedOperationException("registerClient is only supported by ClientMessageBus");
-    }
+
     
     /**
      * Registers a message handler for the given correlation ID.
-     * This is a client-specific method implemented by ClientMessageBus.
+     * This is now handled by the unified registerHandler method.
      */
     public void registerCorrelationIdHandler(String correlationId, MessageHandler handler) {
-        throw new UnsupportedOperationException("registerCorrelationIdHandler is only supported by ClientMessageBus");
+        registerHandler(correlationId, handler);
     }
     
     /**
      * Unregisters a message handler for the given correlation ID.
-     * This is a client-specific method implemented by ClientMessageBus.
+     * This is now handled by the unified unregisterHandler method.
      */
     public void unregisterCorrelationIdHandler(String correlationId) {
-        throw new UnsupportedOperationException("unregisterCorrelationIdHandler is only supported by ClientMessageBus");
+        unregisterHandler(correlationId);
     }
 } 

@@ -46,7 +46,7 @@ class MessageTest {
     void shouldRejectNullSource() {
         // Given
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8081);
-        MessageType messageType = MessageType.CLIENT_GET_REQUEST;
+        MessageType messageType = MessageType.INTERNAL_GET_REQUEST; // Use non-client message type
         byte[] payload = "test".getBytes();
         
         // When & Then

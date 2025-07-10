@@ -20,7 +20,7 @@ class SimpleNioIntegrationTest {
     
     private NioNetwork network;
     private MessageCodec codec;
-    private ServerMessageBus messageBus;
+    private MessageBus messageBus;
     
     private NetworkAddress address1;
     private NetworkAddress address2;
@@ -37,11 +37,10 @@ class SimpleNioIntegrationTest {
         // Setup network and messaging
         network = new NioNetwork();
         codec = new JsonMessageCodec();
-        messageBus = new ServerMessageBus(network, codec);
+        messageBus = new MessageBus(network, codec);
         
-        // Setup message bus multiplexer to handle message delivery
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(messageBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         // Bind network addresses
         network.bind(address1);

@@ -2,8 +2,8 @@ package replicated.cmd;
 
 import replicated.client.Client;
 import replicated.future.ListenableFuture;
-import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
 import replicated.storage.VersionedValue;
@@ -23,10 +23,13 @@ public class ClientApplication {
         this.serverAddress = serverAddress;
         NetworkAddress serverAddr = NetworkAddress.parse(serverAddress);
         
-        // Create network and message bus for the client
+        // Create network and unified message bus for the client
         NioNetwork network = new NioNetwork();
         JsonMessageCodec codec = new JsonMessageCodec();
-        ClientMessageBus messageBus = new ClientMessageBus(network, codec);
+        MessageBus messageBus = new MessageBus(network, codec);
+        
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         // Create client with bootstrap replicas
         this.client = new Client(messageBus, codec, List.of(serverAddr));

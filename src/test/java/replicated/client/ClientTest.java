@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ClientTest {
     
-    private ClientMessageBus messageBus;
+    private MessageBus messageBus;
     private NetworkAddress replicaAddress;
     private Client client;
     
@@ -23,8 +23,8 @@ class ClientTest {
         // Setup addresses
         replicaAddress = new NetworkAddress("192.168.1.1", 8080);
         
-        // Setup message bus with test network
-        messageBus = new ClientMessageBus(new TestNetwork(), new JsonMessageCodec());
+        // Setup unified message bus with test network
+        messageBus = new MessageBus(new TestNetwork(), new JsonMessageCodec());
         
         // Create client with bootstrap replicas (new API)
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);

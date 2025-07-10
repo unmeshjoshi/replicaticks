@@ -16,7 +16,7 @@ class MessageBusTest {
     
     private Network network;
     private MessageCodec codec;
-    private ServerMessageBus messageBus;
+    private MessageBus messageBus;
     private NetworkAddress nodeA;
     private NetworkAddress nodeB;
     
@@ -24,11 +24,10 @@ class MessageBusTest {
     void setUp() {
         network = new SimulatedNetwork(new Random(42L));
         codec = new JsonMessageCodec();
-        messageBus = new ServerMessageBus(network, codec);
+        messageBus = new MessageBus(network, codec);
         
-        // Setup message bus multiplexer to handle message delivery
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(messageBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         nodeA = new NetworkAddress("192.168.1.1", 8080);
         nodeB = new NetworkAddress("192.168.1.2", 8080);
@@ -46,14 +45,14 @@ class MessageBusTest {
     void shouldThrowExceptionForNullNetwork() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new ServerMessageBus(null, codec));
+            () -> new MessageBus(null, codec));
     }
     
     @Test
     void shouldThrowExceptionForNullCodec() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new ServerMessageBus(network, null));
+            () -> new MessageBus(network, null));
     }
     
     @Test

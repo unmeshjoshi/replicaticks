@@ -3,10 +3,9 @@ package replicated.integration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.client.Client;
-import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
-import replicated.messaging.ServerMessageBus;
 import replicated.network.NioNetwork;
 import replicated.replica.QuorumReplica;
 import replicated.storage.SimulatedStorage;
@@ -25,8 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class NetworkMetricsTest {
 
     private NioNetwork network;
-    private ClientMessageBus clientBus;
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
 
     private NetworkAddress r1Addr;
     private NetworkAddress r2Addr;
@@ -41,8 +39,10 @@ class NetworkMetricsTest {
     @BeforeEach
     void setUp() {
         network = new NioNetwork();
-        clientBus = new ClientMessageBus(network, new JsonMessageCodec());
-        serverBus = new ServerMessageBus(network, new JsonMessageCodec());
+        messageBus = new MessageBus(network, new JsonMessageCodec());
+        
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
 
         r1Addr = new NetworkAddress("127.0.0.1", 9201);
         r2Addr = new NetworkAddress("127.0.0.1", 9202);
@@ -61,16 +61,16 @@ class NetworkMetricsTest {
         Storage s3 = new SimulatedStorage(new Random());
 
         JsonMessageCodec codec = new JsonMessageCodec();
-        r1 = new QuorumReplica("r1", r1Addr, peersExcept(r1Addr, all), serverBus, codec, s1);
-        r2 = new QuorumReplica("r2", r2Addr, peersExcept(r2Addr, all), serverBus, codec, s2);
-        r3 = new QuorumReplica("r3", r3Addr, peersExcept(r3Addr, all), serverBus, codec, s3);
+        r1 = new QuorumReplica("r1", r1Addr, peersExcept(r1Addr, all), messageBus, codec, s1);
+        r2 = new QuorumReplica("r2", r2Addr, peersExcept(r2Addr, all), messageBus, codec, s2);
+        r3 = new QuorumReplica("r3", r3Addr, peersExcept(r3Addr, all), messageBus, codec, s3);
 
-        serverBus.registerHandler(r1Addr, r1);
-        serverBus.registerHandler(r2Addr, r2);
-        serverBus.registerHandler(r3Addr, r3);
+        messageBus.registerHandler(r1Addr, r1);
+        messageBus.registerHandler(r2Addr, r2);
+        messageBus.registerHandler(r3Addr, r3);
 
         // client collaborates via the same MessageBus for simplicity
-        client = new Client(clientBus, codec, List.of(r1Addr, r2Addr, r3Addr));
+        client = new Client(messageBus, codec, List.of(r1Addr, r2Addr, r3Addr));
     }
 
     private List<NetworkAddress> peersExcept(NetworkAddress self, List<NetworkAddress> all) {

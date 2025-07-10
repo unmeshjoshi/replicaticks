@@ -5,11 +5,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.client.Client;
 import replicated.future.ListenableFuture;
-import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
-import replicated.messaging.MessageBusMultiplexer;
+import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
-import replicated.messaging.ServerMessageBus;
 import replicated.network.NioNetwork;
 import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
@@ -29,8 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class DirectChannelNioTest {
     private NioNetwork network;
-    private ClientMessageBus clientBus;
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
     private List<QuorumReplica> replicas;
     private NetworkAddress replicaAddr;
     private SimulationDriver simulationDriver;
@@ -40,29 +37,22 @@ public class DirectChannelNioTest {
     @BeforeEach
     void setup() {
         network = new NioNetwork(new JsonMessageCodec());
-        clientBus = new ClientMessageBus(network, new JsonMessageCodec());
-        serverBus = new ServerMessageBus(network, new JsonMessageCodec());
+        messageBus = new MessageBus(network, new JsonMessageCodec());
         
-        // Setup message bus multiplexer to handle both client and server messages
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(clientBus);
-        multiplexer.registerMessageBus(serverBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
-        client = new Client(clientBus);
         replicaAddr = new NetworkAddress("127.0.0.1", 7000);
+        client = new Client(messageBus, new JsonMessageCodec(), List.of(replicaAddr));
         
         // Bind the network to the replica address
         network.bind(replicaAddr);
         
         storage = new SimulatedStorage(new Random());
         JsonMessageCodec codec = new JsonMessageCodec();
-        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), serverBus, codec, storage);
-        serverBus.registerHandler(replicaAddr, replica);
+        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), messageBus, codec, storage);
+        messageBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
-        
-        // Register the client to receive responses
-        clientBus.registerClient(client);
-        clientBus.registerClientHandler(client);
         
         // Create SimulationDriver to orchestrate all component ticking
         simulationDriver = new SimulationDriver(
@@ -70,7 +60,7 @@ public class DirectChannelNioTest {
             List.of(storage),
             replicas.stream().map(r -> (replicated.replica.Replica) r).toList(),
             List.of(client),
-            List.of(clientBus, serverBus)
+            List.of(messageBus)
         );
     }
 

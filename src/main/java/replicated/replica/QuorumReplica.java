@@ -93,7 +93,7 @@ public final class QuorumReplica extends Replica {
         VersionedValue latestValue = getLatestValueFromResponses(responses);
         GetResponse clientResponse = new GetResponse(req.key(), latestValue);
         Message clientMessage = new Message(
-                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                networkAddress, null, MessageType.CLIENT_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
 
@@ -105,7 +105,7 @@ public final class QuorumReplica extends Replica {
                                         MessageContext ctx, Throwable error) {
         GetResponse clientResponse = new GetResponse(req.key(), null);
         Message clientMessage = new Message(
-                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                networkAddress, null, MessageType.CLIENT_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
 
@@ -168,7 +168,7 @@ public final class QuorumReplica extends Replica {
                                                 MessageContext ctx) {
         SetResponse clientResponse = new SetResponse(req.key(), true);
         Message clientMessage = new Message(
-                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                networkAddress, null, MessageType.CLIENT_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
 
@@ -180,7 +180,7 @@ public final class QuorumReplica extends Replica {
                                                 MessageContext ctx, Throwable error) {
         SetResponse clientResponse = new SetResponse(req.key(), false);
         Message clientMessage = new Message(
-                networkAddress, clientAddr, MessageType.CLIENT_RESPONSE,
+                networkAddress, null, MessageType.CLIENT_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
 

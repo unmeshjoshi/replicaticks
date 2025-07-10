@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class QuorumReplicaTest {
     
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
     private Storage storage;
     private QuorumReplica replica;
     private NetworkAddress replicaAddress;
@@ -23,7 +23,7 @@ class QuorumReplicaTest {
     @BeforeEach
     void setUp() {
         // Setup components
-        serverBus = createMockMessageBus();
+        messageBus = createMockMessageBus();
         storage = new SimulatedStorage(new Random(42L));
         
         // Setup addresses
@@ -34,7 +34,7 @@ class QuorumReplicaTest {
         
         // Create enhanced replica
         JsonMessageCodec codec = new JsonMessageCodec();
-        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, codec, storage);
+        replica = new QuorumReplica("replica1", replicaAddress, peers, messageBus, codec, storage);
     }
     
     @Test
@@ -60,7 +60,7 @@ class QuorumReplicaTest {
         // When & Then
         JsonMessageCodec codec = new JsonMessageCodec();
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumReplica("test", replicaAddress, peers, serverBus, codec, null));
+            () -> new QuorumReplica("test", replicaAddress, peers, messageBus, codec, null));
     }
     
     @Test
@@ -189,7 +189,7 @@ class QuorumReplicaTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - replica with timeout configuration
-        replica = new QuorumReplica("replica1", replicaAddress, peers, serverBus, new JsonMessageCodec(), storage, 5); // 5 tick timeout
+        replica = new QuorumReplica("replica1", replicaAddress, peers, messageBus, new JsonMessageCodec(), storage, 5); // 5 tick timeout
         
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
         GetRequest getRequest = new GetRequest("test-key");
@@ -223,10 +223,10 @@ class QuorumReplicaTest {
     
     // Helper methods
     
-    private ServerMessageBus createMockMessageBus() {
+    private MessageBus createMockMessageBus() {
         // For now, return a simple mock that doesn't throw errors
         // In a real implementation, we'd use a proper mock framework
-        return new ServerMessageBus(new TestNetwork(), new JsonMessageCodec());
+        return new MessageBus(new TestNetwork(), new JsonMessageCodec());
     }
     
     private Message createMessage(NetworkAddress source, NetworkAddress destination, 

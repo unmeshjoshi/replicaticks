@@ -31,8 +31,7 @@ public class SimulationRunner {
     
     // System components
     private final SimulatedNetwork network;
-    private final ClientMessageBus clientBus;
-    private final ServerMessageBus serverBus;
+    private final MessageBus messageBus;
     private final List<QuorumReplica> replicas;
     private final List<SimulatedStorage> storages;
     private final List<NetworkAddress> replicaAddresses;
@@ -153,10 +152,12 @@ public class SimulationRunner {
         // Create network with some base packet loss and delay
         this.network = new SimulatedNetwork(new Random(seed + 1), 2, 0.001); // 2 tick delay, 0.1% base loss
         
-        // Create message buses
+        // Create unified message bus
         JsonMessageCodec codec = new JsonMessageCodec();
-        this.clientBus = new ClientMessageBus(network, codec);
-        this.serverBus = new ServerMessageBus(network, codec);
+        this.messageBus = new MessageBus(network, codec);
+        
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         // Create replica addresses
         this.replicaAddresses = new ArrayList<>();
@@ -175,16 +176,16 @@ public class SimulationRunner {
             
             SimulatedStorage storage = new SimulatedStorage(new Random(seed + 100 + i), 1, 0.0);
             QuorumReplica replica = new QuorumReplica(
-                "replica-" + i, address, peers, serverBus, codec, storage, 50 // 50 tick timeout
+                "replica-" + i, address, peers, messageBus, codec, storage, 50 // 50 tick timeout
             );
             
             storages.add(storage);
             replicas.add(replica);
-            serverBus.registerHandler(address, replica);
+            messageBus.registerHandler(address, replica);
         }
         
         // Create client
-        this.client = new Client(clientBus, codec, replicaAddresses, 100); // 100 tick timeout
+        this.client = new Client(messageBus, codec, replicaAddresses, 100); // 100 tick timeout
         
         // Create simulation driver
         this.driver = new SimulationDriver(
@@ -192,7 +193,7 @@ public class SimulationRunner {
             List.copyOf(storages),
             List.copyOf(replicas),
             List.of(client),
-            List.of(clientBus, serverBus)
+            List.of(messageBus)
         );
         
         // Initialize failure scheduler and workload generator

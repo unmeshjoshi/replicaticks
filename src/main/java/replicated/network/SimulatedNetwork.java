@@ -178,8 +178,6 @@ public class SimulatedNetwork implements Network {
             Message message = queuedMessage.message;
             MessageContext context = new MessageContext(message);
             
-            // Store message for polling-based receive() (backward compatibility)
-            deliveredMessages.computeIfAbsent(message.destination(), k -> new ArrayList<>()).add(message);
             messageContexts.put(message, context);
             lastDeliveredMessage = message;
             
@@ -192,11 +190,6 @@ public class SimulatedNetwork implements Network {
                 System.out.println("SimNet: delivered " + message);
             }
         }
-    }
-    
-    private void deliverMessage(Message message) {
-        NetworkAddress destination = message.destination();
-        deliveredMessages.computeIfAbsent(destination, k -> new ArrayList<>()).add(message);
     }
     
     // Network Partitioning Implementation

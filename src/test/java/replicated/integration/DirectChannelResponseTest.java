@@ -4,11 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.client.Client;
 import replicated.future.ListenableFuture;
-import replicated.messaging.ClientMessageBus;
 import replicated.messaging.JsonMessageCodec;
-import replicated.messaging.MessageBusMultiplexer;
+import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
-import replicated.messaging.ServerMessageBus;
 import replicated.network.SimulatedNetwork;
 import replicated.replica.QuorumReplica;
 import replicated.simulation.SimulationDriver;
@@ -27,8 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DirectChannelResponseTest {
     
     private SimulatedNetwork network;
-    private ClientMessageBus clientBus;
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
     private Client client;
     private QuorumReplica replica;
     private SimulatedStorage storage;
@@ -42,13 +39,10 @@ class DirectChannelResponseTest {
         // Setup network and messaging
         network = new SimulatedNetwork(new java.util.Random(42), 0, 0.0); // No delay, no packet loss
         JsonMessageCodec codec = new JsonMessageCodec();
-        clientBus = new ClientMessageBus(network, codec);
-        serverBus = new ServerMessageBus(network, codec);
+        messageBus = new MessageBus(network, codec);
         
-        // Setup message bus multiplexer to handle both client and server messages
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(clientBus);
-        multiplexer.registerMessageBus(serverBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         // Setup addresses
         clientAddress = new NetworkAddress("127.0.0.1", 9000);
@@ -58,11 +52,11 @@ class DirectChannelResponseTest {
         storage = new SimulatedStorage(new java.util.Random(42), 0, 0.0);
         
         // Setup replica - use empty peers list for single-node setup (peers should not include self)
-        replica = new QuorumReplica("test-replica", replicaAddress, List.of(), serverBus, codec, storage);
-        serverBus.registerHandler(replicaAddress, replica);
+        replica = new QuorumReplica("test-replica", replicaAddress, List.of(), messageBus, codec, storage);
+        messageBus.registerHandler(replicaAddress, replica);
         
         // Setup client
-        client = new Client(clientBus, codec, List.of(replicaAddress));
+        client = new Client(messageBus, codec, List.of(replicaAddress));
         
         // Setup simulation driver
         simulationDriver = new SimulationDriver(
@@ -70,7 +64,7 @@ class DirectChannelResponseTest {
             List.of(storage),
             List.of(replica),
             List.of(client),
-            List.of(clientBus, serverBus)
+            List.of(messageBus)
         );
     }
     

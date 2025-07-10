@@ -29,8 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DistributedSystemIntegrationTest {
     
     private Network network;
-    private ClientMessageBus clientBus;
-    private ServerMessageBus serverBus;
+    private MessageBus messageBus;
     private List<QuorumReplica> replicas;
     private List<Client> clients;
     private List<NetworkAddress> replicaAddresses;
@@ -43,13 +42,10 @@ class DistributedSystemIntegrationTest {
         // This prevents random state contamination between test runs
         random = new Random(42L);
         network = new SimulatedNetwork(random);
-        clientBus = new ClientMessageBus(network, new JsonMessageCodec());
-        serverBus = new ServerMessageBus(network, new JsonMessageCodec());
+        messageBus = new MessageBus(network, new JsonMessageCodec());
         
-        // Setup message bus multiplexer to handle both client and server messages
-        MessageBusMultiplexer multiplexer = new MessageBusMultiplexer(network);
-        multiplexer.registerMessageBus(clientBus);
-        multiplexer.registerMessageBus(serverBus);
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
         
         // Setup replica addresses
         replicaAddresses = List.of(
@@ -72,20 +68,20 @@ class DistributedSystemIntegrationTest {
             // Use a fixed seed for each replica to ensure test isolation
             Storage storage = new SimulatedStorage(new Random(42L + i));
             storages.add(storage);
-            QuorumReplica replica = new QuorumReplica("replica-" + address.port(), address, peers, serverBus, new JsonMessageCodec(), storage);
+            QuorumReplica replica = new QuorumReplica("replica-" + address.port(), address, peers, messageBus, new JsonMessageCodec(), storage);
             replicas.add(replica);
             
             // Register replica with message bus
-            serverBus.registerHandler(address, replica);
+            messageBus.registerHandler(address, replica);
         }
         
         // Create clients (addresses will be auto-assigned)
         clients = new ArrayList<>();
         MessageCodec clientCodec = new JsonMessageCodec();
         for (int i = 0; i < 2; i++) { // Create 2 clients
-            Client client = new Client(clientBus, clientCodec, replicaAddresses);
+            Client client = new Client(messageBus, clientCodec, replicaAddresses);
             clients.add(client);
-            // Client handler is auto-registered by ClientMessageBus.sendClientMessage()
+            // Client handler is auto-registered by MessageBus correlation routing
         }
         
         // Create SimulationDriver to orchestrate all component ticking
@@ -94,7 +90,7 @@ class DistributedSystemIntegrationTest {
             storages,
             replicas.stream().map(replica -> (replicated.replica.Replica) replica).toList(),
             clients,
-            List.of(clientBus, serverBus)
+            List.of(messageBus)
         );
     }
     
@@ -112,7 +108,7 @@ class DistributedSystemIntegrationTest {
         
         // 2. Clear all message bus handlers to ensure no message routing contamination
         for (NetworkAddress address : replicaAddresses) {
-            serverBus.unregisterHandler(address);
+            messageBus.unregisterHandler(address);
         }
         
         // 3. Force re-initialization of all components to clear pending state
@@ -120,7 +116,7 @@ class DistributedSystemIntegrationTest {
         // Note: We don't recreate the entire system here since that's done in @BeforeEach
         // but we ensure that all handlers are properly re-registered
         for (int i = 0; i < replicas.size(); i++) {
-            serverBus.registerHandler(replicaAddresses.get(i), replicas.get(i));
+            messageBus.registerHandler(replicaAddresses.get(i), replicas.get(i));
         }
         
         // NOTE: Removed messageBus.tick() call as it was unnecessarily advancing tick counts
@@ -215,7 +211,7 @@ class DistributedSystemIntegrationTest {
         
         // When - Simulate replica failure by removing it from message bus
         NetworkAddress failedReplica = replicaAddresses.get(0);
-        serverBus.unregisterHandler(failedReplica);
+        messageBus.unregisterHandler(failedReplica);
         
         // Try to perform operations through remaining replicas
         NetworkAddress workingReplica = replicaAddresses.get(1);
