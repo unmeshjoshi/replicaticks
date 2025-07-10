@@ -16,9 +16,10 @@ public record Message(
             throw new NullPointerException("Source address cannot be null (except for client-originated messages)");
         }
         
-        // Validate destination address - allow null for CLIENT_RESPONSE messages (uses channel-based routing)
-        if (destination == null && messageType != MessageType.CLIENT_RESPONSE) {
-            throw new NullPointerException("Destination address cannot be null (except for CLIENT_RESPONSE messages)");
+        // Validate destination address - allow null for client response messages (uses channel-based routing)
+        if (destination == null && !messageType.isClientMessage() || 
+            (destination == null && messageType.isClientMessage() && !messageType.isResponse())) {
+            throw new NullPointerException("Destination address cannot be null (except for client response messages)");
         }
         
         Objects.requireNonNull(messageType, "Message type cannot be null");

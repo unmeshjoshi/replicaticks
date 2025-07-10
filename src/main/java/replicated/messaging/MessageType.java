@@ -13,8 +13,10 @@ public enum MessageType {
     /** Client request to set a key-value pair */
     CLIENT_SET_REQUEST(Category.CLIENT_REQUEST),
     
-    /** Response to client requests (both GET and SET) */
-    CLIENT_RESPONSE(Category.CLIENT_RESPONSE),
+    /** Response to client GET requests */
+    CLIENT_GET_RESPONSE(Category.CLIENT_RESPONSE),
+    /** Response to client SET requests */
+    CLIENT_SET_RESPONSE(Category.CLIENT_RESPONSE),
 
     // === INTERNAL MESSAGE TYPES (Server-to-Server) ===
         /** Internal request to get a value from a replica */

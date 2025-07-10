@@ -58,7 +58,7 @@ class MessagePayloadSerializationTest {
         VersionedValue value = new VersionedValue("John Doe".getBytes(), 1L);
         GetResponse getResponse = new GetResponse("user:123", value);
         byte[] payload = jsonMapper.writeValueAsBytes(getResponse);
-        Message message = new Message(replica, client, MessageType.CLIENT_RESPONSE, payload, "test-correlation-id-2");
+        Message message = new Message(replica, client, MessageType.CLIENT_GET_RESPONSE, payload, "test-correlation-id-2");
         
         // When
         byte[] encodedMessage = messageCodec.encode(message);

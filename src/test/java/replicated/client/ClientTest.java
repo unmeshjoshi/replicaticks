@@ -115,7 +115,7 @@ class ClientTest {
         
         // Create a message as if from replica (source address doesn't matter for response handling)
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
-            MessageType.CLIENT_RESPONSE, response);
+            MessageType.CLIENT_GET_RESPONSE, response);
         
         client.onMessageReceived(responseMessage, null);
         
@@ -137,7 +137,7 @@ class ClientTest {
         // When - receive a response
         SetResponse response = new SetResponse(key, true);
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
-            MessageType.CLIENT_RESPONSE, response);
+            MessageType.CLIENT_SET_RESPONSE, response);
         
         client.onMessageReceived(responseMessage, null);
         
@@ -194,7 +194,7 @@ class ClientTest {
         // When - receive unexpected response
         GetResponse response = new GetResponse("unknown-key", null);
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
-            MessageType.CLIENT_RESPONSE, response);
+            MessageType.CLIENT_GET_RESPONSE, response);
         
         // Then - should not throw exception
         assertDoesNotThrow(() -> client.onMessageReceived(responseMessage, null));
@@ -210,7 +210,7 @@ class ClientTest {
         VersionedValue value = new VersionedValue("data".getBytes(), 1L);
         GetResponse response = new GetResponse(key, value);
         Message responseMessage = createMessage(replicaAddress, new NetworkAddress("127.0.0.1", 9000), 
-            MessageType.CLIENT_RESPONSE, response);
+            MessageType.CLIENT_GET_RESPONSE, response);
         
         client.onMessageReceived(responseMessage, null);
         client.tick();

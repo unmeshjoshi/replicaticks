@@ -649,43 +649,7 @@ public class NioNetwork implements Network {
         }
         return null;
     }
-    
-    /**
-     * Determines if a message is a response to a previous request.
-     */
-    private boolean isResponseMessage(Message message) {
-        if (message == null) return false;
-        
-        String messageType = message.messageType().toString();
-        // All response messages contain "RESPONSE": CLIENT_RESPONSE, INTERNAL_GET_RESPONSE, INTERNAL_SET_RESPONSE
-        return messageType.contains("RESPONSE");
-    }
-    
-    /**
-     * Finds the original request channel for routing responses back.
-     * This implements proper request-response correlation.
-     */
-    private SocketChannel findResponseChannel(Message message) {
-        // Look for pending requests that match this response
-        String correlationPattern = message.destination() + "->" + message.source();
-        
-        for (Map.Entry<String, MessageContext> entry : pendingRequests.entrySet()) {
-            String correlationId = entry.getKey();
-            MessageContext requestContext = entry.getValue();
-            
-            if (correlationId.contains(correlationPattern) && 
-                requestContext.canRouteResponse()) {
-                // Found matching request context, return the source channel
-                System.out.println("NIO: Found response routing via correlation: " + correlationId);
-                return requestContext.getSourceChannel();
-            }
-        }
-        
-        // No correlation found, fallback to inbound channel lookup
-        System.out.println("NIO: No correlation found for response, using inbound channel lookup");
-        return findInboundChannelForDestination(message.destination());
-    }
-    
+
     /**
      * Sends all queued messages for a destination once the connection is established.
      */
@@ -931,9 +895,10 @@ public class NioNetwork implements Network {
             System.out.println("NIO: Creating queue for destination: " + message.destination());
             
             // Add to destination queue for processing
-            // For CLIENT_RESPONSE messages with null destination (channel-based routing), use a special key
+            // For client response messages with null destination (channel-based routing), use a special key
             NetworkAddress queueKey = message.destination();
-            if (queueKey == null && message.messageType() == MessageType.CLIENT_RESPONSE) {
+            if (queueKey == null && (message.messageType() == MessageType.CLIENT_GET_RESPONSE || 
+                                    message.messageType() == MessageType.CLIENT_SET_RESPONSE)) {
                 // Use a special marker address for channel-based client responses
                 queueKey = new NetworkAddress("__CLIENT_RESPONSE__", 65535);
             }

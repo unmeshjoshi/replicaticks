@@ -48,7 +48,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(serverAddress, addressHandler);
         
         // When - sending a message with both correlation ID and destination address
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_RESPONSE, 
+        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                     "test-payload".getBytes(), correlationId);
         MessageContext context = new MessageContext(message);
         
@@ -88,7 +88,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(correlationId, correlationHandler);
         
         // When - sending a message with the correlation ID
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_RESPONSE, 
+        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                     "test-payload".getBytes(), correlationId);
         MessageContext context = new MessageContext(message);
         
@@ -101,7 +101,7 @@ class UnifiedMessageBusTest {
         TestMessageHandler addressHandler = new TestMessageHandler();
         messageBus.registerHandler(serverAddress, addressHandler);
         
-        Message secondMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_RESPONSE, 
+        Message secondMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                           "second-payload".getBytes(), correlationId);
         messageBus.onMessage(secondMessage, new MessageContext(secondMessage));
         
@@ -132,9 +132,9 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(address2, addressHandler2);
         
         // When - sending messages with different routing patterns
-        Message corrMessage1 = new Message(serverAddress, address1, MessageType.CLIENT_RESPONSE, 
+        Message corrMessage1 = new Message(serverAddress, address1, MessageType.CLIENT_GET_RESPONSE, 
                                          "corr1".getBytes(), correlationId1);
-        Message corrMessage2 = new Message(serverAddress, address2, MessageType.CLIENT_RESPONSE, 
+        Message corrMessage2 = new Message(serverAddress, address2, MessageType.CLIENT_GET_RESPONSE, 
                                          "corr2".getBytes(), correlationId2);
         Message addrMessage1 = new Message(clientAddress, address1, MessageType.CLIENT_GET_REQUEST, 
                                          "addr1".getBytes(), "unused-corr-id");
@@ -186,7 +186,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(serverAddress, addressHandler);
         
         // Then - handlers should be registered
-        Message corrMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_RESPONSE, 
+        Message corrMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                         "test".getBytes(), correlationId);
         messageBus.onMessage(corrMessage, new MessageContext(corrMessage));
         assertEquals(1, correlationHandler.receivedMessages.size());

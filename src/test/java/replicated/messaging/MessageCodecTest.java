@@ -32,7 +32,7 @@ class MessageCodecTest {
         MessageCodec codec = new JsonMessageCodec();
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8081);
-        MessageType messageType = MessageType.CLIENT_RESPONSE;
+        MessageType messageType = MessageType.CLIENT_GET_RESPONSE;
         byte[] emptyPayload = new byte[0];
         Message originalMessage = new Message(source, destination, messageType, emptyPayload, "test-correlation-id-1");
         

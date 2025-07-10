@@ -9,12 +9,13 @@ class MessageTypeTest {
     @Test
     void shouldContainAllRequiredMessageTypes() {
         // Given & When & Then
-        assertEquals(10, MessageType.values().length);
+        assertEquals(11, MessageType.values().length);
         
         // Verify all required message types exist
         assertNotNull(MessageType.CLIENT_GET_REQUEST);
         assertNotNull(MessageType.CLIENT_SET_REQUEST);
-        assertNotNull(MessageType.CLIENT_RESPONSE);
+        assertNotNull(MessageType.CLIENT_GET_RESPONSE);
+        assertNotNull(MessageType.CLIENT_SET_RESPONSE);
         assertNotNull(MessageType.INTERNAL_GET_REQUEST);
         assertNotNull(MessageType.INTERNAL_GET_RESPONSE);
         assertNotNull(MessageType.INTERNAL_SET_REQUEST);
@@ -30,7 +31,8 @@ class MessageTypeTest {
     @Test
     void shouldCorrectlyIdentifyResponseTypes() {
         // Verify response types
-        assertTrue(MessageType.CLIENT_RESPONSE.isResponse());
+        assertTrue(MessageType.CLIENT_GET_RESPONSE.isResponse());
+        assertTrue(MessageType.CLIENT_SET_RESPONSE.isResponse());
 
         assertTrue(MessageType.INTERNAL_GET_RESPONSE.isResponse());
         assertTrue(MessageType.INTERNAL_SET_RESPONSE.isResponse());
@@ -55,7 +57,8 @@ class MessageTypeTest {
         assertTrue(MessageType.PING_REQUEST.isRequest());
         
         // Verify response types
-        assertFalse(MessageType.CLIENT_RESPONSE.isRequest());
+        assertFalse(MessageType.CLIENT_GET_RESPONSE.isRequest());
+        assertFalse(MessageType.CLIENT_SET_RESPONSE.isRequest());
 
         assertFalse(MessageType.INTERNAL_GET_RESPONSE.isRequest());
         assertFalse(MessageType.INTERNAL_SET_RESPONSE.isRequest());
@@ -67,7 +70,8 @@ class MessageTypeTest {
         // Verify client categories
         assertEquals(MessageType.Category.CLIENT_REQUEST, MessageType.CLIENT_GET_REQUEST.getCategory());
         assertEquals(MessageType.Category.CLIENT_REQUEST, MessageType.CLIENT_SET_REQUEST.getCategory());
-        assertEquals(MessageType.Category.CLIENT_RESPONSE, MessageType.CLIENT_RESPONSE.getCategory());
+        assertEquals(MessageType.Category.CLIENT_RESPONSE, MessageType.CLIENT_GET_RESPONSE.getCategory());
+        assertEquals(MessageType.Category.CLIENT_RESPONSE, MessageType.CLIENT_SET_RESPONSE.getCategory());
 
         
         // Verify internal categories
@@ -87,7 +91,8 @@ class MessageTypeTest {
         // Verify client message checks
         assertTrue(MessageType.CLIENT_GET_REQUEST.isClientMessage());
         assertTrue(MessageType.CLIENT_SET_REQUEST.isClientMessage());
-        assertTrue(MessageType.CLIENT_RESPONSE.isClientMessage());
+        assertTrue(MessageType.CLIENT_GET_RESPONSE.isClientMessage());
+        assertTrue(MessageType.CLIENT_SET_RESPONSE.isClientMessage());
 
         // Verify internal message checks
         assertTrue(MessageType.INTERNAL_GET_REQUEST.isInternalMessage());
