@@ -31,15 +31,18 @@ class PaxosReplicaClientTest {
     private MessageCodec messageCodec;
     private NetworkAddress clientAddress;
     private Network network;
+    private Storage storage1;
+    private Storage storage2; 
+    private Storage storage3;
 
     @BeforeEach
     void setUp() {
         // Create simulated network and storage with deterministic random
         Random random = new Random(42L);
         network = new SimulatedNetwork(random);
-        Storage storage1 = new SimulatedStorage(new Random(43L));
-        Storage storage2 = new SimulatedStorage(new Random(44L));
-        Storage storage3 = new SimulatedStorage(new Random(45L));
+        storage1 = new SimulatedStorage(new Random(43L));
+        storage2 = new SimulatedStorage(new Random(44L));
+        storage3 = new SimulatedStorage(new Random(45L));
         
         // Create message bus and codec
         messageCodec = new JsonMessageCodec();
@@ -101,6 +104,12 @@ class PaxosReplicaClientTest {
         
         // Process the distributed operation by ticking components
         for (int i = 0; i < 20; i++) {
+            // Tick storage components first to complete async operations
+            storage1.tick();
+            storage2.tick();
+            storage3.tick();
+            
+            // Then tick network and message bus
             network.tick();
             messageBus.tick();
         }

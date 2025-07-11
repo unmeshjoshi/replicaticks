@@ -13,6 +13,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -76,10 +77,31 @@ class PaxosReplicaStorageTest {
     private void runUntil(Supplier<Boolean> condition) {
         runUntil(condition, 5000);
     }
+
+    private void waitForStateLoading(PaxosReplica replica) {
+        // Tick storage, network, and message bus until state loading completes
+        // We need to be more aggressive about ticking to ensure all async operations complete
+        for (int i = 0; i < 50; i++) {
+            storage.tick();
+            network.tick();
+            messageBus.tick();
+            
+            // Give some time for async operations to complete
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
     
     @Test
     void shouldPersistStateAfterPromise() throws InterruptedException {
         // Red: Write failing test first
+        
+        // FIRST: Wait for the replica's state to load before sending any messages
+        waitForStateLoading(replica);
         
         // Given: A PREPARE request
         ProposalNumber proposalNumber = new ProposalNumber(1, new NetworkAddress("127.0.0.1", 9002));
@@ -102,32 +124,34 @@ class PaxosReplicaStorageTest {
             return true; // For now, tick a few times to ensure completion
         });
         
-        // Additional ticking to ensure completion
-        for (int i = 0; i < 5; i++) {
+        // Additional ticking to ensure completion - be more aggressive
+        for (int i = 0; i < 20; i++) {
             storage.tick();
+            network.tick();
+            messageBus.tick();
         }
         
         // Then: State should be persisted and retrievable
-        // Create a new replica with the same storage
+        // Create a new replica with the same storage to test persistence
+        // BUT first, let's ensure all pending operations are complete
+        for (int i = 0; i < 30; i++) {
+            storage.tick();
+        }
+        
         PaxosReplica newReplica = new PaxosReplica(
-            "test-replica-2",
-            replicaAddress,
-            Arrays.asList(new NetworkAddress("127.0.0.1", 9002)),
-            messageBus,
-            messageCodec,
+            "test-replica-new", 
+            new NetworkAddress("127.0.0.1", 9001), 
+            List.of(new NetworkAddress("127.0.0.1", 9002), new NetworkAddress("127.0.0.1", 9003)),
+            messageBus, 
+            messageCodec, 
             storage
         );
         
-        // Wait for state to be loaded by ticking until complete
-        runUntil(() -> {
-            // The state loading is complete when storage has been ticked enough
-            return true; // For now, tick a few times to ensure completion
-        });
+        // Wait for state loading to complete
+        waitForStateLoading(newReplica);
         
-        // Additional ticking to ensure state loading completion
-        for (int i = 0; i < 5; i++) {
-            storage.tick();
-        }
+        // Register the new replica with the message bus
+        network.registerMessageHandler(messageBus);
         
         // The new replica should reject a lower proposal number due to loaded state
         ProposalNumber lowerProposal = new ProposalNumber(0, new NetworkAddress("127.0.0.1", 9003));
@@ -162,8 +186,9 @@ class PaxosReplicaStorageTest {
         
         newReplica.onMessageReceived(lowerMessage, lowerContext);
         
-        // Process the response by ticking the network and message bus
+        // Process the response by ticking storage, network and message bus
         for (int i = 0; i < 10; i++) {
+            storage.tick();  // Add storage ticking for async persistence
             network.tick();
             messageBus.tick();
         }
@@ -177,6 +202,9 @@ class PaxosReplicaStorageTest {
     @Test
     void shouldPersistStateAfterAccept() throws InterruptedException {
         // Red: Write failing test for accepted state persistence
+        
+        // FIRST: Wait for the replica's state to load before sending any messages
+        waitForStateLoading(replica);
         
         // Given: A ACCEPT request
         ProposalNumber proposalNumber = new ProposalNumber(1, new NetworkAddress("127.0.0.1", 9002));
@@ -200,32 +228,34 @@ class PaxosReplicaStorageTest {
             return true; // For now, tick a few times to ensure completion
         });
         
-        // Additional ticking to ensure completion
-        for (int i = 0; i < 5; i++) {
+        // Additional ticking to ensure completion - be more aggressive
+        for (int i = 0; i < 20; i++) {
             storage.tick();
+            network.tick();
+            messageBus.tick();
         }
         
         // Then: State should be persisted
         // Create new replica and verify it has the accepted value
+        // BUT first, let's ensure all pending operations are complete
+        for (int i = 0; i < 30; i++) {
+            storage.tick();
+        }
+        
         PaxosReplica newReplica = new PaxosReplica(
-            "test-replica-2",
-            replicaAddress,
-            Arrays.asList(new NetworkAddress("127.0.0.1", 9002)),
+            "test-replica-new",
+            new NetworkAddress("127.0.0.1", 9001),
+            List.of(new NetworkAddress("127.0.0.1", 9002), new NetworkAddress("127.0.0.1", 9003)),
             messageBus,
             messageCodec,
             storage
         );
         
-        // Wait for state to be loaded by ticking until complete
-        runUntil(() -> {
-            // The state loading is complete when storage has been ticked enough
-            return true; // For now, tick a few times to ensure completion
-        });
+        // Wait for state loading to complete
+        waitForStateLoading(newReplica);
         
-        // Additional ticking to ensure state loading completion
-        for (int i = 0; i < 5; i++) {
-            storage.tick();
-        }
+        // Register the new replica with the message bus
+        network.registerMessageHandler(messageBus);
         
         // Send a PREPARE request that should return the accepted value
         ProposalNumber higherProposal = new ProposalNumber(2, new NetworkAddress("127.0.0.1", 9003));
@@ -261,8 +291,9 @@ class PaxosReplicaStorageTest {
         
         newReplica.onMessageReceived(prepareMessage, prepareContext);
         
-        // Process the response by ticking the network and message bus
+        // Process the response by ticking storage, network and message bus
         for (int i = 0; i < 10; i++) {
+            storage.tick();  // Add storage ticking for async persistence
             network.tick();
             messageBus.tick();
         }
@@ -278,6 +309,9 @@ class PaxosReplicaStorageTest {
     @Test
     void shouldPersistGenerationCounter() throws InterruptedException {
         // Red: Test for generation counter persistence
+        
+        // FIRST: Wait for the replica's state to load before sending any messages
+        waitForStateLoading(replica);
         
         // Given: A client propose request that will increment generation
         byte[] value = "test-proposal-value".getBytes();
@@ -308,24 +342,16 @@ class PaxosReplicaStorageTest {
         // Then: Generation counter should be persisted
         // Create new replica and verify it loads the incremented generation
         PaxosReplica newReplica = new PaxosReplica(
-            "test-replica-2",
-            replicaAddress,
-            Arrays.asList(new NetworkAddress("127.0.0.1", 9002)),
+            "test-replica-new",
+            new NetworkAddress("127.0.0.1", 9001),
+            List.of(new NetworkAddress("127.0.0.1", 9002), new NetworkAddress("127.0.0.1", 9003)),
             messageBus,
             messageCodec,
             storage
         );
         
-        // Wait for state to be loaded
-        runUntil(() -> {
-            // The state loading is complete when storage has been ticked enough
-            return true; // For now, tick a few times to ensure completion
-        });
-        
-        // Additional ticking to ensure state loading completion
-        for (int i = 0; i < 5; i++) {
-            storage.tick();
-        }
+        // Wait for state loading to complete
+        waitForStateLoading(newReplica);
         
         // When the new replica makes a proposal, it should use a generation higher than the persisted one
         ProposeRequest newProposeRequest = new ProposeRequest("new-value".getBytes(), "new-correlation");
