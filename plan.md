@@ -716,6 +716,49 @@ Redesign the client-server communication architecture to eliminate the need for 
 
 ---
 
+## Phase 2E: Robust TCP Framing & Backpressure 🚧 **IN PROGRESS**
+
+> NOTE: These changes are **behavioral** – they alter the way bytes are encoded/decoded on the wire and how the system reacts to overload. All work must follow the TDD cycle.
+
+- [ ] **Length-Prefixed Framing** (NIO)
+  - [ ] Sender prepends a 4-byte big-endian length field to every encoded `Message`.
+  - [ ] Receiver first reads the length, then reads exactly that many bytes to obtain a full message frame.
+  - [ ] Partial frames are stored in the per-channel `ChannelState` without data loss.
+- [ ] **Backpressure Mechanism**
+  - [ ] Define `BACKPRESSURE_HIGH_WATERMARK` / `BACKPRESSURE_LOW_WATERMARK` constants.
+  - [ ] When the inbound queue size exceeds the high watermark, disable `OP_READ` on all channels.
+  - [ ] When the queue drains below the low watermark, re-enable `OP_READ`.
+  - [ ] Add tests that artificially flood the network and assert no OOM / starvation.
+
+### Deliverables
+- New unit tests in `network/` verifying correct framing under partial writes/reads.
+- Stress test demonstrating backpressure activation & recovery.
+
+---
+
+## Phase 2F: Connection Management Enhancements 🛠️ **TODO**
+
+- [ ] **Connection Pooling**
+  - [ ] Maintain a bounded pool (configurable N) of outbound `SocketChannel`s per peer.
+  - [ ] Reuse idle connections for new requests instead of opening new ones.
+- [ ] **Health Checks / Idle Detection**
+  - [ ] Track `lastActivityTime` in `ChannelState` (already present).
+  - [ ] Periodically close and remove connections idle for > `maxIdleMs`.
+  - [ ] Optionally send lightweight heartbeat messages to keep NAT/firewalls warm.
+- [ ] **Test Scenarios**
+  - [ ] Simulate zombie connections and verify automatic cleanup & reconnection.
+
+---
+
+## Phase 0: Production-Grade Logging 📝 **TODO**
+
+- [ ] Replace `System.out/err` with **SLF4J** API.
+- [ ] Add **Logback** as the default implementation in `build.gradle` (test/runtime).
+- [ ] Use parameterised logging (`LOG.debug("Sending to {} -> {}", src, dst)`).
+- [ ] Provide `logback-test.xml` with sensible console pattern & log-level overrides in tests.
+
+---
+
 ## Phase 21: Next Steps & Future Enhancements 🔄 **PLANNED**
 
 ### **PLANNED COMPONENTS**

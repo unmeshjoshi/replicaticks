@@ -59,16 +59,17 @@ public class NioNetwork implements Network {
     // Per-channel state management (replaces shared buffers to prevent data corruption)
     private final Map<SocketChannel, ChannelState> channelStates = new ConcurrentHashMap<>();
 
-    // Request-response correlation tracking (enables proper response routing)
-    private final Map<String, MessageContext> pendingRequests = new ConcurrentHashMap<>();
-
     // map message identity (object) to context
     private final Map<Message, MessageContext> messageContexts = new ConcurrentHashMap<>();
 
     private final Random random = new Random();
 
-    // === Metrics ===
-    private static final int MAX_INBOUND_PER_TICK = 1000; // safeguard to avoid starving other work per tick
+    private static final int DEFAULT_MAX_INBOUND_PER_TICK = 1000; // safeguard to avoid starving other work per tick
+    private final int maxInboundPerTick;
+    // === Backpressure tuning ===
+    private final int backpressureHighWatermark;
+    private final int backpressureLowWatermark;
+    private volatile boolean backpressureEnabled = false;
     private final AtomicInteger inboundConnectionCount = new AtomicInteger();
     private final AtomicInteger outboundConnectionCount = new AtomicInteger();
     private final AtomicInteger closedConnectionCount = new AtomicInteger();
@@ -151,7 +152,18 @@ public class NioNetwork implements Network {
     }
 
     public NioNetwork(MessageCodec codec) {
+        this(codec, DEFAULT_MAX_INBOUND_PER_TICK);
+    }
+
+    public NioNetwork(MessageCodec codec, int maxInboundPerTick) {
+        this(codec, maxInboundPerTick, 10_000, 5_000);
+    }
+
+    public NioNetwork(MessageCodec codec, int maxInboundPerTick, int backpressureHighWatermark, int backpressureLowWatermark) {
         this.codec = codec;
+        this.maxInboundPerTick = maxInboundPerTick;
+        this.backpressureHighWatermark = backpressureHighWatermark;
+        this.backpressureLowWatermark = backpressureLowWatermark;
         try {
             this.selector = Selector.open();
         } catch (IOException e) {
@@ -270,6 +282,18 @@ public class NioNetwork implements Network {
             // Process inbound messages and deliver to callback
             processInboundMessages();
 
+            // === Backpressure management ===
+            int queueSize = inboundMessageQueue.size();
+            if (!backpressureEnabled && queueSize > backpressureHighWatermark) {
+                toggleReadInterest(false);
+                backpressureEnabled = true;
+                System.out.println("NIO: Backpressure ENABLED - queue size: " + queueSize);
+            } else if (backpressureEnabled && queueSize < backpressureLowWatermark) {
+                toggleReadInterest(true);
+                backpressureEnabled = false;
+                System.out.println("NIO: Backpressure DISABLED - queue size: " + queueSize);
+            }
+
         } catch (IOException e) {
             throw new RuntimeException("Error in network tick", e);
         }
@@ -358,70 +382,62 @@ public class NioNetwork implements Network {
 
     private void handleRead(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
-
-        // Get or create channel state for this specific channel (prevents data corruption)
-        ChannelState channelState = channelStates.computeIfAbsent(channel, k -> new ChannelState());
+        ChannelState channelState = channelStates.get(channel);
+        if (channelState == null) {
+            System.err.println("[NIO][handleRead] No ChannelState for channel " + channel);
+            return;
+        }
         ByteBuffer readBuffer = channelState.getReadBuffer();
-        readBuffer.clear();
-
         int bytesRead = channel.read(readBuffer);
-        System.out.println("NIO: handleRead - read " + bytesRead + " bytes from channel");
-
+        System.out.println("[NIO][handleRead] Read " + bytesRead + " bytes from channel. Buffer pos=" + readBuffer.position() + ", limit=" + readBuffer.limit());
         if (bytesRead == -1) {
-            // Connection closed - comprehensive cleanup
-            System.out.println("NIO: Connection closed, performing cleanup");
+            System.out.println("[NIO][handleRead] Channel closed by peer: " + channel);
             cleanupConnection(channel);
             return;
         }
-
-        if (bytesRead > 0) {
-            channelState.updateActivity();
-            readBuffer.flip();
-
-            // Get source address for message context
-            NetworkAddress sourceAddress = getChannelSourceAddress(channel);
-
-            // Handle multiple messages in a single buffer
-            int messagesDecoded = 0;
-            while (readBuffer.hasRemaining()) {
-                // Try to decode a message from the current buffer position
-                int initialPosition = readBuffer.position();
-                byte[] data = new byte[readBuffer.remaining()];
-                readBuffer.get(data);
-
+        readBuffer.flip();
+        int messagesDecoded = 0;
+        try {
+            while (true) {
+                int posBefore = readBuffer.position();
+                int limBefore = readBuffer.limit();
+                int expectedLen = channelState.getExpectedMessageLength();
+                System.out.println("[NIO][framing] pos=" + posBefore + ", limit=" + limBefore + ", expectedMessageLength=" + expectedLen);
+                if (expectedLen == -1) {
+                    if (readBuffer.remaining() < 4) {
+                        System.out.println("[NIO][framing] Not enough bytes for length header");
+                        break;
+                    }
+                    expectedLen = readBuffer.getInt();
+                    channelState.setExpectedMessageLength(expectedLen);
+                    System.out.println("[NIO][framing] Decoded length header: " + expectedLen);
+                }
+                if (readBuffer.remaining() < expectedLen) {
+                    System.out.println("[NIO][framing] Not enough bytes for full message. Needed=" + expectedLen + ", remaining=" + readBuffer.remaining());
+                    // Only rewind if we just read the length header in this loop iteration
+                    if (posBefore + 4 == readBuffer.position()) {
+                        readBuffer.position(posBefore); // rewind to before reading length header
+                        channelState.resetExpectedMessageLength();
+                    }
+                    break;
+                }
+                byte[] msgBytes = new byte[expectedLen];
+                readBuffer.get(msgBytes);
+                channelState.resetExpectedMessageLength();
                 try {
-                    Message message = codec.decode(data, Message.class);
+                    Message message = codec.decode(msgBytes, Message.class);
+                    routeInboundMessage(new InboundMessage(message, new MessageContext(message, channel, getChannelSourceAddress(channel))));
                     messagesDecoded++;
-                    System.out.println("NIO: Decoded message #" + messagesDecoded + " from " + message.source() + " to " + message.destination() +
-                            " type=" + message.messageType());
-
-                    // Create message context to preserve source channel information
-                    MessageContext messageContext = new MessageContext(message, channel, sourceAddress);
-
-                    // Route message with context
-                    routeInboundMessage(messageContext);
-
-                    // If we successfully decoded a message, calculate how many bytes it consumed
-                    // and advance the buffer position accordingly
-                    byte[] encodedMessage = codec.encode(message);
-                    int messageLength = encodedMessage.length;
-                    readBuffer.position(initialPosition + messageLength);
-
                 } catch (Exception e) {
-                    // If we can't decode a message, it might be a partial message
-                    // Put the buffer back to the initial position and break
-                    readBuffer.position(initialPosition);
-                    System.out.println("NIO: Could not decode message (possibly partial), stopping decode loop");
+                    System.err.println("[NIO][framing] Error decoding message frame: " + e.getMessage());
+                    e.printStackTrace();
+                    System.err.println("[NIO][framing] Buffer state: pos=" + readBuffer.position() + ", limit=" + readBuffer.limit() + ", expectedLen=" + expectedLen);
                     break;
                 }
             }
-
-            System.out.println("NIO: Decoded " + messagesDecoded + " messages from " + bytesRead + " bytes");
-        }
-
-        if (bytesRead > 0) {
-            ConnectionStats cs = connectionStats.get(channel);
-            if (cs != null) cs.recordRecv(bytesRead);
+        } finally {
+            readBuffer.compact();
+            System.out.println("[NIO][handleRead] Decoded " + messagesDecoded + " messages from " + bytesRead + " bytes");
         }
     }
 
@@ -435,49 +451,41 @@ public class NioNetwork implements Network {
             return;
         }
 
-        // Get pending data from attachment
-        ByteBuffer buffer = (ByteBuffer) key.attachment();
-        if (buffer != null) {
+        // Process pending writes from the queue
+        while (channelState.hasPendingWrites()) {
+            ByteBuffer buffer = channelState.getPendingWrites().peek(); // peek to keep it if partial
+            if (buffer == null) break;
+            
             int bytesWritten = channel.write(buffer);
             channelState.updateActivity();
 
             System.out.println("NIO: handleWrite - wrote " + bytesWritten + " bytes, remaining: " + buffer.remaining());
 
             if (!buffer.hasRemaining()) {
-                // Finished writing, switch back to read mode
-                key.interestOps(SelectionKey.OP_READ);
-                key.attach(null);
-
-                // Continue processing any remaining queued messages for this destination
-                NetworkAddress destination = findDestinationForChannel(channel);
-                if (destination != null) {
-                    sendQueuedMessages(destination, channel);
-                }
+                // Finished writing this buffer, remove it from queue
+                channelState.getPendingWrites().poll();
+                System.out.println("NIO: Completed write of buffer");
+            } else {
+                // Still have data to write, keep it in queue for next time
+                System.out.println("NIO: Partial write, keeping buffer in queue");
+                break; // Stop processing more buffers to avoid starvation
             }
-        } else {
-            // Check if there are pending writes in the channel state
-            if (channelState.hasPendingWrites()) {
-                ByteBuffer pendingBuffer = channelState.getPendingWrites().poll();
-                if (pendingBuffer != null) {
-                    int bytesWritten = channel.write(pendingBuffer);
-                    channelState.updateActivity();
-
-                    System.out.println("NIO: handleWrite - wrote pending " + bytesWritten + " bytes, remaining: " + pendingBuffer.remaining());
-
-                    if (pendingBuffer.hasRemaining()) {
-                        // Still have data to write, keep it for next time
-                        key.attach(pendingBuffer);
-                    } else if (!channelState.hasPendingWrites()) {
-                        // No more pending writes, switch back to read mode
-                        key.interestOps(SelectionKey.OP_READ);
-                    }
-                    ConnectionStats cs = connectionStats.get(channel);
-                    if (cs != null) cs.recordSent(bytesWritten);
-                }
-            }
+            
+            ConnectionStats cs = connectionStats.get(channel);
+            if (cs != null) cs.recordSent(bytesWritten);
         }
 
-        // recording handled in branches above
+        // If no more pending writes, switch back to read mode
+        if (!channelState.hasPendingWrites()) {
+            key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+            System.out.println("NIO: No more pending writes, disabled write interest");
+
+            // Continue processing any remaining queued messages for this destination
+            NetworkAddress destination = findDestinationForChannel(channel);
+            if (destination != null) {
+                sendQueuedMessages(destination, channel);
+            }
+        }
     }
 
     private void processOutboundMessages() {
@@ -535,10 +543,23 @@ public class NioNetwork implements Network {
 
         // Drain up to MAX_INBOUND_PER_TICK messages from the queue in one shot to minimise contention
         List<InboundMessage> batch = new ArrayList<>();
-        inboundMessageQueue.drainTo(batch, MAX_INBOUND_PER_TICK);
+        inboundMessageQueue.drainTo(batch, maxInboundPerTick);
 
         for (InboundMessage im : batch) {
             deliverInbound(im);
+        }
+    }
+
+    private void toggleReadInterest(boolean enable) {
+        for (SelectionKey key : selector.keys()) {
+            if (key.channel() instanceof SocketChannel) {
+                int ops = key.interestOps();
+                if (enable) {
+                    key.interestOps(ops | SelectionKey.OP_READ);
+                } else {
+                    key.interestOps(ops & ~SelectionKey.OP_READ);
+                }
+            }
         }
     }
 
@@ -575,19 +596,22 @@ public class NioNetwork implements Network {
                 (channel != null ? channel.isConnected() : "null") + ")");
 
         if (channel != null && channel.isConnected()) {
-            byte[] data = codec.encode(message);
-            ByteBuffer buffer = ByteBuffer.wrap(data);
-
+            ByteBuffer buffer = toFramedBuffer(message);
+            
             int bytesWritten = channel.write(buffer);
             System.out.println("NIO: Wrote " + bytesWritten + " bytes immediately, remaining=" + buffer.remaining());
 
             if (buffer.hasRemaining()) {
-                // Couldn't write everything, register for write events
-                SelectionKey key = channel.keyFor(selector);
-                if (key != null) {
-                    key.interestOps(SelectionKey.OP_WRITE);
-                    key.attach(buffer);
-                    System.out.println("NIO: Registered for write events, buffer attached");
+                // Couldn't write everything, add to pending writes queue
+                ChannelState channelState = channelStates.get(channel);
+                if (channelState != null) {
+                    channelState.addPendingWrite(buffer);
+                    // Register for write events if not already registered
+                    SelectionKey key = channel.keyFor(selector);
+                    if (key != null) {
+                        key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+                        System.out.println("NIO: Registered for write events, buffer queued");
+                    }
                 }
             } else {
                 System.out.println("NIO: Message sent completely");
@@ -600,6 +624,15 @@ public class NioNetwork implements Network {
             System.out.println("NIO: Message queued for later delivery, pending count for " + destination +
                     ": " + pendingMessages.get(destination).size());
         }
+    }
+
+    private ByteBuffer toFramedBuffer(Message message) {
+        byte[] payload = codec.encode(message);
+        ByteBuffer buffer = ByteBuffer.allocate(4 + payload.length);
+        buffer.putInt(payload.length);
+        buffer.put(payload);
+        buffer.flip();
+        return buffer;
     }
 
     private SocketChannel getOrCreateClientChannel(NetworkAddress address) throws IOException {
@@ -694,22 +727,24 @@ public class NioNetwork implements Network {
                 System.out.println("NIO: Sending queued message " + (++sentCount) + " from " +
                         message.source() + " to " + message.destination());
 
-                // Encode and send the message directly
-                byte[] data = codec.encode(message);
-                ByteBuffer buffer = ByteBuffer.wrap(data);
+                ByteBuffer buffer = toFramedBuffer(message);
 
                 int bytesWritten = channel.write(buffer);
                 System.out.println("NIO: Wrote " + bytesWritten + " bytes, remaining=" + buffer.remaining());
 
                 if (buffer.hasRemaining()) {
-                    // Couldn't write everything, register for write events and attach the buffer
-                    SelectionKey key = channel.keyFor(selector);
-                    if (key != null) {
-                        key.interestOps(SelectionKey.OP_WRITE);
-                        key.attach(buffer);
-                        System.out.println("NIO: Partial write, registered for write events");
-                        break; // Stop processing more messages until this one is sent
+                    // Couldn't write everything, add to pending writes queue
+                    ChannelState channelState = channelStates.get(channel);
+                    if (channelState != null) {
+                        channelState.addPendingWrite(buffer);
+                        // Register for write events if not already registered
+                        SelectionKey key = channel.keyFor(selector);
+                        if (key != null) {
+                            key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+                            System.out.println("NIO: Partial write, registered for write events");
+                        }
                     }
+                    break; // Stop processing more messages until this one is sent
                 }
             }
 
@@ -901,8 +936,9 @@ public class NioNetwork implements Network {
      * Routes inbound messages with preserved context information.
      * This enables proper response routing back to the source channel.
      */
-    private void routeInboundMessage(MessageContext messageContext) {
-        Message message = messageContext.getMessage();
+    private void routeInboundMessage(InboundMessage im) {
+        Message message = im.message();
+        MessageContext messageContext = im.messageContext();
 
         System.out.println("NIO: routeInboundMessage called for " + message.messageType() + " from " +
                 message.source() + " to " + message.destination());
@@ -913,7 +949,6 @@ public class NioNetwork implements Network {
                 System.out.println("NIO: Message is a request, storing context");
                 String correlationId = generateCorrelationId(message);
                 messageContext.setCorrelationId(correlationId);
-                pendingRequests.put(correlationId, messageContext);
                 System.out.println("NIO: Stored request context for correlation: " + correlationId +
                         ", context: " + messageContext);
             } else {
@@ -921,7 +956,7 @@ public class NioNetwork implements Network {
             }
 
             System.out.println("NIO: Creating queue for destination: " + message.destination());
-            inboundMessageQueue.offer(new InboundMessage(message, messageContext));
+            inboundMessageQueue.offer(im);
             System.out.println("NIO: Message added to receive queue for " + message.destination() +
                     ", queue size: " + inboundMessageQueue.size() + ", context: " + messageContext);
         } catch (Exception e) {
@@ -962,9 +997,6 @@ public class NioNetwork implements Network {
             }
             channelStates.clear();
 
-            // Clean up pending requests
-            pendingRequests.clear();
-
             // Close all server channels
             for (ServerSocketChannel channel : serverChannels.values()) {
                 try {
@@ -990,9 +1022,7 @@ public class NioNetwork implements Network {
         if (!channel.isOpen()) {
             throw new IllegalStateException("Channel is closed: " + channel);
         }
-        // Encode immediately (small messages) – copies unavoidable for now
-        byte[] bytes = codec.encode(message);
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        ByteBuffer buffer = toFramedBuffer(message);
         ChannelState state = channelStates.computeIfAbsent(channel, c -> new ChannelState());
         state.addPendingWrite(buffer);
 

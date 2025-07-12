@@ -19,6 +19,7 @@ public class ChannelState {
     private volatile long lastActivityTime;
     private volatile boolean hasPartialMessage;
     private byte[] partialMessageBytes;
+    private int expectedMessageLength = -1; // -1 means we are expecting to read the 4-byte length header
     
     public ChannelState(int bufferSize) {
         this.readBuffer = ByteBuffer.allocate(bufferSize);
@@ -80,6 +81,18 @@ public class ChannelState {
     
     public boolean hasPendingWrites() {
         return !pendingWrites.isEmpty();
+    }
+    
+    public int getExpectedMessageLength() {
+        return expectedMessageLength;
+    }
+
+    public void setExpectedMessageLength(int expectedMessageLength) {
+        this.expectedMessageLength = expectedMessageLength;
+    }
+
+    public void resetExpectedMessageLength() {
+        this.expectedMessageLength = -1;
     }
     
     /**
