@@ -1,166 +1,113 @@
 package replicated.messaging;
 
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
- * Message types for the replicated key-value store.
- *
+ * MessageType is a Netty–style extensible constant that replaces the former enum.
+ * <p>
+ * It implements {@link MessageTypeInterface} so that external code can rely on the
+ * minimal contract (id, category, timeout).  A global registry guarantees that
+ * every id maps to a single canonical instance, enabling equality by reference.
  */
-public enum MessageType {
-    
-    /** Client request to get a value by key */
-    CLIENT_GET_REQUEST(Category.CLIENT_REQUEST),
-    /** Client request to set a key-value pair */
-    CLIENT_SET_REQUEST(Category.CLIENT_REQUEST),
-    
-    /** Response to client GET requests */
-    CLIENT_GET_RESPONSE(Category.CLIENT_RESPONSE),
-    /** Response to client SET requests */
-    CLIENT_SET_RESPONSE(Category.CLIENT_RESPONSE),
+public final class MessageType implements MessageTypeInterface {
 
-    // === INTERNAL MESSAGE TYPES (Server-to-Server) ===
-        /** Internal request to get a value from a replica */
-    INTERNAL_GET_REQUEST(Category.INTERNAL_REQUEST),
-    /** Internal request to set a value on a replica */
-    INTERNAL_SET_REQUEST(Category.INTERNAL_REQUEST),
-     /** Response to internal GET request */
-    INTERNAL_GET_RESPONSE(Category.INTERNAL_RESPONSE),
-    /** Response to internal SET request */
-    INTERNAL_SET_RESPONSE(Category.INTERNAL_RESPONSE),
-    
-    // === SYSTEM MESSAGE TYPES ===
-    
-    /** Heartbeat/ping message */
-    PING_REQUEST(Category.SYSTEM_REQUEST),
-    
-    /** Response to ping */
-    PING_RESPONSE(Category.SYSTEM_RESPONSE),
-    
-    /** Generic failure response */
-    FAILURE_RESPONSE(Category.SYSTEM_RESPONSE),
-    
-    // === PAXOS MESSAGE TYPES ===
-    
-    /** Client request to propose a value via Paxos */
-    PAXOS_PROPOSE_REQUEST(Category.CLIENT_REQUEST),
-    /** Response to client propose request */
-    PAXOS_PROPOSE_RESPONSE(Category.CLIENT_RESPONSE),
-    
-    /** Paxos Phase 1a: Prepare request */
-    PAXOS_PREPARE_REQUEST(Category.INTERNAL_REQUEST),
-    /** Paxos Phase 1b: Promise response */
-    PAXOS_PROMISE_RESPONSE(Category.INTERNAL_RESPONSE),
-    
-    /** Paxos Phase 2a: Accept request */
-    PAXOS_ACCEPT_REQUEST(Category.INTERNAL_REQUEST),
-    /** Paxos Phase 2b: Accepted response */
-    PAXOS_ACCEPTED_RESPONSE(Category.INTERNAL_RESPONSE),
-    
-    /** Paxos commit notification */
-    PAXOS_COMMIT_REQUEST(Category.INTERNAL_REQUEST);
-    
-    // === ENUM FIELDS ===
-    
-    private final Category category;
+    // ===== Static registry (id → instance) ==================================
+    private static final Map<String, MessageType> REGISTRY = new ConcurrentHashMap<>();
 
-    // === CONSTRUCTORS ===
-    
-    MessageType(Category category) {
-        this.category = category;
-    }
-    
-    // === PUBLIC METHODS ===
-    
-    /**
-     * Returns true if this message type represents a response.
-     * 
-     * This method derives the response status from the message category:
-     * - CLIENT_RESPONSE, INTERNAL_RESPONSE, SYSTEM_RESPONSE → true
-     * - CLIENT_REQUEST, INTERNAL_REQUEST, SYSTEM_REQUEST → false
-     * 
-     * @return true if this is a response message type
-     */
-    public boolean isResponse() {
-        return category.isResponse();
-    }
-    
-    /**
-     * Returns true if this message type represents a request.
-     * 
-     * @return true if this is a request message type
-     */
-    public boolean isRequest() {
-        return !isResponse();
+    private static MessageType register(MessageType type) {
+        MessageType existing = REGISTRY.putIfAbsent(type.id, type);
+        return existing == null ? type : existing; // return canonical instance
     }
 
-    public Category getCategory() {
-        return category;
+    /** Look up an existing MessageType by id (or null if not registered). */
+    public static MessageType valueOf(String id) {
+        return REGISTRY.get(id);
     }
-    
+
     /**
-     * @return true if this is a client request or response
+     * Factory method to obtain an existing MessageType by id or register a new one
+     * if it is not present yet.  This allows external libraries to define custom
+     * message types at runtime (Netty-style extensibility).
      */
-    public boolean isClientMessage() {
-        return category == Category.CLIENT_REQUEST || category == Category.CLIENT_RESPONSE;
+    public static MessageType valueOf(String id, MessageTypeInterface.Category category, long timeoutMs) {
+        return REGISTRY.computeIfAbsent(id, k -> new MessageType(k, category, timeoutMs));
     }
-    
+
+    // ===== Pre-defined (library) constants ==================================
+    private static final long DEFAULT_CLIENT_TIMEOUT = 5_000L;
+    private static final long DEFAULT_INTERNAL_TIMEOUT = 3_000L;
+    private static final long DEFAULT_SYSTEM_TIMEOUT = 1_000L;
+
+    // --- Client messages -----------------------------------------------------
+    public static final MessageType CLIENT_GET_REQUEST  = register(new MessageType("CLIENT_GET_REQUEST",  MessageTypeInterface.Category.CLIENT_REQUEST,  DEFAULT_CLIENT_TIMEOUT));
+    public static final MessageType CLIENT_SET_REQUEST  = register(new MessageType("CLIENT_SET_REQUEST",  MessageTypeInterface.Category.CLIENT_REQUEST,  DEFAULT_CLIENT_TIMEOUT));
+    public static final MessageType CLIENT_GET_RESPONSE = register(new MessageType("CLIENT_GET_RESPONSE", MessageTypeInterface.Category.CLIENT_RESPONSE,  0));
+    public static final MessageType CLIENT_SET_RESPONSE = register(new MessageType("CLIENT_SET_RESPONSE", MessageTypeInterface.Category.CLIENT_RESPONSE,  0));
+
+    // --- Internal replica messages -----------------------------------------
+    public static final MessageType INTERNAL_GET_REQUEST   = register(new MessageType("INTERNAL_GET_REQUEST",  MessageTypeInterface.Category.INTERNAL_REQUEST,  DEFAULT_INTERNAL_TIMEOUT));
+    public static final MessageType INTERNAL_SET_REQUEST   = register(new MessageType("INTERNAL_SET_REQUEST",  MessageTypeInterface.Category.INTERNAL_REQUEST,  DEFAULT_INTERNAL_TIMEOUT));
+    public static final MessageType INTERNAL_GET_RESPONSE  = register(new MessageType("INTERNAL_GET_RESPONSE", MessageTypeInterface.Category.INTERNAL_RESPONSE, 0));
+    public static final MessageType INTERNAL_SET_RESPONSE  = register(new MessageType("INTERNAL_SET_RESPONSE", MessageTypeInterface.Category.INTERNAL_RESPONSE, 0));
+
+    // --- System messages ----------------------------------------------------
+    public static final MessageType PING_REQUEST    = register(new MessageType("PING_REQUEST",    MessageTypeInterface.Category.SYSTEM_REQUEST,  DEFAULT_SYSTEM_TIMEOUT));
+    public static final MessageType PING_RESPONSE   = register(new MessageType("PING_RESPONSE",   MessageTypeInterface.Category.SYSTEM_RESPONSE, 0));
+    public static final MessageType FAILURE_RESPONSE= register(new MessageType("FAILURE_RESPONSE",MessageTypeInterface.Category.SYSTEM_RESPONSE, 0));
+
+    // --- Paxos messages -----------------------------------------------------
+    public static final MessageType PAXOS_PROPOSE_REQUEST  = register(new MessageType("PAXOS_PROPOSE_REQUEST",  MessageTypeInterface.Category.CLIENT_REQUEST,   DEFAULT_CLIENT_TIMEOUT));
+    public static final MessageType PAXOS_PROPOSE_RESPONSE = register(new MessageType("PAXOS_PROPOSE_RESPONSE", MessageTypeInterface.Category.CLIENT_RESPONSE,  0));
+    public static final MessageType PAXOS_PREPARE_REQUEST  = register(new MessageType("PAXOS_PREPARE_REQUEST",  MessageTypeInterface.Category.INTERNAL_REQUEST, DEFAULT_INTERNAL_TIMEOUT));
+    public static final MessageType PAXOS_PROMISE_RESPONSE = register(new MessageType("PAXOS_PROMISE_RESPONSE", MessageTypeInterface.Category.INTERNAL_RESPONSE, 0));
+    public static final MessageType PAXOS_ACCEPT_REQUEST   = register(new MessageType("PAXOS_ACCEPT_REQUEST",   MessageTypeInterface.Category.INTERNAL_REQUEST, DEFAULT_INTERNAL_TIMEOUT));
+    public static final MessageType PAXOS_ACCEPTED_RESPONSE= register(new MessageType("PAXOS_ACCEPTED_RESPONSE",MessageTypeInterface.Category.INTERNAL_RESPONSE, 0));
+    public static final MessageType PAXOS_COMMIT_REQUEST   = register(new MessageType("PAXOS_COMMIT_REQUEST",   MessageTypeInterface.Category.INTERNAL_REQUEST, DEFAULT_INTERNAL_TIMEOUT));
+
+    // ===== Instance fields ==================================================
+    private final String id;
+    private final MessageTypeInterface.Category category;
+    private final long timeoutMs;
+
+    // ===== Constructors ======================================================
+    private MessageType(String id, MessageTypeInterface.Category category, long timeoutMs) {
+        this.id = Objects.requireNonNull(id, "id");
+        this.category = Objects.requireNonNull(category, "category");
+        this.timeoutMs = timeoutMs;
+    }
+
+    // ===== MessageTypeInterface implementation ==============================
+    @Override public String getId() { return id; }
+    @Override public MessageTypeInterface.Category getCategory() { return category; }
+    @Override public long getTimeoutMs() { return timeoutMs; }
+
+    // ===== Convenience =======================================================
+    public boolean isResponse() { return category.isResponse(); }
+    public boolean isRequest()  { return !isResponse(); }
+    public boolean isClientMessage()   { return category == MessageTypeInterface.Category.CLIENT_REQUEST   || category == MessageTypeInterface.Category.CLIENT_RESPONSE; }
+    public boolean isInternalMessage() { return category == MessageTypeInterface.Category.INTERNAL_REQUEST || category == MessageTypeInterface.Category.INTERNAL_RESPONSE; }
+    public boolean isSystemMessage()   { return category == MessageTypeInterface.Category.SYSTEM_REQUEST   || category == MessageTypeInterface.Category.SYSTEM_RESPONSE; }
+
+    // ===== Equality & hashing ===============================================
+    @Override public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof MessageType)) return false;
+        MessageType other = (MessageType) o;
+        return id.equals(other.id);
+    }
+
+    @Override public int hashCode() { return id.hashCode(); }
+
+    @Override public String toString() { return id; }
+
     /**
-     * Returns true if this is an internal server-to-server message.
-     * @return true if this is an internal request or response
+     * Compatibility helper mimicking the enum-generated {@code values()} method.
+     * It returns all registered message types; the order is unspecified.
      */
-    public boolean isInternalMessage() {
-        return category == Category.INTERNAL_REQUEST || category == Category.INTERNAL_RESPONSE;
+    public static MessageType[] values() {
+        return REGISTRY.values().toArray(new MessageType[0]);
     }
-    
-    /**
-     * Returns true if this is a system message (ping, failure, etc.).
-     * 
-     * @return true if this is a system message
-     */
-    public boolean isSystemMessage() {
-        return category == Category.SYSTEM_REQUEST || category == Category.SYSTEM_RESPONSE;
-    }
-    
-    // === INNER CLASSES ===
-    
-    /**
-     * Categories for message types, similar to Cassandra's Stage classification.
-     */
-    public enum Category {
-        /** Client-originated requests */
-        CLIENT_REQUEST,
-        
-        /** Responses to client requests */
-        CLIENT_RESPONSE,
-        
-        /** Internal server-to-server requests */
-        INTERNAL_REQUEST,
-        
-        /** Responses to internal requests */
-        INTERNAL_RESPONSE,
-        
-        /** System requests (ping, health checks, etc.) */
-        SYSTEM_REQUEST,
-        
-        /** System responses */
-        SYSTEM_RESPONSE;
-        
-        /**
-         * Returns true if this category represents response messages.
-         * 
-         * @return true if this is a response category
-         */
-        public boolean isResponse() {
-            return this == CLIENT_RESPONSE || 
-                   this == INTERNAL_RESPONSE || 
-                   this == SYSTEM_RESPONSE;
-        }
-        
-        /**
-         * Returns true if this category represents request messages.
-         * 
-         * @return true if this is a request category
-         */
-        public boolean isRequest() {
-            return !isResponse();
-        }
-    }
+
 }

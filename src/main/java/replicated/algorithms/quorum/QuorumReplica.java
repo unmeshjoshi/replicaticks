@@ -42,17 +42,20 @@ public final class QuorumReplica extends Replica {
             return;
         }
 
-        switch (message.messageType()) {
-            case CLIENT_GET_REQUEST -> handleClientGetRequest(message, ctx);
-            case CLIENT_SET_REQUEST -> handleClientSetRequest(message, ctx);
-            case INTERNAL_GET_REQUEST -> handleInternalGetRequest(message);
-            case INTERNAL_SET_REQUEST -> handleInternalSetRequest(message);
-            case INTERNAL_GET_RESPONSE -> handleInternalGetResponse(message);
-            case INTERNAL_SET_RESPONSE -> handleInternalSetResponse(message);
-            default -> {
-                // Unknown message type, ignore
-            }
-        }
+        MessageType mt = message.messageType();
+        if (mt == MessageType.CLIENT_GET_REQUEST) {
+            handleClientGetRequest(message, ctx);
+        } else if (mt == MessageType.CLIENT_SET_REQUEST) {
+            handleClientSetRequest(message, ctx);
+        } else if (mt == MessageType.INTERNAL_GET_REQUEST) {
+            handleInternalGetRequest(message);
+        } else if (mt == MessageType.INTERNAL_SET_REQUEST) {
+            handleInternalSetRequest(message);
+        } else if (mt == MessageType.INTERNAL_GET_RESPONSE) {
+            handleInternalGetResponse(message);
+        } else if (mt == MessageType.INTERNAL_SET_RESPONSE) {
+            handleInternalSetResponse(message);
+        } // else ignore unknown
     }
 
 

@@ -1,0 +1,16 @@
+
+// --- Custom Run Tasks -------------------------------------------------------
+
+tasks.register('runEchoServer', JavaExec) {
+    group = 'application'
+    description = 'Runs the echo server'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'example.EchoServer'
+}
+
+tasks.register('runEchoClient', JavaExec) {
+    group = 'application'
+    description = 'Runs the echo client'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'example.EchoClient'
+} 

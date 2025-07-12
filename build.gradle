@@ -1,7 +1,11 @@
 plugins {
     id 'java'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'maven-publish'
 }
+
+group = 'io.github.unmeshjoshi'
+version = '0.1.0-alpha.1'
 
 repositories {
     jcenter()
@@ -20,7 +24,7 @@ dependencies {
 // Configure the shadow plugin to create a fat JAR
 shadowJar {
     archiveBaseName.set('replicated-server')
-    archiveClassifier.set('')
+    archiveClassifier.set('all')
     archiveVersion.set('')
     
     // Merge service files (important for RocksDB)
@@ -46,7 +50,7 @@ task shadowClientJar(type: com.github.jengelman.gradle.plugins.shadow.tasks.Shad
     configurations = [project.configurations.runtimeClasspath]
     
     archiveBaseName.set('replicated-client')
-    archiveClassifier.set('')
+    archiveClassifier.set('all')
     archiveVersion.set('')
     
     // Merge service files
@@ -107,5 +111,20 @@ task runCluster(type: Exec) {
                 println "Cleanup script failed: ${e.message}"
             }
         }
+    }
+}
+
+// --- Publishing -------------------------------------------------------------
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            groupId = project.group
+            artifactId = 'replicaticks'
+            version = project.version
+        }
+    }
+    repositories {
+        mavenLocal()
     }
 }

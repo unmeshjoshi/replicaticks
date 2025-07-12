@@ -68,28 +68,21 @@ public final class PaxosReplica extends Replica {
         }
         
         try {
-            switch (message.messageType()) {
-                case PAXOS_PROPOSE_REQUEST:
-                    handleProposeRequest(message, context);
-                    break;
-                case PAXOS_PREPARE_REQUEST:
-                    handlePrepareRequest(message, context);
-                    break;
-                case PAXOS_PROMISE_RESPONSE:
-                    handlePromiseResponse(message);
-                    break;
-                case PAXOS_ACCEPT_REQUEST:
-                    handleAcceptRequest(message, context);
-                    break;
-                case PAXOS_ACCEPTED_RESPONSE:
-                    handleAcceptedResponse(message);
-                    break;
-                case PAXOS_COMMIT_REQUEST:
-                    handleCommitRequest(message, context);
-                    break;
-                default:
-                    // Log unhandled message types
-                    System.out.println("PaxosReplica: Unhandled message type: " + message.messageType());
+            MessageType mt = message.messageType();
+            if (mt == MessageType.PAXOS_PROPOSE_REQUEST) {
+                handleProposeRequest(message, context);
+            } else if (mt == MessageType.PAXOS_PREPARE_REQUEST) {
+                handlePrepareRequest(message, context);
+            } else if (mt == MessageType.PAXOS_PROMISE_RESPONSE) {
+                handlePromiseResponse(message);
+            } else if (mt == MessageType.PAXOS_ACCEPT_REQUEST) {
+                handleAcceptRequest(message, context);
+            } else if (mt == MessageType.PAXOS_ACCEPTED_RESPONSE) {
+                handleAcceptedResponse(message);
+            } else if (mt == MessageType.PAXOS_COMMIT_REQUEST) {
+                handleCommitRequest(message, context);
+            } else {
+                System.out.println("PaxosReplica: Unhandled message type: " + mt);
             }
         } catch (Exception e) {
             // Log error and send failure response if applicable

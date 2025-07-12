@@ -255,3 +255,35 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Project Plan](plan.md)
 
 --- 
+
+## Using as a Library
+
+### Dependency coordinates (Maven Local)
+
+Until the project is published to a remote repository you can depend on the locally-installed artifact:
+
+```gradle
+repositories {
+    mavenLocal()
+}
+
+dependencies {
+    implementation 'io.github.unmeshjoshi:replicaticks:0.1.0-alpha.1'
+}
+```
+
+### Extending `MessageType`
+
+`MessageType` is an extensible constant class (similar to Netty’s `HttpMethod`).  You can declare your own message types in client code like so:
+
+```java
+public final class RaftMessageTypes {
+    public static final MessageType RAFT_APPEND_ENTRIES = MessageType.valueOf(
+            "RAFT_APPEND_ENTRIES",
+            MessageTypeInterface.Category.INTERNAL_REQUEST,
+            5_000 // timeout in ms
+    );
+}
+```
+
+Registering multiple custom types is safe; the global registry guarantees singleton instances, so you can compare them with `==` just like traditional enums. 
