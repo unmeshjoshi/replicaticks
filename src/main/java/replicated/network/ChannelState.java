@@ -1,113 +1,86 @@
 package replicated.network;
 
-import java.nio.ByteBuffer;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * Per-channel state management for NIO operations.
+ * Per-channel state management for NIO operations using ReadFrame and WriteFrame abstractions.
  * 
- * This class prevents data corruption by providing dedicated buffers
- * for each socket channel, following production patterns from Kafka,
- * Cassandra, and other distributed systems.
+ * This class provides clean abstractions for reading and writing framed messages,
+ * separating concerns and making the code more maintainable.
  */
 public class ChannelState {
     
-    private final ByteBuffer readBuffer;
-    private final ByteBuffer writeBuffer;
-    private final Queue<ByteBuffer> pendingWrites;
+    private final ReadFrame readFrame;
+    private final Queue<WriteFrame> pendingWrites;
     private volatile long lastActivityTime;
-    private volatile boolean hasPartialMessage;
-    private byte[] partialMessageBytes;
-    private int expectedMessageLength = -1; // -1 means we are expecting to read the 4-byte length header
-    
-    public ChannelState(int bufferSize) {
-        this.readBuffer = ByteBuffer.allocate(bufferSize);
-        this.writeBuffer = ByteBuffer.allocate(bufferSize);
-        this.pendingWrites = new ConcurrentLinkedQueue<>();
-        this.lastActivityTime = System.currentTimeMillis();
-        this.hasPartialMessage = false;
-    }
     
     public ChannelState() {
-        this(8192); // Default 8KB buffers
+        this.readFrame = new ReadFrame();
+        this.pendingWrites = new ConcurrentLinkedQueue<>();
+        this.lastActivityTime = System.currentTimeMillis();
     }
     
-    public ByteBuffer getReadBuffer() {
-        return readBuffer;
+    /**
+     * Gets the read frame for this channel.
+     */
+    public ReadFrame getReadFrame() {
+        return readFrame;
     }
     
-    public ByteBuffer getWriteBuffer() {
-        return writeBuffer;
-    }
-    
-    public Queue<ByteBuffer> getPendingWrites() {
+    /**
+     * Gets the queue of pending write frames.
+     */
+    public Queue<WriteFrame> getPendingWrites() {
         return pendingWrites;
     }
     
+    /**
+     * Updates the last activity time for this channel.
+     */
     public void updateActivity() {
         this.lastActivityTime = System.currentTimeMillis();
     }
     
+    /**
+     * Gets the last activity time for this channel.
+     */
     public long getLastActivityTime() {
         return lastActivityTime;
     }
     
-    public boolean hasPartialMessage() {
-        return hasPartialMessage;
-    }
-    
-    public void setPartialMessage(byte[] partialBytes) {
-        this.partialMessageBytes = partialBytes;
-        this.hasPartialMessage = (partialBytes != null && partialBytes.length > 0);
-    }
-    
-    public byte[] getPartialMessageBytes() {
-        return partialMessageBytes;
-    }
-    
-    public void clearPartialMessage() {
-        this.partialMessageBytes = null;
-        this.hasPartialMessage = false;
-    }
-    
-    public boolean isIdle(long maxIdleTimeMs) {
-        return System.currentTimeMillis() - lastActivityTime > maxIdleTimeMs;
-    }
-    
-    public void addPendingWrite(ByteBuffer buffer) {
-        pendingWrites.offer(buffer);
-    }
-    
+    /**
+     * Checks if this channel has pending writes.
+     */
     public boolean hasPendingWrites() {
         return !pendingWrites.isEmpty();
     }
     
-    public int getExpectedMessageLength() {
-        return expectedMessageLength;
-    }
-
-    public void setExpectedMessageLength(int expectedMessageLength) {
-        this.expectedMessageLength = expectedMessageLength;
-    }
-
-    public void resetExpectedMessageLength() {
-        this.expectedMessageLength = -1;
+    /**
+     * Adds a write frame to the pending writes queue.
+     */
+    public void addPendingWrite(WriteFrame writeFrame) {
+        pendingWrites.offer(writeFrame);
     }
     
     /**
-     * Cleanup resources associated with this channel state.
+     * Checks if this channel is idle for the given duration.
+     */
+    public boolean isIdle(long maxIdleTimeMs) {
+        return System.currentTimeMillis() - lastActivityTime > maxIdleTimeMs;
+    }
+    
+    /**
+     * Cleans up resources associated with this channel state.
      */
     public void cleanup() {
-        readBuffer.clear();
-        writeBuffer.clear();
+        readFrame.reset();
         pendingWrites.clear();
-        clearPartialMessage();
     }
     
     @Override
     public String toString() {
-        return String.format("ChannelState{lastActivity=%d, pendingWrites=%d, hasPartial=%s}", 
-                           lastActivityTime, pendingWrites.size(), hasPartialMessage);
+        return String.format("ChannelState{lastActivity=%d, pendingWrites=%d, readFrame=%s}", 
+                           lastActivityTime, pendingWrites.size(), readFrame);
     }
 } 

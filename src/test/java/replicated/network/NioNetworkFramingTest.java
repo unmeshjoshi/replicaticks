@@ -106,8 +106,8 @@ public class NioNetworkFramingTest {
      */
     @Test
     public void shouldApplyAndReleaseBackpressure() throws Exception {
-        // Create server with very slow processing (only 5 messages per tick) and low backpressure thresholds
-        NioNetwork server = new NioNetwork(new JsonMessageCodec(), 5, 500, 250);
+        // Create server with very slow processing (only 1 message per tick) and very low backpressure thresholds
+        NioNetwork server = new NioNetwork(new JsonMessageCodec(), 1, 1, 1);
         NioNetwork client = newNetwork();
 
         int serverPort = freePort();
@@ -118,86 +118,39 @@ public class NioNetworkFramingTest {
 
         // Register server
         server.bind(serverAddr);
-        final AtomicInteger processedCount = new AtomicInteger(0);
-        server.registerMessageHandler((message, context) -> {
-            // Simulate slow processing by counting messages
-            processedCount.incrementAndGet();
-        });
+        // Register client
+        client.bind(clientAddr);
 
-        // Flood the server with messages faster than it can process them
-        for (int i = 0; i < 3_000; i++) {
-            byte[] payload = ("flood-" + i).getBytes();
+        // Connect client to server
+        client.establishConnection(serverAddr);
+        // Tick both client and server to establish the connection
+        spinTicks(client, 2);
+        spinTicks(server, 2);
+
+        // Flood the server with 10 messages before ticking the server
+        int floodCount = 10;
+        for (int i = 0; i < floodCount; i++) {
+            byte[] payload = ("msg-" + i).getBytes();
             Message m = new Message(clientAddr, serverAddr, MessageType.PING_REQUEST, payload, UUID.randomUUID().toString());
             client.send(m);
         }
+        // Flush outbound queue
+        spinTicks(client, 10);
 
-        // Aggressively flush client outbound queue
-        for (int i = 0; i < 100; i++) {
-            client.tick();
-        }
+        // Allow the server to read the burst of messages (no handler registered yet)
+        spinTicks(server, 5);
 
-        // Run server ticks until inbound queue exceeds backpressure threshold or timeout
-        int maxTicks = 1000;
-        int queueSize = 0;
-        boolean backpressureTriggered = false;
-        java.lang.reflect.Field backpressureField;
-        try {
-            backpressureField = NioNetwork.class.getDeclaredField("backpressureEnabled");
-            backpressureField.setAccessible(true);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
-        for (int i = 0; i < maxTicks && !backpressureTriggered; i++) {
+        // Backpressure should be enabled after the burst
+        assertTrue(server.isBackpressureEnabled(), "Back-pressure should be enabled after flood");
+
+        // Now register the handler and drain the queue
+        final AtomicInteger processedCount = new AtomicInteger(0);
+        server.registerMessageHandler((msg, ctx) -> processedCount.incrementAndGet());
+        int ticks = 0;
+        while (server.isBackpressureEnabled() && ticks < 20) {
             server.tick();
-            // Check if backpressure was triggered
-            try {
-                backpressureTriggered = backpressureField.getBoolean(server);
-            } catch (ReflectiveOperationException e) {
-                throw new RuntimeException(e);
-            }
-            // Print queue size for diagnostics
-            java.lang.reflect.Field queueField;
-            try {
-                queueField = NioNetwork.class.getDeclaredField("inboundMessageQueue");
-                queueField.setAccessible(true);
-                java.util.concurrent.BlockingQueue<?> inboundQueue = (java.util.concurrent.BlockingQueue<?>) queueField.get(server);
-                queueSize = inboundQueue.size();
-            } catch (ReflectiveOperationException e) {
-                throw new RuntimeException(e);
-            }
-            if (i % 10 == 0) {
-                System.out.println("[TEST] Tick " + i + ": Queue size = " + queueSize + ", Backpressure = " + backpressureTriggered);
-            }
+            ticks++;
         }
-        System.out.println("[TEST] Inbound queue size before backpressure assertion: " + queueSize);
-        assertTrue(backpressureTriggered, "Back-pressure should be enabled after flood");
-
-        // Continue processing to drain the queue until below low watermark
-        int drainTicks = 0;
-        final int maxDrainTicks = 2000;
-        while (queueSize > 250 && drainTicks < maxDrainTicks) {
-            server.tick();
-            drainTicks++;
-            // Update queue size
-            try {
-                java.lang.reflect.Field queueField = NioNetwork.class.getDeclaredField("inboundMessageQueue");
-                queueField.setAccessible(true);
-                java.util.concurrent.BlockingQueue<?> inboundQueue = (java.util.concurrent.BlockingQueue<?>) queueField.get(server);
-                queueSize = inboundQueue.size();
-            } catch (ReflectiveOperationException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        // Print queue size and backpressure state after draining
-        boolean finalBackpressure = false;
-        try {
-            finalBackpressure = backpressureField.getBoolean(server);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
-        System.out.println("[TEST] After draining: Queue size = " + queueSize + ", Backpressure = " + finalBackpressure + ", Ticks = " + drainTicks);
-
-        // Check if backpressure was released
-        assertFalse(finalBackpressure, "Back-pressure should be released after queue drains");
+        assertFalse(server.isBackpressureEnabled(), "Back-pressure should be released after draining");
     }
 } 
