@@ -53,6 +53,24 @@ public class ReadFrame {
         }
     }
 
+    /**
+     * Reads data from the channel and returns a ReadResult encapsulating the outcome.
+     * This method handles all exceptions and provides a clean interface for frame reading.
+     * 
+     * @param channel The socket channel to read from
+     * @return ReadResult indicating the outcome of the read operation
+     */
+    public ReadResult readFrom(SocketChannel channel) {
+        try {
+            boolean complete = read(channel); // your existing method
+            return complete ? ReadResult.frameComplete() : ReadResult.incomplete();
+        } catch (EOFException e) {
+            return ReadResult.connectionClosed();
+        } catch (IOException e) {
+            return ReadResult.framingError(e);
+        }
+    }
+
     private boolean readHeader(SocketChannel channel) throws IOException {
         if (headerBuffer.hasRemaining()) {
             int read = channel.read(headerBuffer);

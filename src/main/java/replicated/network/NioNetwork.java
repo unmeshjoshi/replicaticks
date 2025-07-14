@@ -5,7 +5,6 @@ import replicated.messaging.Message;
 import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -14,6 +13,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
@@ -42,6 +42,7 @@ public class NioNetwork implements Network {
     private final NetworkState state = new NetworkState();
 
     private final Random random = new Random();
+    private final Logger logger = Logger.getLogger(NioNetwork.class.getName());
 
 
     public NioNetwork() {
@@ -376,61 +377,120 @@ public class NioNetwork implements Network {
         }
     }
 
-    private void handleRead(SelectionKey key) throws IOException {
-        SocketChannel channel = (SocketChannel) key.channel();
-        ChannelState channelState = (ChannelState) key.attachment();
-        if (channelState == null) {
-            System.err.println("[NIO][handleRead] No ChannelState attached to SelectionKey for channel " + channel);
-            return;
-        }
+    private static final int MAX_FRAMES_PER_READ = 64;
 
+    private void handleRead(SelectionKey key) throws IOException {
+        if (key == null) {
+            throw new IllegalArgumentException("SelectionKey cannot be null");
+        }
+        
+        SocketChannel channel = (SocketChannel) key.channel();
+        ChannelState channelState = validateChannelState(key, channel);
+        
         ReadFrame readFrame = channelState.getReadFrame();
+        readFromChannel(channel, readFrame);
+        
+        // Update activity
+        channelState.updateActivity();
+    }
+
+    private ChannelState validateChannelState(SelectionKey key, SocketChannel channel) {
+        ChannelState channelState  = (ChannelState) key.attachment();
+        if (channelState == null) {
+            throw new IllegalStateException("No ChannelState attached to SelectionKey for channel: " + channel);
+        }
+        return channelState;
+    }
+
+    private void readFromChannel(SocketChannel channel, ReadFrame readFrame) {
+        int framesProcessed = 0;
         int messagesDecoded = 0;
 
         try {
-            while (true) {
-                boolean frameComplete;
-                try {
-                    frameComplete = readFrame.read(channel);
-                } catch (EOFException e) {
-                    System.out.println("[NIO][handleRead] Channel closed by peer: " + channel);
-                    cleanupConnection(channel);
+            while (framesProcessed < MAX_FRAMES_PER_READ) {
+                ReadResult result = readFrame.readFrom(channel);
+
+                if (result.isConnectionClosed()) {
+                    handleConnectionClosed(channel);
                     return;
-                } catch (IOException e) {
-                    // Invalid header or payload length, log and reset frame, then continue
-                    System.err.println("[NIO][framing] Invalid frame: " + e.getMessage() + " (resetting ReadFrame)");
-                    readFrame.reset();
-                    continue;
                 }
 
-                if (!frameComplete) {
-                    // Frame is not complete, need more data
-                    break;
+                if (result.hasFramingError()) {
+                    handleFramingError(channel, result.error(), readFrame);
+                    return; //  Do not continue on framing errors
                 }
 
-                // Frame is complete, process it
+                if (!result.isFrameComplete()) {
+                    break; // wait for more data
+                }
+
                 ReadFrame.Frame frame = readFrame.complete();
-                try {
-                    // Convert ByteBuffer to byte array for decoding
-                    ByteBuffer payload = frame.getPayload();
-                    byte[] msgBytes = new byte[payload.remaining()];
-                    payload.get(msgBytes);
-
-                    Message message = codec.decode(msgBytes, Message.class);
-                    routeInboundMessage(new InboundMessage(message, new MessageContext(message, channel, getChannelSourceAddress(channel))));
-                    messagesDecoded++;
-                } catch (Exception e) {
-                    System.err.println("[NIO][framing] Error decoding message frame: " + e.getMessage());
-                    readFrame.reset();
-                }
+                routeMessage(channel, frame);
+                framesProcessed++;
+                messagesDecoded++;
             }
         } catch (Exception e) {
-            System.err.println("[NIO][handleRead] Unexpected error: " + e.getMessage());
-            e.printStackTrace();
+            handleUnexpectedReadError(channel, e);
         }
 
-        System.out.println("[NIO][handleRead] Decoded " + messagesDecoded + " messages");
+        // Update metrics
+        if (messagesDecoded > 0) {
+            updateReadMetrics(channel, messagesDecoded);
+            System.out.println("[NIO][handleRead] Decoded " + messagesDecoded + " messages, processed " + framesProcessed + " frames");
+        }
     }
+
+    private void handleConnectionClosed(SocketChannel channel) {
+        System.out.println("[NIO][handleRead] Channel closed by peer: " + channel);
+        cleanupConnection(channel);
+    }
+
+    private void handleFramingError(SocketChannel channel, Throwable error, ReadFrame frame) {
+        System.out.println("[NIO][framing] Invalid frame from " + getRemoteAddress(channel) + ": " + error.getMessage() + " (resetting ReadFrame)");
+        frame.reset();
+    }
+
+    private void handleUnexpectedReadError(SocketChannel channel, Exception e) {
+        System.err.println("[NIO][handleRead] Unexpected error on " + getRemoteAddress(channel) + ": " + e.getMessage());
+        e.printStackTrace();
+    }
+
+    private void routeMessage(SocketChannel channel, ReadFrame.Frame frame) {
+        try {
+            // Convert ByteBuffer to byte array for decoding
+            Message message = decodeMessage(frame);
+            routeInboundMessage(new InboundMessage(message, new MessageContext(message, channel, getChannelSourceAddress(channel))));
+
+        } catch (Exception e) {
+            System.out.println("[NIO][framing] Error decoding message frame: " + e.getMessage());
+        }
+    }
+
+    private Message decodeMessage(ReadFrame.Frame frame) {
+        ByteBuffer payload = frame.getPayload();
+        byte[] msgBytes = new byte[payload.remaining()];
+        payload.get(msgBytes);
+
+        Message message = codec.decode(msgBytes, Message.class);
+        return message;
+    }
+
+    private String getRemoteAddress(SocketChannel channel) {
+        try {
+            return channel.getRemoteAddress().toString();
+        } catch (IOException e) {
+            return "unknown";
+        }
+    }
+
+    private void updateReadMetrics(SocketChannel channel, int messagesDecoded) {
+        if (messagesDecoded > 0) {
+            // Record message count as bytes (approximate - each message counts as 1 byte for metrics)
+            // This is a reasonable approximation since we can't get exact byte counts from ReadFrame
+            metricsCollector.recordBytesReceived(channel.toString(), messagesDecoded);
+        }
+    }
+
 
     private void handleWrite(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();

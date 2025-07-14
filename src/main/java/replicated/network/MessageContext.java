@@ -82,9 +82,7 @@ public class MessageContext {
     public boolean isResponse() {
         if (message == null) return false;
         
-        String messageType = message.messageType().toString();
-        return messageType.contains("RESPONSE") || 
-               (isInbound && messageType.contains("INTERNAL"));
+        return message.messageType().isResponse();
     }
     
     /**
@@ -93,8 +91,7 @@ public class MessageContext {
     public boolean isRequest() {
         if (message == null) return false;
         
-        String messageType = message.messageType().toString();
-        return messageType.contains("REQUEST");
+        return message.messageType().isRequest();
     }
     
     /**
