@@ -1,6 +1,9 @@
 package replicated.network;
 
-import replicated.messaging.*;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.Message;
+import replicated.messaging.MessageCodec;
+import replicated.messaging.NetworkAddress;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -11,11 +14,6 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -31,20 +29,21 @@ import java.util.stream.Collectors;
  */
 public class NioNetwork implements Network {
 
+    private final NetworkConfig config;
+    private final NetworkFaultConfig faultConfig;
+    //Simple collector of network metrics.
+    private final MetricsCollector metricsCollector = new MetricsCollector();
+
+
     private final MessageCodec codec;
     private final Selector selector;
-
     // Network state management
-    private final NetworkState state = new NetworkState();
 
-    private final NetworkFaultConfig faultConfig;
+    private final NetworkState state = new NetworkState();
 
     private final Random random = new Random();
 
-    private final NetworkConfig config;
 
-    //Simple collector of network metrics.
-    private final MetricsCollector metricsCollector = new MetricsCollector();
 
     public NioNetwork() {
         this(new JsonMessageCodec(), NetworkConfig.defaults(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
@@ -119,37 +118,59 @@ public class NioNetwork implements Network {
 
     @Override
     public void send(Message message) {
-        if (message == null) {
-            throw new IllegalArgumentException("Message cannot be null");
-        }
+        validate(message);
 
         System.out.println("NIO: Sending message from " + message.source() + " to " + message.destination() +
                 " type=" + message.messageType());
 
-        // Check for self-message (source == destination)
-        if (message.source() != null && message.source().equals(message.destination())) {
-            System.out.println("NIO: Self-message detected, delivering directly to local handler");
-            deliverSelfMessage(message);
+        if (deliverIfSelf(message)){
             return;
         }
 
+        if (shouldDrop(message)) { // Drop the message if packet loss or link partition configured.
+            return;
+        }
+
+        // Add to outbound queue for async processing
+        state.addOutboundMessage(message);
+        System.out.println("NIO: Message added to outbound queue, queue size: " + state.getOutboundQueueSize());
+    }
+
+    private boolean deliverIfSelf(Message message) {
+        // Check for self-message (source == destination)
+        if (isSelfMessage(message)) {
+            System.out.println("NIO: Self-message detected, delivering directly to local handler");
+            deliverSelfMessage(message);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isSelfMessage(Message message) {
+        return message.source() != null && message.source().equals(message.destination());
+    }
+
+    private static void validate(Message message) {
+        if (message == null) {
+            throw new IllegalArgumentException("Message cannot be null");
+        }
+    }
+
+    private boolean shouldDrop(Message message) {
         // Check for network partition
         String linkKey = linkKey(message.source(), message.destination());
         if (faultConfig.getPartitionedLinks().contains(linkKey)) {
             System.out.println("NIO: Message dropped due to partition: " + linkKey);
-            return; // Drop message due to partition
+            return true;
         }
 
         // Check for packet loss
         Double lossRate = faultConfig.getLinkPacketLoss().get(linkKey);
         if (lossRate != null && random.nextDouble() < lossRate) {
             System.out.println("NIO: Message dropped due to packet loss: " + linkKey);
-            return; // Drop message due to packet loss
+            return true;
         }
-
-        // Add to outbound queue for async processing
-        state.addOutboundMessage(message);
-        System.out.println("NIO: Message added to outbound queue, queue size: " + state.getOutboundQueueSize());
+        return false;
     }
 
 
@@ -159,38 +180,7 @@ public class NioNetwork implements Network {
             // Process selector events (non-blocking)
             selector.selectNow();
 
-            Set<SelectionKey> selectedKeys = selector.selectedKeys();
-            Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
-
-            while (keyIterator.hasNext()) {
-                SelectionKey key = keyIterator.next();
-                keyIterator.remove();
-
-                try {
-                    if (key.isReadable()) {
-                        System.out.println("NIO: Processing READ event");
-                        handleRead(key);
-                    } else if (key.isWritable()) {
-                        System.out.println("NIO: Processing WRITE event");
-                        handleWrite(key);
-                    } else if (key.isConnectable()) {
-                        System.out.println("NIO: Processing CONNECT event");
-                        handleConnect(key);
-                    } else if (key.isAcceptable()) {
-                        System.out.println("NIO: Processing ACCEPT event");
-                        handleAccept(key);
-                    }
-                } catch (IOException e) {
-                    // Close problematic connection
-                    key.cancel();
-                    if (key.channel() != null) {
-                        try {
-                            key.channel().close();
-                        } catch (IOException ignored) {
-                        }
-                    }
-                }
-            }
+            processSelectedKeys(selector.selectedKeys());
 
             // Process outbound messages
             processOutboundMessages();
@@ -214,13 +204,46 @@ public class NioNetwork implements Network {
         }
     }
 
+    private void processSelectedKeys(Set<SelectionKey> selectedKeys) {
+        Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
+
+        while (keyIterator.hasNext()) {
+            SelectionKey key = keyIterator.next();
+            keyIterator.remove();
+            try {
+                if (key.isReadable()) {
+                    System.out.println("NIO: Processing READ event");
+                    handleRead(key);
+                } else if (key.isWritable()) {
+                    System.out.println("NIO: Processing WRITE event");
+                    handleWrite(key);
+                } else if (key.isConnectable()) {
+                    System.out.println("NIO: Processing CONNECT event");
+                    handleConnect(key);
+                } else if (key.isAcceptable()) {
+                    System.out.println("NIO: Processing ACCEPT event");
+                    handleAccept(key);
+                }
+            } catch (IOException e) {
+                // Close problematic connection
+                key.cancel();
+                if (key.channel() != null) {
+                    try {
+                        key.channel().close();
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+        }
+    }
+
     private void handleAccept(SelectionKey key) throws IOException {
         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
         SocketChannel clientChannel = serverChannel.accept();
 
         if (clientChannel != null) {
             clientChannel.configureBlocking(false);
-            clientChannel.register(selector, SelectionKey.OP_READ);
+            SelectionKey clientKey = clientChannel.register(selector, SelectionKey.OP_READ);
 
             // Get the client's address from the accepted connection
             InetSocketAddress clientAddress = (InetSocketAddress) clientChannel.getRemoteAddress();
@@ -252,8 +275,9 @@ public class NioNetwork implements Network {
             // metrics
             metricsCollector.registerConnection(clientChannel.toString(), new ConnectionStats(localNetworkAddress, clientNetworkAddress, true));
 
-            // Create channel state for the new connection
-            state.getChannelStates().put(clientChannel, new ChannelState());
+            // Create channel state for the new inbound connection and attach to SelectionKey
+            ChannelState channelState = ChannelState.forInbound(clientNetworkAddress);
+            clientKey.attach(channelState);
 
             System.out.println("NIO: Accepted connection from client: " + clientNetworkAddress +
                     " -> " + localNetworkAddress + " (connection info: " + connectionInfo + ")");
@@ -270,22 +294,21 @@ public class NioNetwork implements Network {
                 // Connection established, switch to read mode
                 key.interestOps(SelectionKey.OP_READ);
 
-                // Find the destination address for this channel
-                NetworkAddress destination = findDestinationForChannel(channel);
+                // Find the remote address for this channel
+                NetworkAddress destination = findRemoteAddressForChannel(channel);
                 if (destination != null) {
                     System.out.println("NIO: Found destination " + destination + " for connected channel");
                     
-                    // Create channel state for the new outbound connection
-                    state.getChannelStates().put(channel, new ChannelState());
+                    // Create channel state for the new outbound connection and attach to SelectionKey
+                    ChannelState channelState = ChannelState.forOutbound(destination);
+                    key.attach(channelState);
                     
                     // Send any queued messages
                     sendQueuedMessages(destination, channel);
                     metricsCollector.incrementOutboundConnection();
 
-                    // metrics
-                    NetworkAddress localAddr = destination; // actually local? Wait we need local for outbound: source is findSourceForChannel? easier: use networkAddress mapping
-                    NetworkAddress remote = destination;
-                    ConnectionStats stats = new ConnectionStats(/*local*/localAddr, remote, false);
+                    // Use the outbound-specific constructor for metrics
+                    ConnectionStats stats = ConnectionStats.forOutbound(destination);
                     metricsCollector.registerConnection(channel.toString(), stats);
                 } else {
                     System.out.println("NIO: WARNING - Could not find destination for connected channel");
@@ -302,9 +325,9 @@ public class NioNetwork implements Network {
 
     private void handleRead(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
-        ChannelState channelState = state.getChannelState(channel);
+        ChannelState channelState = (ChannelState) key.attachment();
         if (channelState == null) {
-            System.err.println("[NIO][handleRead] No ChannelState for channel " + channel);
+            System.err.println("[NIO][handleRead] No ChannelState attached to SelectionKey for channel " + channel);
             return;
         }
         
@@ -359,10 +382,10 @@ public class NioNetwork implements Network {
     private void handleWrite(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
 
-        // Get channel state for this specific channel
-        ChannelState channelState = state.getChannelState(channel);
+        // Get channel state from SelectionKey attachment
+        ChannelState channelState = (ChannelState) key.attachment();
         if (channelState == null) {
-            System.err.println("NIO: No channel state found for write operation");
+            System.err.println("NIO: No channel state attached to SelectionKey for write operation");
             return;
         }
 
@@ -395,7 +418,7 @@ public class NioNetwork implements Network {
             System.out.println("NIO: No more pending writes, disabled write interest");
 
             // Continue processing any remaining queued messages for this destination
-            NetworkAddress destination = findDestinationForChannel(channel);
+            NetworkAddress destination = findRemoteAddressForChannel(channel);
             if (destination != null) {
                 sendQueuedMessages(destination, channel);
             }
@@ -569,12 +592,12 @@ public class NioNetwork implements Network {
 
             if (writeFrame.hasRemaining()) {
                 // Couldn't write everything, add to pending writes queue
-                ChannelState channelState = state.getChannelState(channel);
-                if (channelState != null) {
-                    channelState.addPendingWrite(writeFrame);
-                    // Register for write events if not already registered
-                    SelectionKey key = channel.keyFor(selector);
-                    if (key != null) {
+                SelectionKey key = channel.keyFor(selector);
+                if (key != null) {
+                    ChannelState channelState = (ChannelState) key.attachment();
+                    if (channelState != null) {
+                        channelState.addPendingWrite(writeFrame);
+                        // Register for write events if not already registered
                         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                         System.out.println("NIO: Registered for write events, frame queued");
                     }
@@ -612,20 +635,22 @@ public class NioNetwork implements Network {
             channel.configureBlocking(false);
 
             boolean connected = channel.connect(new InetSocketAddress(address.ipAddress(), address.port()));
+            SelectionKey key;
             if (!connected) {
                 // Connection in progress, register for connect events
                 System.out.println("NIO: Connection in progress, registering for connect events");
-                channel.register(selector, SelectionKey.OP_CONNECT);
+                key = channel.register(selector, SelectionKey.OP_CONNECT);
             } else {
                 // Immediate connection, register for read events
                 System.out.println("NIO: Immediate connection, registering for read events");
-                channel.register(selector, SelectionKey.OP_READ);
+                key = channel.register(selector, SelectionKey.OP_READ);
             }
 
             state.putOutboundConnection(address, channel);
 
-            // Create channel state for the new outbound connection
-            state.putChannelState(channel, new ChannelState());
+            // Create channel state for the new outbound connection and attach to SelectionKey
+            ChannelState channelState = ChannelState.forOutbound(address);
+            key.attach(channelState);
 
             System.out.println("NIO: Stored new channel in outboundConnections map");
         } else {
@@ -636,18 +661,19 @@ public class NioNetwork implements Network {
     }
 
     /**
-     * Finds the NetworkAddress destination for a given SocketChannel.
-     * Searches both outbound connections and inbound connections.
+     * Finds the remote address for a given SocketChannel.
+     * For outbound connections: returns the destination we connected to.
+     * For inbound connections: returns the remote client address.
      */
-    private NetworkAddress findDestinationForChannel(SocketChannel channel) {
-        // First check outbound connections (client-side)
+    private NetworkAddress findRemoteAddressForChannel(SocketChannel channel) {
+        // Check outbound connections (client-side) - destination is the remote
         for (Map.Entry<NetworkAddress, SocketChannel> entry : state.getOutboundConnectionsEntrySet()) {
             if (entry.getValue() == channel) {
                 return entry.getKey();
             }
         }
 
-        // Then check inbound connections (server-side) - return the remote address
+        // Check inbound connections (server-side) - remote address is the client
         ConnectionInfo connectionInfo = state.getInboundConnection(channel);
         if (connectionInfo != null) {
             return connectionInfo.getRemoteAddress();
@@ -693,12 +719,12 @@ public class NioNetwork implements Network {
 
                 if (writeFrame.hasRemaining()) {
                     // Couldn't write everything, add to pending writes queue
-                    ChannelState channelState = state.getChannelState(channel);
-                    if (channelState != null) {
-                        channelState.addPendingWrite(writeFrame);
-                        // Register for write events if not already registered
-                        SelectionKey key = channel.keyFor(selector);
-                        if (key != null) {
+                    SelectionKey key = channel.keyFor(selector);
+                    if (key != null) {
+                        ChannelState channelState = (ChannelState) key.attachment();
+                        if (channelState != null) {
+                            channelState.addPendingWrite(writeFrame);
+                            // Register for write events if not already registered
                             key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                             System.out.println("NIO: Partial write, registered for write events");
                         }
@@ -795,7 +821,11 @@ public class NioNetwork implements Network {
             channel.configureBlocking(false);
 
             // Register the channel for read events (connection is already established)
-            channel.register(selector, SelectionKey.OP_READ);
+            SelectionKey key = channel.register(selector, SelectionKey.OP_READ);
+
+            // Create channel state for the new outbound connection and attach to SelectionKey
+            ChannelState channelState = ChannelState.forOutbound(destination);
+            key.attach(channelState);
 
             // Store the channel for future use
             state.getOutboundConnections().put(destination, channel);
@@ -828,11 +858,12 @@ public class NioNetwork implements Network {
      */
     private void cleanupConnection(SocketChannel channel) {
         try {
-            // Cancel any selection key
+            // Cancel any selection key (this will also detach the ChannelState)
             SelectionKey key = channel.keyFor(selector);
-            if (key != null) key.cancel();
-
-            state.getChannelStates().remove(channel);
+            if (key != null) {
+                key.attach(null); // Clear the attachment
+                key.cancel();
+            }
 
             metricsCollector.markConnectionClosed(channel.toString());
             metricsCollector.unregisterConnection(channel.toString());
@@ -971,12 +1002,6 @@ public class NioNetwork implements Network {
                 }
             }
 
-            // Clean up all channel states
-            for (ChannelState stateObj : state.getChannelStates().values()) {
-                stateObj.cleanup();
-            }
-            state.getChannelStates().clear();
-
             // Close all server channels
             for (ServerSocketChannel channel : state.getServerChannels().values()) {
                 try {
@@ -1006,11 +1031,22 @@ public class NioNetwork implements Network {
         }
         byte[] messageData = codec.encode(message);
         WriteFrame writeFrame = new WriteFrame(messageData);
-        ChannelState channelState = state.getChannelStates().computeIfAbsent(channel, c -> new ChannelState());
-        channelState.addPendingWrite(writeFrame);
+        
+        // Get channel state from SelectionKey attachment
+        SelectionKey key = channel.keyFor(selector);
+        if (key != null) {
+            ChannelState channelState = (ChannelState) key.attachment();
+            if (channelState != null) {
+                channelState.addPendingWrite(writeFrame);
+            } else {
+                // Create a default channel state if none exists
+                channelState = new ChannelState();
+                key.attach(channelState);
+                channelState.addPendingWrite(writeFrame);
+            }
+        }
 
         // Ensure OP_WRITE interest so selector wakes up next tick
-        SelectionKey key = channel.keyFor(selector);
         if (key != null && key.isValid()) {
             key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
         }
