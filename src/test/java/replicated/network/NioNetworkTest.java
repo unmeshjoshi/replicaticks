@@ -164,9 +164,12 @@ class NioNetworkTest {
     @Test
     void shouldCloseResourcesGracefully() {
         // Given
-        network.bind(address1);
+        // Use a different network because the teardown closes the network created in the setup.
+
+        NioNetwork testNetwork = new NioNetwork();
+        testNetwork.bind(address1);
         
         // When/Then - should not throw
-        assertDoesNotThrow(() -> network.close());
+        assertDoesNotThrow(() -> testNetwork.close());
     }
 } 

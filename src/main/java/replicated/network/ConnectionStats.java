@@ -23,6 +23,15 @@ public final class ConnectionStats {
         this.lastActivityNanos = this.openedAtNanos;
     }
 
+    /**
+     * Constructor for outbound connections where the local address is ephemeral.
+     * Uses a placeholder for the local address since it's not meaningful for the application.
+     */
+    static ConnectionStats forOutbound(NetworkAddress remote) {
+        NetworkAddress ephemeralLocal = new NetworkAddress("ephemeral", 1);
+        return new ConnectionStats(ephemeralLocal, remote, false);
+    }
+
     void recordSent(long n) {
         bytesSent.addAndGet(n);
         lastActivityNanos = System.nanoTime();

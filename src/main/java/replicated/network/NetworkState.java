@@ -24,9 +24,6 @@ public final class NetworkState {
     // Client connections to other nodes (outbound connections we initiate)
     private final Map<NetworkAddress, SocketChannel> outboundConnections = new ConcurrentHashMap<>();
     
-    // Accepted client connections with full metadata (inbound connections from clients to us as server)
-    private final Map<SocketChannel, ConnectionInfo> inboundConnections = new ConcurrentHashMap<>();
-    
     // Inbound message queue
     private final BlockingQueue<InboundMessage> inboundMessageQueue = new LinkedBlockingQueue<>();
     
@@ -74,23 +71,6 @@ public final class NetworkState {
 
     public SocketChannel removeOutboundConnection(NetworkAddress address) {
         return outboundConnections.remove(address);
-    }
-
-    // Getters for inbound connections
-    public Map<SocketChannel, ConnectionInfo> getInboundConnections() {
-        return inboundConnections;
-    }
-
-    public ConnectionInfo getInboundConnection(SocketChannel channel) {
-        return inboundConnections.get(channel);
-    }
-
-    public void putInboundConnection(SocketChannel channel, ConnectionInfo info) {
-        inboundConnections.put(channel, info);
-    }
-
-    public ConnectionInfo removeInboundConnection(SocketChannel channel) {
-        return inboundConnections.remove(channel);
     }
 
     // Getters for message queues
@@ -202,20 +182,12 @@ public final class NetworkState {
         return outboundConnections.containsKey(address);
     }
 
-    public boolean hasInboundConnection(SocketChannel channel) {
-        return inboundConnections.containsKey(channel);
-    }
-
     public int getOutboundConnectionCount() {
         return outboundConnections.size();
     }
 
     public Set<Map.Entry<NetworkAddress, SocketChannel>> getOutboundConnectionsEntrySet() {
         return outboundConnections.entrySet();
-    }
-
-    public int getInboundConnectionCount() {
-        return inboundConnections.size();
     }
 
     public boolean hasServerChannel(NetworkAddress address) {
@@ -258,7 +230,7 @@ public final class NetworkState {
 
     // Utility methods
     public boolean hasAnyConnections() {
-        return !outboundConnections.isEmpty() || !inboundConnections.isEmpty();
+        return !outboundConnections.isEmpty();
     }
 
     public boolean hasAnyMessages() {
@@ -270,7 +242,7 @@ public final class NetworkState {
     }
 
     public int getTotalConnectionCount() {
-        return outboundConnections.size() + inboundConnections.size();
+        return outboundConnections.size();
     }
 
     public int getTotalMessageCount() {
