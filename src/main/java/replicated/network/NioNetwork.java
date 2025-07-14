@@ -64,11 +64,7 @@ public class NioNetwork implements Network {
 
     private final Random random = new Random();
 
-    private static final int DEFAULT_MAX_INBOUND_PER_TICK = 1000; // safeguard to avoid starving other work per tick
-    private final int maxInboundPerTick;
-    // === Backpressure tuning ===
-    private final int backpressureHighWatermark;
-    private final int backpressureLowWatermark;
+    private final NetworkConfig config;
     private volatile boolean backpressureEnabled = false;
 
     //Simple collector of network metrics.
@@ -79,18 +75,24 @@ public class NioNetwork implements Network {
     }
 
     public NioNetwork(MessageCodec codec) {
-        this(codec, DEFAULT_MAX_INBOUND_PER_TICK);
+        this(codec, NetworkConfig.defaults());
     }
 
     public NioNetwork(MessageCodec codec, int maxInboundPerTick) {
-        this(codec, maxInboundPerTick, 10_000, 5_000);
+        this(codec, NetworkConfig.builder().maxInboundPerTick(maxInboundPerTick).build());
     }
 
     public NioNetwork(MessageCodec codec, int maxInboundPerTick, int backpressureHighWatermark, int backpressureLowWatermark) {
+        this(codec, NetworkConfig.builder()
+                .maxInboundPerTick(maxInboundPerTick)
+                .backpressureHighWatermark(backpressureHighWatermark)
+                .backpressureLowWatermark(backpressureLowWatermark)
+                .build());
+    }
+
+    public NioNetwork(MessageCodec codec, NetworkConfig config) {
         this.codec = codec;
-        this.maxInboundPerTick = maxInboundPerTick;
-        this.backpressureHighWatermark = backpressureHighWatermark;
-        this.backpressureLowWatermark = backpressureLowWatermark;
+        this.config = config;
         try {
             this.selector = Selector.open();
         } catch (IOException e) {
@@ -210,11 +212,11 @@ public class NioNetwork implements Network {
 
             // === Backpressure management ===
             int queueSize = inboundMessageQueue.size();
-            if (!backpressureEnabled && queueSize > backpressureHighWatermark) {
+            if (!backpressureEnabled && queueSize > config.backpressureHighWatermark()) {
                 toggleReadInterest(false);
                 backpressureEnabled = true;
                 System.out.println("NIO: Backpressure ENABLED - queue size: " + queueSize);
-            } else if (backpressureEnabled && queueSize < backpressureLowWatermark) {
+            } else if (backpressureEnabled && queueSize < config.backpressureLowWatermark()) {
                 toggleReadInterest(true);
                 backpressureEnabled = false;
                 System.out.println("NIO: Backpressure DISABLED - queue size: " + queueSize);
@@ -466,9 +468,9 @@ public class NioNetwork implements Network {
             return; // No callback registered
         }
 
-        // Drain up to MAX_INBOUND_PER_TICK messages from the queue in one shot to minimise contention
+        // Drain up to maxInboundPerTick messages from the queue in one shot to minimise contention
         List<InboundMessage> batch = new ArrayList<>();
-        inboundMessageQueue.drainTo(batch, maxInboundPerTick);
+        inboundMessageQueue.drainTo(batch, config.maxInboundPerTick());
 
         for (InboundMessage im : batch) {
             deliverInbound(im);

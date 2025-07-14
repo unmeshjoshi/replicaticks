@@ -107,7 +107,7 @@ public class NioNetworkFramingTest {
     @Test
     public void shouldApplyAndReleaseBackpressure() throws Exception {
         // Create server with very slow processing (only 1 message per tick) and very low backpressure thresholds
-        NioNetwork server = new NioNetwork(new JsonMessageCodec(), 1, 1, 1);
+        NioNetwork server = new NioNetwork(new JsonMessageCodec(), 1, 2, 1);
         NioNetwork client = newNetwork();
 
         int serverPort = freePort();
