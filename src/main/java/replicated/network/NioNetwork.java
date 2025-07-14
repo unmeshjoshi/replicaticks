@@ -245,61 +245,66 @@ public class NioNetwork implements Network {
     private void handleAccept(SelectionKey key) throws IOException {
         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
         SocketChannel clientChannel = serverChannel.accept();
-
         if (clientChannel != null) {
             try {
-                clientChannel.configureBlocking(false);
-                SelectionKey clientKey = clientChannel.register(selector, SelectionKey.OP_READ);
-
-                // Get the client's address from the accepted connection
-                InetSocketAddress clientAddress = (InetSocketAddress) clientChannel.getRemoteAddress();
-                InetSocketAddress localAddress = (InetSocketAddress) clientChannel.getLocalAddress();
-
-                // Validate addresses are not null
-                if (clientAddress == null || localAddress == null) {
-                    System.err.println("NIO: WARNING - Received connection with null addresses, closing channel");
-                    clientKey.cancel();
-                    clientChannel.close();
-                    return;
-                }
-
-                NetworkAddress clientNetworkAddress = new NetworkAddress(
-                        clientAddress.getAddress().getHostAddress(),
-                        clientAddress.getPort()
-                );
-
-                NetworkAddress localNetworkAddress = new NetworkAddress(
-                        localAddress.getAddress().getHostAddress(),
-                        localAddress.getPort()
-                );
-
-                // Create channel state for the new inbound connection and attach to SelectionKey
-                ChannelState channelState = ChannelState.forInbound(clientNetworkAddress);
-                clientKey.attach(channelState);
-
-                // Track metrics for the new inbound connection
-                metricsCollector.incrementInboundConnection();
-                metricsCollector.registerConnection(clientChannel.toString(), new ConnectionStats(localNetworkAddress, clientNetworkAddress, true));
-
-                System.out.println("NIO: Accepted connection from client: " + clientNetworkAddress +
-                        " -> " + localNetworkAddress);
-
+                setupInboundConnection(clientChannel);
             } catch (Exception e) {
-                // Clean up resources if anything goes wrong
-                System.err.println("NIO: Error setting up accepted connection: " + e.getMessage());
-                try {
-                    SelectionKey clientKey = clientChannel.keyFor(selector);
-                    if (clientKey != null) {
-                        clientKey.cancel();
-                    }
-                    clientChannel.close();
-                } catch (IOException cleanupException) {
-                    System.err.println("NIO: Error during cleanup: " + cleanupException.getMessage());
-                }
-                throw e; // Re-throw to let caller handle it
+                handleInboundConnectionSetupFailure(clientChannel, e);
+                throw e;
             }
         }
     }
+
+    private void setupInboundConnection(SocketChannel clientChannel) throws IOException {
+        configureNonBlocking(clientChannel);
+        SelectionKey clientKey = registerChannelForRead(clientChannel);
+        NetworkAddress clientAddress = extractClientAddress(clientChannel);
+        //clientAddress can never be null for inbound connections.
+        attachChannelState(clientKey, clientAddress);
+        metricsCollector.registerInboundConnection(clientChannel.toString(), clientChannel, clientAddress);
+
+        logSuccessfulConnection(clientAddress);
+    }
+
+    private NetworkAddress extractClientAddress(SocketChannel clientChannel) throws IOException {
+        InetSocketAddress clientAddress = (InetSocketAddress) clientChannel.getRemoteAddress();
+        return NetworkAddress.from(clientAddress);
+    }
+
+    private void configureNonBlocking(SocketChannel channel) throws IOException {
+        channel.configureBlocking(false);
+    }
+
+    private SelectionKey registerChannelForRead(SocketChannel channel) throws IOException {
+        return channel.register(selector, SelectionKey.OP_READ);
+    }
+
+    private void attachChannelState(SelectionKey clientKey, NetworkAddress clientAddress) {
+        ChannelState channelState = ChannelState.forInbound(clientAddress);
+        clientKey.attach(channelState);
+    }
+
+    private void logSuccessfulConnection(NetworkAddress clientAddress) {
+        System.out.println("NIO: Accepted connection from client: " + clientAddress);
+    }
+
+    private void handleInboundConnectionSetupFailure(SocketChannel clientChannel, Exception e) {
+        System.err.println("NIO: Error setting up accepted connection: " + e.getMessage());
+        cleanupFailedInboundConnection(clientChannel);
+    }
+
+    private void cleanupFailedInboundConnection(SocketChannel clientChannel) {
+        try {
+            SelectionKey clientKey = clientChannel.keyFor(selector);
+            if (clientKey != null) {
+                clientKey.cancel();
+            }
+            clientChannel.close();
+        } catch (IOException cleanupException) {
+            System.err.println("NIO: Error during cleanup: " + cleanupException.getMessage());
+        }
+    }
+
 
     private void handleConnect(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
@@ -328,7 +333,7 @@ public class NioNetwork implements Network {
             sendQueuedMessages(destination, channel);
             registerOutboundConnectionMetrics(channel, destination);
             System.out.println("NIO: Successfully processed connection to " + destination);
-            
+
         } catch (IOException e) {
             handleConnectionProcessingFailure(key, channel, destination, e);
             throw e;
@@ -340,23 +345,21 @@ public class NioNetwork implements Network {
         if (channelState == null) {
             throw new IllegalStateException("No ChannelState attached to SelectionKey for channel: " + channel);
         }
-        
+
         if (!channelState.isOutbound()) {
             throw new IllegalStateException("ChannelState is not outbound for channel: " + channel);
         }
-        
+
         NetworkAddress destination = channelState.getRemoteAddress();
         if (destination == null) {
             throw new IllegalStateException("No remote address in ChannelState for channel: " + channel);
         }
-        
+
         return destination;
     }
 
     private void registerOutboundConnectionMetrics(SocketChannel channel, NetworkAddress destination) {
-        ConnectionStats stats = ConnectionStats.forOutbound(destination);
-        metricsCollector.registerConnection(channel.toString(), stats);
-        metricsCollector.incrementOutboundConnection();
+        metricsCollector.registerOutboundConnection(channel.toString(), destination);
     }
 
     private void handleConnectionProcessingFailure(SelectionKey key, SocketChannel channel, NetworkAddress destination, IOException e) {
@@ -459,7 +462,7 @@ public class NioNetwork implements Network {
                 break; // Stop processing more frames to avoid starvation
             }
 
-            metricsCollector.recordSent(channel.toString(), bytesWritten);
+            metricsCollector.recordBytesSent(channel.toString(), bytesWritten);
         }
 
         // If no more pending writes, switch back to read mode
@@ -649,7 +652,7 @@ public class NioNetwork implements Network {
             } else {
                 System.out.println("NIO: Message sent completely");
             }
-            metricsCollector.recordSent(channel.toString(), bytesWritten);
+            metricsCollector.recordBytesSent(channel.toString(), bytesWritten);
         } else {
             // Connection not ready, queue the message for later delivery
             state.addPendingMessage(destination, message);
@@ -842,8 +845,7 @@ public class NioNetwork implements Network {
             InetSocketAddress localAddress = (InetSocketAddress) channel.getLocalAddress();
 
             // Convert to NetworkAddress
-            NetworkAddress actualClientAddress = new NetworkAddress(
-                    localAddress.getAddress().getHostAddress(), localAddress.getPort());
+            NetworkAddress actualClientAddress = NetworkAddress.from(localAddress);
 
             // Now switch back to non-blocking mode for ongoing operations
             channel.configureBlocking(false);
@@ -907,9 +909,7 @@ public class NioNetwork implements Network {
                 }
             }
 
-            metricsCollector.markConnectionClosed(channel.toString());
-            metricsCollector.unregisterConnection(channel.toString());
-            metricsCollector.incrementClosedConnection();
+            metricsCollector.cleanupConnection(channel.toString());
 
             channel.close();
             System.out.println("NIO: Connection cleanup completed for channel");
@@ -936,7 +936,7 @@ public class NioNetwork implements Network {
         try {
             InetSocketAddress remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
             if (remoteAddress != null) {
-                return new NetworkAddress(remoteAddress.getAddress().getHostAddress(), remoteAddress.getPort());
+                return NetworkAddress.from(remoteAddress);
             }
         } catch (IOException e) {
             // Ignore and return null

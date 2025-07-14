@@ -1,5 +1,6 @@
 package replicated.network;
 
+import replicated.messaging.NetworkAddress;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -68,6 +69,59 @@ public final class MetricsCollector {
         if (stats != null) {
             stats.markClosed();
         }
+    }
+
+    /**
+     * Registers an inbound connection with metrics tracking.
+     * Increments the inbound connection counter and creates ConnectionStats with both local and remote addresses.
+     */
+    public void registerInboundConnection(String connectionId, NetworkAddress localAddress, NetworkAddress remoteAddress) {
+        incrementInboundConnection();
+        ConnectionStats stats = new ConnectionStats(localAddress, remoteAddress, true);
+        registerConnection(connectionId, stats);
+    }
+
+    /**
+     * Registers an inbound connection with metrics tracking, extracting local address from the channel.
+     * This method handles the complete inbound connection registration including address extraction.
+     */
+    public void registerInboundConnection(String connectionId, java.nio.channels.SocketChannel channel, NetworkAddress remoteAddress) throws java.io.IOException {
+        java.net.InetSocketAddress localSocket = (java.net.InetSocketAddress) channel.getLocalAddress();
+        NetworkAddress localAddress = NetworkAddress.from(localSocket);
+        registerInboundConnection(connectionId, localAddress, remoteAddress);
+    }
+
+    /**
+     * Registers an outbound connection with metrics tracking.
+     * Increments the outbound connection counter and creates ConnectionStats using the factory method.
+     */
+    public void registerOutboundConnection(String connectionId, NetworkAddress remoteAddress) {
+        incrementOutboundConnection();
+        ConnectionStats stats = ConnectionStats.forOutbound(remoteAddress);
+        registerConnection(connectionId, stats);
+    }
+
+    /**
+     * Records bytes sent for a connection and updates activity.
+     */
+    public void recordBytesSent(String connectionId, int bytesSent) {
+        recordSent(connectionId, bytesSent);
+    }
+
+    /**
+     * Records bytes received for a connection and updates activity.
+     */
+    public void recordBytesReceived(String connectionId, int bytesReceived) {
+        recordReceived(connectionId, bytesReceived);
+    }
+
+    /**
+     * Handles complete connection cleanup including marking as closed, unregistering, and incrementing closed counter.
+     */
+    public void cleanupConnection(String connectionId) {
+        markConnectionClosed(connectionId);
+        unregisterConnection(connectionId);
+        incrementClosedConnection();
     }
     
     /**
