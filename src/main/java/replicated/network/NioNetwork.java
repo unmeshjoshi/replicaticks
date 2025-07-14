@@ -932,15 +932,7 @@ public class NioNetwork implements Network {
                 : "->" + destination.toString();
     }
 
-    /**
-     * Generates a unique correlation ID for request-response tracking.
-     * This enables proper response routing back to the original request channel.
-     */
-    private String generateCorrelationId(Message message) {
-        return message.source() + "->" + message.destination() + "-" +
-                message.messageType() + "-" + System.currentTimeMillis() + "-" +
-                random.nextInt(1000);
-    }
+
 
     /**
      * Comprehensive connection cleanup to prevent resource leaks.
@@ -1017,31 +1009,16 @@ public class NioNetwork implements Network {
                 message.source() + " to " + message.destination());
 
         try {
-            // Store request context for response correlation
-            if (messageContext.isRequest()) {
-                System.out.println("NIO: Message is a request, storing context");
-                String correlationId = generateCorrelationId(message);
-                messageContext.setCorrelationId(correlationId);
-                System.out.println("NIO: Stored request context for correlation: " + correlationId +
-                        ", context: " + messageContext);
-            } else {
-                System.out.println("NIO: Message is not a request, skipping context storage");
-            }
-
-            System.out.println("NIO: Creating queue for destination: " + message.destination());
             state.addInboundMessage(im);
             System.out.println("NIO: Message added to receive queue for " + message.destination() +
-                    ", queue size: " + state.getInboundMessageQueueSize() + ", context: " + messageContext);
+                    ", queue size: " + state.getInboundMessageQueueSize());
         } catch (Exception e) {
             System.err.println("NIO: Exception in routeInboundMessage: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    @Override
-    public MessageContext getContextFor(Message message) {
-        return state.getMessageContexts().get(message);
-    }
+
 
     /**
      * Closes all network resources.

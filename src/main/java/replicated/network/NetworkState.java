@@ -33,8 +33,7 @@ public final class NetworkState {
     // Queue for messages pending connection establishment
     private final Map<NetworkAddress, Queue<Message>> pendingMessages = new ConcurrentHashMap<>();
     
-    // map message identity (object) to context
-    private final Map<Message, MessageContext> messageContexts = new ConcurrentHashMap<>();
+
 
     // Backpressure management
     private volatile boolean backpressureEnabled = false;
@@ -98,22 +97,7 @@ public final class NetworkState {
         return pendingMessages.remove(address);
     }
 
-    // Getters for message contexts
-    public Map<Message, MessageContext> getMessageContexts() {
-        return messageContexts;
-    }
 
-    public MessageContext getMessageContext(Message message) {
-        return messageContexts.get(message);
-    }
-
-    public void putMessageContext(Message message, MessageContext context) {
-        messageContexts.put(message, context);
-    }
-
-    public MessageContext removeMessageContext(Message message) {
-        return messageContexts.remove(message);
-    }
 
     // Helper methods for inbound message queue
     public int getInboundMessageQueueSize() {
@@ -198,14 +182,7 @@ public final class NetworkState {
         return serverChannels.size();
     }
 
-    // Helper methods for message contexts
-    public boolean hasMessageContext(Message message) {
-        return messageContexts.containsKey(message);
-    }
 
-    public int getMessageContextCount() {
-        return messageContexts.size();
-    }
 
     // Clear methods
     public void clearInboundMessageQueue() {
@@ -224,9 +201,7 @@ public final class NetworkState {
         pendingMessages.clear();
     }
 
-    public void clearMessageContexts() {
-        messageContexts.clear();
-    }
+
 
     // Utility methods
     public boolean hasAnyConnections() {
