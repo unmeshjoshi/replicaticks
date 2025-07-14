@@ -294,14 +294,11 @@ public class NioNetwork implements Network {
                 // Connection established, switch to read mode
                 key.interestOps(SelectionKey.OP_READ);
 
-                // Find the remote address for this channel
-                NetworkAddress destination = findRemoteAddressForChannel(channel);
-                if (destination != null) {
+                // Get the destination from the ChannelState that was attached during connection creation
+                ChannelState channelState = (ChannelState) key.attachment();
+                if (channelState != null && channelState.isOutbound()) {
+                    NetworkAddress destination = channelState.getRemoteAddress();
                     System.out.println("NIO: Found destination " + destination + " for connected channel");
-                    
-                    // Create channel state for the new outbound connection and attach to SelectionKey
-                    ChannelState channelState = ChannelState.forOutbound(destination);
-                    key.attach(channelState);
                     
                     // Send any queued messages
                     sendQueuedMessages(destination, channel);
@@ -311,7 +308,7 @@ public class NioNetwork implements Network {
                     ConnectionStats stats = ConnectionStats.forOutbound(destination);
                     metricsCollector.registerConnection(channel.toString(), stats);
                 } else {
-                    System.out.println("NIO: WARNING - Could not find destination for connected channel");
+                    System.out.println("NIO: WARNING - No valid ChannelState attached to SelectionKey for connected channel");
                 }
             } else {
                 System.out.println("NIO: Connection still pending, will retry later");
@@ -416,12 +413,6 @@ public class NioNetwork implements Network {
         if (!channelState.hasPendingWrites()) {
             key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
             System.out.println("NIO: No more pending writes, disabled write interest");
-
-            // Continue processing any remaining queued messages for this destination
-            NetworkAddress destination = findRemoteAddressForChannel(channel);
-            if (destination != null) {
-                sendQueuedMessages(destination, channel);
-            }
         }
     }
 
@@ -658,28 +649,6 @@ public class NioNetwork implements Network {
         }
 
         return channel;
-    }
-
-    /**
-     * Finds the remote address for a given SocketChannel.
-     * For outbound connections: returns the destination we connected to.
-     * For inbound connections: returns the remote client address.
-     */
-    private NetworkAddress findRemoteAddressForChannel(SocketChannel channel) {
-        // Check outbound connections (client-side) - destination is the remote
-        for (Map.Entry<NetworkAddress, SocketChannel> entry : state.getOutboundConnectionsEntrySet()) {
-            if (entry.getValue() == channel) {
-                return entry.getKey();
-            }
-        }
-
-        // Check inbound connections (server-side) - remote address is the client
-        ConnectionInfo connectionInfo = state.getInboundConnection(channel);
-        if (connectionInfo != null) {
-            return connectionInfo.getRemoteAddress();
-        }
-
-        return null;
     }
 
     /**
@@ -1084,7 +1053,4 @@ public class NioNetwork implements Network {
     public SocketChannel getClientChannel(NetworkAddress destination) {
         return state.getOutboundConnections().get(destination);
     }
-
-
-
 }
