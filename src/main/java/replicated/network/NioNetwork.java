@@ -181,7 +181,7 @@ public class NioNetwork implements Network {
                 System.err.println("NIO: Selector is closed, skipping tick");
                 return;
             }
-            
+
             // Process selector events (non-blocking)
             selector.selectNow();
 
@@ -304,36 +304,72 @@ public class NioNetwork implements Network {
     private void handleConnect(SelectionKey key) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
         System.out.println("NIO: handleConnect called for channel: " + channel);
-
         try {
-            if (channel.finishConnect()) {
-                System.out.println("NIO: Connection established successfully");
-                // Connection established, switch to read mode
-                key.interestOps(SelectionKey.OP_READ);
-
-                // Get the destination from the ChannelState that was attached during connection creation
-                ChannelState channelState = (ChannelState) key.attachment();
-                if (channelState != null && channelState.isOutbound()) {
-                    NetworkAddress destination = channelState.getRemoteAddress();
-                    System.out.println("NIO: Found destination " + destination + " for connected channel");
-
-                    // Send any queued messages
-                    sendQueuedMessages(destination, channel);
-                    metricsCollector.incrementOutboundConnection();
-
-                    // Use the outbound-specific constructor for metrics
-                    ConnectionStats stats = ConnectionStats.forOutbound(destination);
-                    metricsCollector.registerConnection(channel.toString(), stats);
-                } else {
-                    System.out.println("NIO: WARNING - No valid ChannelState attached to SelectionKey for connected channel");
-                }
-            } else {
+            if (!channel.finishConnect()) {
                 System.out.println("NIO: Connection still pending, will retry later");
             }
+
+            System.out.println("NIO: Connection established successfully");
+            // Connection established, switch to read mode
+            key.interestOps(SelectionKey.OP_READ);
+            processEstablishedConnection(key, channel);
+
         } catch (IOException e) {
             System.err.println("NIO: Connection failed: " + e.getMessage());
+            cleanupFailedConnection(key, channel);
+        }
+    }
+
+    private void processEstablishedConnection(SelectionKey key, SocketChannel channel) throws IOException {
+        NetworkAddress destination = validateOutboundChannelState(key, channel);
+        System.out.println("NIO: Processing established connection to " + destination);
+
+        try {
+            sendQueuedMessages(destination, channel);
+            registerOutboundConnectionMetrics(channel, destination);
+            System.out.println("NIO: Successfully processed connection to " + destination);
+            
+        } catch (IOException e) {
+            handleConnectionProcessingFailure(key, channel, destination, e);
+            throw e;
+        }
+    }
+
+    private NetworkAddress validateOutboundChannelState(SelectionKey key, SocketChannel channel) {
+        ChannelState channelState = (ChannelState) key.attachment();
+        if (channelState == null) {
+            throw new IllegalStateException("No ChannelState attached to SelectionKey for channel: " + channel);
+        }
+        
+        if (!channelState.isOutbound()) {
+            throw new IllegalStateException("ChannelState is not outbound for channel: " + channel);
+        }
+        
+        NetworkAddress destination = channelState.getRemoteAddress();
+        if (destination == null) {
+            throw new IllegalStateException("No remote address in ChannelState for channel: " + channel);
+        }
+        
+        return destination;
+    }
+
+    private void registerOutboundConnectionMetrics(SocketChannel channel, NetworkAddress destination) {
+        ConnectionStats stats = ConnectionStats.forOutbound(destination);
+        metricsCollector.registerConnection(channel.toString(), stats);
+        metricsCollector.incrementOutboundConnection();
+    }
+
+    private void handleConnectionProcessingFailure(SelectionKey key, SocketChannel channel, NetworkAddress destination, IOException e) {
+        System.err.println("NIO: Failed to process connection to " + destination + ": " + e.getMessage());
+        cleanupFailedConnection(key, channel);
+    }
+
+    private void cleanupFailedConnection(SelectionKey key, SocketChannel channel) {
+        try {
             key.cancel();
             channel.close();
+        } catch (IOException cleanupException) {
+            System.err.println("NIO: Error during failed connection cleanup: " + cleanupException.getMessage());
         }
     }
 
@@ -956,7 +992,7 @@ public class NioNetwork implements Network {
 
             clearAllPendingMessages();
 
-            if (selector.isOpen()){
+            if (selector.isOpen()) {
                 // Close all inbound connections
                 for (SelectionKey key : selector.keys()) {
                     if (key.channel() instanceof SocketChannel) {
