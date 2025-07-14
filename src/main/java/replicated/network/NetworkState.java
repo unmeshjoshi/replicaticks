@@ -36,9 +36,6 @@ public final class NetworkState {
     // Queue for messages pending connection establishment
     private final Map<NetworkAddress, Queue<Message>> pendingMessages = new ConcurrentHashMap<>();
     
-    // Per-channel state management (replaces shared buffers to prevent data corruption)
-    private final Map<SocketChannel, ChannelState> channelStates = new ConcurrentHashMap<>();
-    
     // map message identity (object) to context
     private final Map<Message, MessageContext> messageContexts = new ConcurrentHashMap<>();
 
@@ -119,23 +116,6 @@ public final class NetworkState {
 
     public Queue<Message> removePendingMessages(NetworkAddress address) {
         return pendingMessages.remove(address);
-    }
-
-    // Getters for channel states
-    public Map<SocketChannel, ChannelState> getChannelStates() {
-        return channelStates;
-    }
-
-    public ChannelState getChannelState(SocketChannel channel) {
-        return channelStates.get(channel);
-    }
-
-    public void putChannelState(SocketChannel channel, ChannelState state) {
-        channelStates.put(channel, state);
-    }
-
-    public ChannelState removeChannelState(SocketChannel channel) {
-        return channelStates.remove(channel);
     }
 
     // Getters for message contexts
@@ -246,19 +226,6 @@ public final class NetworkState {
         return serverChannels.size();
     }
 
-    // Helper methods for channel states
-    public boolean hasChannelState(SocketChannel channel) {
-        return channelStates.containsKey(channel);
-    }
-
-    public ChannelState getOrCreateChannelState(SocketChannel channel) {
-        return channelStates.computeIfAbsent(channel, k -> new ChannelState());
-    }
-
-    public int getChannelStateCount() {
-        return channelStates.size();
-    }
-
     // Helper methods for message contexts
     public boolean hasMessageContext(Message message) {
         return messageContexts.containsKey(message);
@@ -268,7 +235,7 @@ public final class NetworkState {
         return messageContexts.size();
     }
 
-    // Helper methods for bulk operations
+    // Clear methods
     public void clearInboundMessageQueue() {
         inboundMessageQueue.clear();
     }
@@ -285,15 +252,11 @@ public final class NetworkState {
         pendingMessages.clear();
     }
 
-    public void clearChannelStates() {
-        channelStates.clear();
-    }
-
     public void clearMessageContexts() {
         messageContexts.clear();
     }
 
-    // Helper methods for checking overall state
+    // Utility methods
     public boolean hasAnyConnections() {
         return !outboundConnections.isEmpty() || !inboundConnections.isEmpty();
     }
@@ -318,7 +281,7 @@ public final class NetworkState {
         return total;
     }
 
-    // Backpressure management helper methods
+    // Backpressure management
     public boolean isBackpressureEnabled() {
         return backpressureEnabled;
     }
@@ -328,11 +291,11 @@ public final class NetworkState {
     }
 
     public boolean shouldEnableBackpressure(int highWatermark) {
-        return !backpressureEnabled && getInboundMessageQueueSize() > highWatermark;
+        return !backpressureEnabled && getInboundMessageQueueSize() >= highWatermark;
     }
 
     public boolean shouldDisableBackpressure(int lowWatermark) {
-        return backpressureEnabled && getInboundMessageQueueSize() < lowWatermark;
+        return backpressureEnabled && getInboundMessageQueueSize() <= lowWatermark;
     }
 
     public void enableBackpressure() {
@@ -344,6 +307,6 @@ public final class NetworkState {
     }
 
     public int getCurrentInboundQueueSize() {
-        return getInboundMessageQueueSize();
+        return inboundMessageQueue.size();
     }
 } 
