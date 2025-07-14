@@ -585,15 +585,6 @@ public class NioNetworkPartialMessageTest {
     // === Helper Methods =====================================================
 
     private SocketChannel getClientChannel(NioNetwork client, NetworkAddress serverAddr) {
-        // Use reflection to access the outbound connections map
-        try {
-            java.lang.reflect.Field outboundField = NioNetwork.class.getDeclaredField("outboundConnections");
-            outboundField.setAccessible(true);
-            java.util.Map<NetworkAddress, SocketChannel> outboundConnections = 
-                (java.util.Map<NetworkAddress, SocketChannel>) outboundField.get(client);
-            return outboundConnections.get(serverAddr);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        return client.getClientChannel(serverAddr);
     }
 } 

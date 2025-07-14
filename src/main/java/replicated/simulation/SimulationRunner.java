@@ -418,7 +418,7 @@ public class SimulationRunner {
                     System.out.println("GET mismatch: key=" + key + 
                                       ", expected=" + expectedValue + 
                                       ", got=" + (result != null ? new String(result.value()) : "null"));
-                }
+                }   
             });
             
             future.onFailure(error -> {

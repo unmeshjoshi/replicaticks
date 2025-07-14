@@ -114,6 +114,62 @@ task runCluster(type: Exec) {
     }
 }
 
+// Task to test individual servers
+task testIndividualServers(type: Exec) {
+    group = 'verification'
+    description = 'Tests each server individually to verify data replication'
+    
+    // Ensure JARs are built first
+    dependsOn shadowJar, shadowClientJar
+    
+    // Make executable
+    doFirst {
+        exec {
+            commandLine 'chmod', '+x', 'scripts/test-individual-servers.sh'
+        }
+    }
+    
+    commandLine './scripts/test-individual-servers.sh'
+}
+
+// Task to inspect data directory
+task inspectData {
+    group = 'verification'
+    description = 'Inspect the data directory to verify stored values'
+    
+    doLast {
+        def dataDir = file('build/demo-data')
+        if (!dataDir.exists()) {
+            println "❌ Data directory does not exist: ${dataDir.absolutePath}"
+            println "   Run './gradlew runCluster' first to generate data"
+            return
+        }
+        
+        println "📁 Data directory: ${dataDir.absolutePath}"
+        println "🔍 Inspecting RocksDB files..."
+        
+        dataDir.eachDir { replicaDir ->
+            println "\n📂 Replica: ${replicaDir.name}"
+            if (replicaDir.exists()) {
+                def files = replicaDir.listFiles()
+                if (files) {
+                    files.each { file ->
+                        println "   📄 ${file.name} (${file.length()} bytes)"
+                    }
+                } else {
+                    println "   ⚠️  No files found"
+                }
+            } else {
+                println "   ❌ Directory not found"
+            }
+        }
+        
+        println "\n💡 To inspect RocksDB contents, you can use:"
+        println "   - RocksDB CLI tools (if installed)"
+        println "   - Or run individual server tests: './gradlew testIndividualServers'"
+    }
+}
+
 // --- Publishing -------------------------------------------------------------
 publishing {
     publications {
