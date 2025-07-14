@@ -51,10 +51,8 @@ public class NioNetwork implements Network {
     // Queue for messages pending connection establishment
     private final Map<NetworkAddress, Queue<Message>> pendingMessages = new ConcurrentHashMap<>();
 
-    // Network partitioning state
-    private final Set<String> partitionedLinks = new HashSet<>();
-    private final Map<String, Double> linkPacketLoss = new HashMap<>();
-    private final Map<String, Integer> linkDelays = new HashMap<>();
+    // Network partitioning state (moved to NetworkFaultConfig)
+    private final NetworkFaultConfig faultConfig;
 
     // Per-channel state management (replaces shared buffers to prevent data corruption)
     private final Map<SocketChannel, ChannelState> channelStates = new ConcurrentHashMap<>();
@@ -71,15 +69,15 @@ public class NioNetwork implements Network {
     private final MetricsCollector metricsCollector = new MetricsCollector();
 
     public NioNetwork() {
-        this(new JsonMessageCodec());
+        this(new JsonMessageCodec(), NetworkConfig.defaults(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
     }
 
     public NioNetwork(MessageCodec codec) {
-        this(codec, NetworkConfig.defaults());
+        this(codec, NetworkConfig.defaults(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
     }
 
     public NioNetwork(MessageCodec codec, int maxInboundPerTick) {
-        this(codec, NetworkConfig.builder().maxInboundPerTick(maxInboundPerTick).build());
+        this(codec, NetworkConfig.builder().maxInboundPerTick(maxInboundPerTick).build(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
     }
 
     public NioNetwork(MessageCodec codec, int maxInboundPerTick, int backpressureHighWatermark, int backpressureLowWatermark) {
@@ -87,12 +85,17 @@ public class NioNetwork implements Network {
                 .maxInboundPerTick(maxInboundPerTick)
                 .backpressureHighWatermark(backpressureHighWatermark)
                 .backpressureLowWatermark(backpressureLowWatermark)
-                .build());
+                .build(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
     }
 
     public NioNetwork(MessageCodec codec, NetworkConfig config) {
+        this(codec, config, new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
+    }
+
+    public NioNetwork(MessageCodec codec, NetworkConfig config, NetworkFaultConfig faultConfig) {
         this.codec = codec;
         this.config = config;
+        this.faultConfig = faultConfig;
         try {
             this.selector = Selector.open();
         } catch (IOException e) {
@@ -147,13 +150,13 @@ public class NioNetwork implements Network {
 
         // Check for network partition
         String linkKey = linkKey(message.source(), message.destination());
-        if (partitionedLinks.contains(linkKey)) {
+        if (faultConfig.getPartitionedLinks().contains(linkKey)) {
             System.out.println("NIO: Message dropped due to partition: " + linkKey);
             return; // Drop message due to partition
         }
 
         // Check for packet loss
-        Double lossRate = linkPacketLoss.get(linkKey);
+        Double lossRate = faultConfig.getLinkPacketLoss().get(linkKey);
         if (lossRate != null && random.nextDouble() < lossRate) {
             System.out.println("NIO: Message dropped due to packet loss: " + linkKey);
             return; // Drop message due to packet loss
@@ -683,9 +686,8 @@ public class NioNetwork implements Network {
         if (source == null || destination == null) {
             throw new IllegalArgumentException("Addresses cannot be null");
         }
-
-        partitionedLinks.add(linkKey(source, destination));
-        partitionedLinks.add(linkKey(destination, source));
+        faultConfig.addPartitionedLink(linkKey(source, destination));
+        faultConfig.addPartitionedLink(linkKey(destination, source));
     }
 
     @Override
@@ -693,8 +695,7 @@ public class NioNetwork implements Network {
         if (source == null || destination == null) {
             throw new IllegalArgumentException("Addresses cannot be null");
         }
-
-        partitionedLinks.add(linkKey(source, destination));
+        faultConfig.addPartitionedLink(linkKey(source, destination));
     }
 
     @Override
@@ -702,9 +703,8 @@ public class NioNetwork implements Network {
         if (source == null || destination == null) {
             throw new IllegalArgumentException("Addresses cannot be null");
         }
-
-        partitionedLinks.remove(linkKey(source, destination));
-        partitionedLinks.remove(linkKey(destination, source));
+        faultConfig.removePartitionedLink(linkKey(source, destination));
+        faultConfig.removePartitionedLink(linkKey(destination, source));
     }
 
     @Override
@@ -715,8 +715,7 @@ public class NioNetwork implements Network {
         if (delayTicks < 0) {
             throw new IllegalArgumentException("Delay ticks cannot be negative");
         }
-
-        linkDelays.put(linkKey(source, destination), delayTicks);
+        faultConfig.setLinkDelay(linkKey(source, destination), delayTicks);
     }
 
     @Override
@@ -727,8 +726,7 @@ public class NioNetwork implements Network {
         if (lossRate < 0.0 || lossRate > 1.0) {
             throw new IllegalArgumentException("Loss rate must be between 0.0 and 1.0");
         }
-
-        linkPacketLoss.put(linkKey(source, destination), lossRate);
+        faultConfig.setLinkPacketLoss(linkKey(source, destination), lossRate);
     }
 
     @Override
