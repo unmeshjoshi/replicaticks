@@ -172,4 +172,57 @@ class NioNetworkTest {
         // When/Then - should not throw
         assertDoesNotThrow(() -> testNetwork.close());
     }
+    
+    @Test
+    void shouldRespectMaxOutboundPerTickLimit() {
+        // Given
+        int noOfPerTickMessages = 3;
+        NetworkConfig config = NetworkConfig.builder()
+            .maxOutboundPerTick(noOfPerTickMessages)  // Limit to 3 messages per tick
+            .build();
+        NioNetwork limitedNetwork = new NioNetwork(null, config);
+        
+        // Send 10 messages (more than the limit)
+        int totalNoOfMessages = 10;
+        for (int i = 0; i < totalNoOfMessages; i++) {
+            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, 
+                ("test-" + i).getBytes(), "correlation-" + i);
+            limitedNetwork.send(message);
+        }
+        
+        // When - process one tick
+        limitedNetwork.tick();
+
+        assertEquals(limitedNetwork.getOutboundQueueSize(), totalNoOfMessages - noOfPerTickMessages ,
+            "Messages remaining, indicating limit was applied. Found: " + limitedNetwork.getOutboundQueueSize());
+
+        // Cleanup
+        limitedNetwork.close();
+    }
+    
+    @Test
+    void shouldProcessAllMessagesWhenUnderLimit() {
+        // Given
+        NetworkConfig config = NetworkConfig.builder()
+            .maxOutboundPerTick(10)  // Limit higher than message count
+            .build();
+        NioNetwork limitedNetwork = new NioNetwork(null, config);
+        
+        // Send 5 messages (under the limit)
+        for (int i = 0; i < 5; i++) {
+            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, 
+                ("test-" + i).getBytes(), "correlation-" + i);
+            limitedNetwork.send(message);
+        }
+        
+        // When - process one tick
+        limitedNetwork.tick();
+        
+        // Then - all messages should have been processed
+        assertEquals(0, limitedNetwork.getOutboundQueueSize(), 
+            "Should have 0 messages remaining when under the limit");
+        
+        // Cleanup
+        limitedNetwork.close();
+    }
 } 

@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+
 import replicated.messaging.Message;
 import replicated.messaging.NetworkAddress;
 
@@ -17,22 +18,21 @@ import replicated.messaging.NetworkAddress;
  * Thread-safe state container for NioNetwork.
  */
 public final class NetworkState {
-    
+
     // Server sockets bound to specific addresses
     private final Map<NetworkAddress, ServerSocketChannel> serverChannels = new ConcurrentHashMap<>();
 
     // Client connections to other nodes (outbound connections we initiate)
     private final Map<NetworkAddress, SocketChannel> outboundConnections = new ConcurrentHashMap<>();
-    
+
     // Inbound message queue
     private final BlockingQueue<InboundMessage> inboundMessageQueue = new LinkedBlockingQueue<>();
-    
+
     // Outbound message queue for async sending
-    private final Queue<Message> outboundQueue = new LinkedBlockingQueue<>();
-    
+    private final BlockingQueue<Message> outboundQueue = new LinkedBlockingQueue<>();
+
     // Queue for messages pending connection establishment
     private final Map<NetworkAddress, Queue<Message>> pendingMessages = new ConcurrentHashMap<>();
-    
 
 
     // Backpressure management
@@ -41,10 +41,6 @@ public final class NetworkState {
     // Getters for server channels
     public Map<NetworkAddress, ServerSocketChannel> getServerChannels() {
         return serverChannels;
-    }
-
-    public ServerSocketChannel getServerChannel(NetworkAddress address) {
-        return serverChannels.get(address);
     }
 
     public void putServerChannel(NetworkAddress address, ServerSocketChannel channel) {
@@ -68,37 +64,6 @@ public final class NetworkState {
         outboundConnections.put(address, channel);
     }
 
-    public SocketChannel removeOutboundConnection(NetworkAddress address) {
-        return outboundConnections.remove(address);
-    }
-
-    // Getters for message queues
-    public BlockingQueue<InboundMessage> getInboundMessageQueue() {
-        return inboundMessageQueue;
-    }
-
-    public Queue<Message> getOutboundQueue() {
-        return outboundQueue;
-    }
-
-    public Map<NetworkAddress, Queue<Message>> getPendingMessages() {
-        return pendingMessages;
-    }
-
-    public Queue<Message> getPendingMessages(NetworkAddress address) {
-        return pendingMessages.get(address);
-    }
-
-    public void putPendingMessages(NetworkAddress address, Queue<Message> messages) {
-        pendingMessages.put(address, messages);
-    }
-
-    public Queue<Message> removePendingMessages(NetworkAddress address) {
-        return pendingMessages.remove(address);
-    }
-
-
-
     // Helper methods for inbound message queue
     public int getInboundMessageQueueSize() {
         return inboundMessageQueue.size();
@@ -106,14 +71,6 @@ public final class NetworkState {
 
     public void addInboundMessage(InboundMessage message) {
         inboundMessageQueue.add(message);
-    }
-
-    public InboundMessage pollInboundMessage() {
-        return inboundMessageQueue.poll();
-    }
-
-    public boolean hasInboundMessages() {
-        return !inboundMessageQueue.isEmpty();
     }
 
     public int drainInboundMessages(Collection<InboundMessage> collection, int maxElements) {
@@ -133,14 +90,8 @@ public final class NetworkState {
         return outboundQueue.poll();
     }
 
-    public boolean hasOutboundMessages() {
-        return !outboundQueue.isEmpty();
-    }
-
-    // Helper methods for pending messages
-    public boolean hasPendingMessages(NetworkAddress address) {
-        Queue<Message> queue = pendingMessages.get(address);
-        return queue != null && !queue.isEmpty();
+    public int drainOutboundMessages(Collection<Message> collection, int maxElements) {
+        return outboundQueue.drainTo(collection, maxElements);
     }
 
     public int getPendingMessageCount(NetworkAddress address) {
@@ -152,22 +103,8 @@ public final class NetworkState {
         pendingMessages.computeIfAbsent(address, k -> new LinkedBlockingQueue<>()).add(message);
     }
 
-    public Message pollPendingMessage(NetworkAddress address) {
-        Queue<Message> queue = pendingMessages.get(address);
-        return queue != null ? queue.poll() : null;
-    }
-
     public Queue<Message> getOrCreatePendingMessages(NetworkAddress address) {
         return pendingMessages.computeIfAbsent(address, k -> new LinkedBlockingQueue<>());
-    }
-
-    // Helper methods for connections
-    public boolean hasOutboundConnection(NetworkAddress address) {
-        return outboundConnections.containsKey(address);
-    }
-
-    public int getOutboundConnectionCount() {
-        return outboundConnections.size();
     }
 
     public Set<Map.Entry<NetworkAddress, SocketChannel>> getOutboundConnectionsEntrySet() {
@@ -178,20 +115,11 @@ public final class NetworkState {
         return serverChannels.containsKey(address);
     }
 
-    public int getServerChannelCount() {
-        return serverChannels.size();
+
+    public Map<NetworkAddress, Queue<Message>> getPendingMessages() {
+        return pendingMessages;
     }
 
-
-
-    // Clear methods
-    public void clearInboundMessageQueue() {
-        inboundMessageQueue.clear();
-    }
-
-    public void clearOutboundQueue() {
-        outboundQueue.clear();
-    }
 
     public void clearPendingMessages(NetworkAddress address) {
         pendingMessages.remove(address);
@@ -201,27 +129,8 @@ public final class NetworkState {
         pendingMessages.clear();
     }
 
-
-
-    // Utility methods
-    public boolean hasAnyConnections() {
-        return !outboundConnections.isEmpty();
-    }
-
-    public boolean hasAnyMessages() {
-        return !inboundMessageQueue.isEmpty() || !outboundQueue.isEmpty() || !pendingMessages.isEmpty();
-    }
-
-    public boolean hasAnyServerChannels() {
-        return !serverChannels.isEmpty();
-    }
-
-    public int getTotalConnectionCount() {
-        return outboundConnections.size();
-    }
-
     public int getTotalMessageCount() {
-        int total = inboundMessageQueue.size() + outboundQueue.size();
+        int total = outboundQueue.size();
         for (Queue<Message> queue : pendingMessages.values()) {
             total += queue.size();
         }
@@ -231,10 +140,6 @@ public final class NetworkState {
     // Backpressure management
     public boolean isBackpressureEnabled() {
         return backpressureEnabled;
-    }
-
-    public void setBackpressureEnabled(boolean enabled) {
-        this.backpressureEnabled = enabled;
     }
 
     public boolean shouldEnableBackpressure(int highWatermark) {
@@ -256,4 +161,4 @@ public final class NetworkState {
     public int getCurrentInboundQueueSize() {
         return inboundMessageQueue.size();
     }
-} 
+}

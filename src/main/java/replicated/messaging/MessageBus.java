@@ -21,18 +21,18 @@ import java.util.Map;
  * - Address routing is used as fallback if no correlation handler exists
  */
 public class MessageBus implements MessageCallback {
-    
+
     protected final Network network;
     protected final MessageCodec messageCodec;
-    
+
     // Dual routing maps
     private final Map<String, MessageHandler> correlationIdHandlers;
     private final Map<NetworkAddress, MessageHandler> addressHandlers;
-    
+
     /**
      * Creates a MessageBus with the given network and codec dependencies.
-     * 
-     * @param network the underlying network for message transmission
+     *
+     * @param network      the underlying network for message transmission
      * @param messageCodec the codec for message encoding/decoding
      * @throws IllegalArgumentException if either parameter is null
      */
@@ -43,16 +43,16 @@ public class MessageBus implements MessageCallback {
         if (messageCodec == null) {
             throw new IllegalArgumentException("MessageCodec cannot be null");
         }
-        
+
         this.network = network;
         this.messageCodec = messageCodec;
         this.correlationIdHandlers = new HashMap<>();
         this.addressHandlers = new HashMap<>();
     }
-    
+
     /**
      * Sends a message through the underlying network.
-     * 
+     *
      * @param message the message to send
      * @throws IllegalArgumentException if message is null
      */
@@ -60,19 +60,19 @@ public class MessageBus implements MessageCallback {
         if (message == null) {
             throw new IllegalArgumentException("Message cannot be null");
         }
-        
+
         network.send(message);
     }
 
     // === CORRELATION ID ROUTING (Client Response Pattern) ===
-    
+
     /**
      * Registers a message handler for the given correlation ID.
      * When messages with this correlation ID are received, they will be routed to the handler.
      * This is the client pattern - for components that send requests and expect responses.
-     * 
+     *
      * @param correlationId the correlation ID to register the handler for
-     * @param handler the message handler to receive messages
+     * @param handler       the message handler to receive messages
      */
     public void registerHandler(String correlationId, MessageHandler handler) {
         if (correlationId == null) {
@@ -83,11 +83,11 @@ public class MessageBus implements MessageCallback {
         }
         correlationIdHandlers.put(correlationId, handler);
     }
-    
+
     /**
      * Unregisters the message handler for the given correlation ID.
      * Messages with this correlation ID will no longer be routed to any handler.
-     * 
+     *
      * @param correlationId the correlation ID to unregister
      */
     public void unregisterHandler(String correlationId) {
@@ -96,14 +96,14 @@ public class MessageBus implements MessageCallback {
         }
         correlationIdHandlers.remove(correlationId);
     }
-    
+
     // === ADDRESS ROUTING (Server Request Pattern) ===
-    
+
     /**
      * Registers a message handler for the given network address.
      * When messages are received for this address, they will be routed to the handler.
      * This is the server pattern - for components that listen on specific addresses.
-     * 
+     *
      * @param address the network address to register the handler for
      * @param handler the message handler to receive messages
      */
@@ -116,11 +116,11 @@ public class MessageBus implements MessageCallback {
         }
         addressHandlers.put(address, handler);
     }
-    
+
     /**
      * Unregisters the message handler for the given network address.
      * Messages sent to this address will no longer be routed to any handler.
-     * 
+     *
      * @param address the network address to unregister
      */
     public void unregisterHandler(NetworkAddress address) {
@@ -129,13 +129,13 @@ public class MessageBus implements MessageCallback {
         }
         addressHandlers.remove(address);
     }
-    
+
     // === UNIFIED ROUTING LOGIC ===
-    
+
     /**
      * Callback method that receives messages from the network.
      * This is called by the network when messages are available.
-     * 
+     * <p>
      * Routing Priority:
      * 1. Check correlation ID first (client response pattern)
      * 2. Fall back to address routing (server request pattern)
@@ -145,10 +145,10 @@ public class MessageBus implements MessageCallback {
     public void onMessage(Message message, MessageContext context) {
         String correlationId = message.correlationId();
         NetworkAddress destination = message.destination();
-        
-        System.out.println("MessageBus: Routing message " + message.messageType() + " from " + message.source() + 
-                          " to " + destination + " (correlationId=" + correlationId + ")");
-        
+
+        System.out.println("MessageBus: Routing message " + message.messageType() + " from " + message.source() +
+                " to " + destination + " (correlationId=" + correlationId + ")");
+
         // PRIORITY 1: Correlation ID routing (client responses)
         //If the message is sent in response to an earlier message sent with a specific correlation ID,
         //then it should be routed to the corresponding handler for that correlation ID
@@ -162,7 +162,7 @@ public class MessageBus implements MessageCallback {
                 return;
             }
         }
-        
+
         // PRIORITY 2: Address routing (server requests)
         if (isMessageFor(destination)) {
             MessageHandler addressHandler = addressHandlers.get(destination);
@@ -172,10 +172,10 @@ public class MessageBus implements MessageCallback {
                 return;
             }
         }
-        
+
         // PRIORITY 3: Unroutable message (log but don't crash)
-        System.out.println("MessageBus: No handler found for message " + message.messageType() + 
-                          " (correlationId=" + correlationId + ", destination=" + destination + ")");
+        System.out.println("MessageBus: No handler found for message " + message.messageType() +
+                " (correlationId=" + correlationId + ", destination=" + destination + ")");
     }
 
     private static boolean isMessageFor(NetworkAddress destination) {
@@ -189,7 +189,7 @@ public class MessageBus implements MessageCallback {
     /**
      * Routes received messages to registered handlers.
      * This method implements the reactive Service Layer tick() pattern.
-     * 
+     * <p>
      * Note: This method does NOT tick the network - that is handled by the centralized
      * SimulationDriver to maintain proper tick orchestration. This method only processes
      * messages that were delivered in previous ticks.
@@ -200,7 +200,7 @@ public class MessageBus implements MessageCallback {
         // centralized tick orchestration and deterministic ordering
         routeMessagesToHandlers();
     }
-    
+
     /**
      * Routes messages to their respective handlers based on correlation ID or destination address.
      * This method is now called by the network callback instead of polling.
@@ -209,18 +209,18 @@ public class MessageBus implements MessageCallback {
         // This method is now handled by the onMessage callback
         // The network will call onMessage when messages are available
     }
-    
+
     /**
      * Broadcasts a message from the source to all recipients in the list.
      * The sender (source) will not receive the message - only the other recipients.
-     * 
-     * @param source the source address sending the broadcast
-     * @param recipients the list of addresses to send the message to
+     *
+     * @param source      the source address sending the broadcast
+     * @param recipients  the list of addresses to send the message to
      * @param messageType the type of message to broadcast
-     * @param payload the message payload
+     * @param payload     the message payload
      */
-    public void broadcast(NetworkAddress source, List<NetworkAddress> recipients, 
-                         MessageType messageType, byte[] payload) {
+    public void broadcast(NetworkAddress source, List<NetworkAddress> recipients,
+                          MessageType messageType, byte[] payload) {
         for (NetworkAddress recipient : recipients) {
             if (!recipient.equals(source)) {  // Don't send to self
                 String correlationId = generateCorrelationId();
@@ -229,16 +229,16 @@ public class MessageBus implements MessageCallback {
             }
         }
     }
-    
+
     private static final java.util.concurrent.atomic.AtomicLong correlationIdCounter = new java.util.concurrent.atomic.AtomicLong(0);
-    
+
     /**
      * Generates a unique correlation ID for message tracking.
      */
     protected String generateCorrelationId() {
         return "msg-" + System.currentTimeMillis() + "-" + correlationIdCounter.incrementAndGet();
     }
-    
+
     /**
      * Helper method for direct-channel replies.
      */
@@ -252,25 +252,5 @@ public class MessageBus implements MessageCallback {
             // Fallback to normal send if direct channel not available (e.g., simulation or ctx null)
             network.send(response);
         }
-    }
-    
-    // === LEGACY CLIENT-SPECIFIC METHODS (for backward compatibility) ===
-    
-
-    
-    /**
-     * Registers a message handler for the given correlation ID.
-     * This is now handled by the unified registerHandler method.
-     */
-    public void registerCorrelationIdHandler(String correlationId, MessageHandler handler) {
-        registerHandler(correlationId, handler);
-    }
-    
-    /**
-     * Unregisters a message handler for the given correlation ID.
-     * This is now handled by the unified unregisterHandler method.
-     */
-    public void unregisterCorrelationIdHandler(String correlationId) {
-        unregisterHandler(correlationId);
     }
 } 

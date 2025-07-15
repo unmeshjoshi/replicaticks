@@ -8,6 +8,7 @@ public final class NetworkConfig {
     
     // === Performance tuning ===
     private final int maxInboundPerTick;
+    private final int maxOutboundPerTick;
     
     // === Backpressure tuning ===
     private final int backpressureHighWatermark;
@@ -15,6 +16,7 @@ public final class NetworkConfig {
     
     private NetworkConfig(Builder builder) {
         this.maxInboundPerTick = builder.maxInboundPerTick;
+        this.maxOutboundPerTick = builder.maxOutboundPerTick;
         this.backpressureHighWatermark = builder.backpressureHighWatermark;
         this.backpressureLowWatermark = builder.backpressureLowWatermark;
         
@@ -24,6 +26,9 @@ public final class NetworkConfig {
     private void validate() {
         if (maxInboundPerTick <= 0) {
             throw new IllegalArgumentException("maxInboundPerTick must be positive");
+        }
+        if (maxOutboundPerTick <= 0) {
+            throw new IllegalArgumentException("maxOutboundPerTick must be positive");
         }
         if (backpressureHighWatermark <= 0) {
             throw new IllegalArgumentException("backpressureHighWatermark must be positive");
@@ -38,6 +43,10 @@ public final class NetworkConfig {
     
     public int maxInboundPerTick() {
         return maxInboundPerTick;
+    }
+    
+    public int maxOutboundPerTick() {
+        return maxOutboundPerTick;
     }
     
     public int backpressureHighWatermark() {
@@ -64,8 +73,8 @@ public final class NetworkConfig {
     
     @Override
     public String toString() {
-        return String.format("NetworkConfig{maxInboundPerTick=%d, backpressureHighWatermark=%d, backpressureLowWatermark=%d}",
-                maxInboundPerTick, backpressureHighWatermark, backpressureLowWatermark);
+        return String.format("NetworkConfig{maxInboundPerTick=%d, maxOutboundPerTick=%d, backpressureHighWatermark=%d, backpressureLowWatermark=%d}",
+                maxInboundPerTick, maxOutboundPerTick, backpressureHighWatermark, backpressureLowWatermark);
     }
     
     /**
@@ -73,11 +82,17 @@ public final class NetworkConfig {
      */
     public static final class Builder {
         private int maxInboundPerTick = 1000; // safeguard to avoid starving other work per tick
+        private int maxOutboundPerTick = 1000; // safeguard to avoid starving other work per tick
         private int backpressureHighWatermark = 10000;
         private int backpressureLowWatermark = 5000;
         
         public Builder maxInboundPerTick(int maxInboundPerTick) {
             this.maxInboundPerTick = maxInboundPerTick;
+            return this;
+        }
+        
+        public Builder maxOutboundPerTick(int maxOutboundPerTick) {
+            this.maxOutboundPerTick = maxOutboundPerTick;
             return this;
         }
         
