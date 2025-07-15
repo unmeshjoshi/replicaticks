@@ -177,7 +177,12 @@ public final class ClusterClient implements MessageHandler {
         // Use dynamic client address registration
         if (currentClientAddress == null) {
             // Generate a unique client address for this request
-            NetworkAddress clientAddress = new NetworkAddress("client-" + clientId);
+            //TODO: We need to have a ProcessID abstraction to identify clients and replicas.
+            //We can then use ProcessID to map messages. The network layer can keep the map of processIDs to
+            //network addresses of replicas. For clients we do not need to explicitly map ip addresses
+            //as the network messages will be sent over the connected channel.
+            NetworkAddress clientAddress = new NetworkAddress("client-" + clientId, 8080);
+            currentClientAddress = clientAddress;
         }
 
         Message message = new Message(currentClientAddress, destination, messageType, payload, correlationId);
