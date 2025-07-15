@@ -102,4 +102,66 @@ class MessageTest {
         assertThrows(NullPointerException.class, () ->
             new Message(source, destination, messageType, payload, null));
     }
+
+    @Test
+    void shouldCreateClientMessageWithFactoryMethod() {
+        // Given
+        NetworkAddress destination = new NetworkAddress("127.0.0.1", 8080);
+        byte[] payload = "test".getBytes();
+        String correlationId = "test-correlation-id";
+        
+        // When
+        Message clientMessage = Message.clientMessage(destination, MessageType.CLIENT_GET_REQUEST, payload, correlationId);
+        
+        // Then
+        assertNull(clientMessage.source(), "Client message should have null source");
+        assertEquals(destination, clientMessage.destination());
+        assertEquals(MessageType.CLIENT_GET_REQUEST, clientMessage.messageType());
+        assertArrayEquals(payload, clientMessage.payload());
+        assertEquals(correlationId, clientMessage.correlationId());
+    }
+    
+    @Test
+    void shouldCreateUnboundMessageWithSystemMessageType() {
+        // Given
+        NetworkAddress destination = new NetworkAddress("127.0.0.1", 8080);
+        byte[] payload = "test".getBytes();
+        String correlationId = "test-correlation-id";
+        
+        // When
+        Message unboundMessage = Message.unboundMessage(destination, MessageType.PING_REQUEST, payload, correlationId);
+        
+        // Then
+        assertNull(unboundMessage.source(), "Unbound message should have null source");
+        assertEquals(destination, unboundMessage.destination());
+        assertEquals(MessageType.PING_REQUEST, unboundMessage.messageType());
+        assertArrayEquals(payload, unboundMessage.payload());
+        assertEquals(correlationId, unboundMessage.correlationId());
+    }
+    
+    @Test
+    void shouldThrowExceptionForNonClientOrSystemMessageType() {
+        // Given
+        NetworkAddress destination = new NetworkAddress("127.0.0.1", 8080);
+        byte[] payload = "test".getBytes();
+        String correlationId = "test-correlation-id";
+        
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> {
+            Message.unboundMessage(destination, MessageType.INTERNAL_GET_REQUEST, payload, correlationId);
+        }, "Should throw exception for internal message type");
+    }
+    
+    @Test
+    void shouldThrowExceptionForNonClientMessageType() {
+        // Given
+        NetworkAddress destination = new NetworkAddress("127.0.0.1", 8080);
+        byte[] payload = "test".getBytes();
+        String correlationId = "test-correlation-id";
+        
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> {
+            Message.clientMessage(destination, MessageType.PING_REQUEST, payload, correlationId);
+        }, "Should throw exception for non-client message type");
+    }
 } 

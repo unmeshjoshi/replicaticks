@@ -111,11 +111,6 @@ public final class NetworkState {
         return outboundConnections.entrySet();
     }
 
-    public boolean hasServerChannel(NetworkAddress address) {
-        return serverChannels.containsKey(address);
-    }
-
-
     public Map<NetworkAddress, Queue<Message>> getPendingMessages() {
         return pendingMessages;
     }

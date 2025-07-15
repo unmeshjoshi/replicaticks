@@ -25,8 +25,6 @@ public final class ClusterClient implements MessageHandler {
     private final Random random = new Random();
     
     // Connection management
-    private NetworkAddress currentClientAddress;
-    private int connectionAttempts = 0;
     private final int maxRetries = 3;
     
     // Request tracking - using RequestWaitingList for timeout handling
@@ -38,7 +36,8 @@ public final class ClusterClient implements MessageHandler {
     
     // Delegate for handling protocol-specific messages
     private MessageHandler protocolHandler;
-    
+    private NetworkAddress currentClientAddress;
+
     /**
      * Creates a ClusterClient with bootstrap replicas for cluster discovery.
      *
@@ -174,13 +173,13 @@ public final class ClusterClient implements MessageHandler {
         messageBus.registerHandler(correlationId, this);
         
         byte[] payload = serializePayload(request);
-        
+
         // Use dynamic client address registration
         if (currentClientAddress == null) {
             // Generate a unique client address for this request
-            currentClientAddress = new NetworkAddress("127.0.0.1", 9000 + random.nextInt(1000));
+            NetworkAddress clientAddress = new NetworkAddress("client-" + clientId);
         }
-        
+
         Message message = new Message(currentClientAddress, destination, messageType, payload, correlationId);
         messageBus.sendMessage(message);
     }
@@ -236,13 +235,6 @@ public final class ClusterClient implements MessageHandler {
      */
     public RequestWaitingList<String, Object> getRequestWaitingList() {
         return requestWaitingList;
-    }
-    
-    /**
-     * Get the current client network address.
-     */
-    public NetworkAddress getCurrentClientAddress() {
-        return currentClientAddress;
     }
     
     /**

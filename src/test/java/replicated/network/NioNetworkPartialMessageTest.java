@@ -3,6 +3,7 @@ package replicated.network;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import replicated.TestUtils;
 import replicated.messaging.*;
 
 import java.io.IOException;
@@ -44,20 +45,14 @@ public class NioNetworkPartialMessageTest {
         for (int i = 0; i < count; i++) n.tick();
     }
 
-    private NioNetwork newNetwork() {
-        NioNetwork n = new NioNetwork(new JsonMessageCodec());
-        resources.add(n);
-        return n;
-    }
-
     private NioNetwork newNetwork(int maxInboundPerTick) {
         NioNetwork n = new NioNetwork(new JsonMessageCodec(), maxInboundPerTick);
         resources.add(n);
         return n;
     }
 
-    private Message createTestMessage(NetworkAddress source, NetworkAddress dest, String payload) {
-        return new Message(source, dest, MessageType.PING_REQUEST, payload.getBytes(), UUID.randomUUID().toString());
+    private Message createTestMessage(NetworkAddress dest, String payload) {
+        return Message.unboundMessage(dest, MessageType.PING_REQUEST, payload.getBytes(), UUID.randomUUID().toString());
     }
 
     // === Test 1: Length Header Split Across Reads ============================
@@ -68,17 +63,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleLengthHeaderSplitAcrossReads() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -91,7 +81,7 @@ public class NioNetworkPartialMessageTest {
         spinTicks(server, 5);
 
         // Create a message and encode it
-        Message testMessage = createTestMessage(clientAddr, serverAddr, "test-message");
+        Message testMessage = createTestMessage(serverAddr, "test-message");
         byte[] encoded = new JsonMessageCodec().encode(testMessage);
         
         // Create length-prefixed buffer
@@ -141,17 +131,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleMultipleLengthHeadersSplitAcrossReads() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -164,8 +149,8 @@ public class NioNetworkPartialMessageTest {
         spinTicks(server, 5);
 
         // Create two messages
-        Message msg1 = createTestMessage(clientAddr, serverAddr, "message-1");
-        Message msg2 = createTestMessage(clientAddr, serverAddr, "message-2");
+        Message msg1 = createTestMessage(serverAddr, "message-1");
+        Message msg2 = createTestMessage(serverAddr, "message-2");
         
         byte[] encoded1 = new JsonMessageCodec().encode(msg1);
         byte[] encoded2 = new JsonMessageCodec().encode(msg2);
@@ -222,17 +207,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleMessagePayloadSplitAcrossReads() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -246,7 +226,7 @@ public class NioNetworkPartialMessageTest {
 
         // Create a large message
         String largePayload = "x".repeat(1000); // 1KB payload
-        Message testMessage = createTestMessage(clientAddr, serverAddr, largePayload);
+        Message testMessage = createTestMessage(serverAddr, largePayload);
         byte[] encoded = new JsonMessageCodec().encode(testMessage);
         
         // Create length-prefixed buffer
@@ -298,17 +278,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleMultiplePartialMessagesInSingleRead() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -321,9 +296,9 @@ public class NioNetworkPartialMessageTest {
         spinTicks(server, 5);
 
         // Create three messages
-        Message msg1 = createTestMessage(clientAddr, serverAddr, "msg1");
-        Message msg2 = createTestMessage(clientAddr, serverAddr, "msg2");
-        Message msg3 = createTestMessage(clientAddr, serverAddr, "msg3");
+        Message msg1 = createTestMessage(serverAddr, "msg1");
+        Message msg2 = createTestMessage(serverAddr, "msg2");
+        Message msg3 = createTestMessage(serverAddr, "msg3");
         
         byte[] encoded1 = new JsonMessageCodec().encode(msg1);
         byte[] encoded2 = new JsonMessageCodec().encode(msg2);
@@ -383,17 +358,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleBufferCompactionAfterPartialReads() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -407,7 +377,7 @@ public class NioNetworkPartialMessageTest {
 
         // Create multiple small messages to trigger buffer compaction
         for (int i = 0; i < 10; i++) {
-            Message msg = createTestMessage(clientAddr, serverAddr, "msg-" + i);
+            Message msg = createTestMessage(serverAddr, "msg-" + i);
             client.send(msg);
         }
 
@@ -432,17 +402,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleSingleMessagePartialWrite() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -456,7 +421,7 @@ public class NioNetworkPartialMessageTest {
 
         // Create a large message that will likely cause partial writes
         String largePayload = "x".repeat(5000); // 5KB payload
-        Message testMessage = createTestMessage(clientAddr, serverAddr, largePayload);
+        Message testMessage = createTestMessage(serverAddr, largePayload);
         client.send(testMessage);
 
         // Process ticks to handle partial writes
@@ -481,17 +446,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleInvalidLengthHeaders() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -516,7 +476,7 @@ public class NioNetworkPartialMessageTest {
         spinTicks(server, 1);
 
         // Send valid message after invalid one
-        Message validMessage = createTestMessage(clientAddr, serverAddr, "valid-message");
+        Message validMessage = createTestMessage(serverAddr, "valid-message");
         client.send(validMessage);
 
         // Process ticks
@@ -541,17 +501,12 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleZeroLengthMessages() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
+        NioNetwork server = newNetwork(10);
+        NioNetwork client = newNetwork(10);
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -564,7 +519,7 @@ public class NioNetworkPartialMessageTest {
         spinTicks(server, 5);
 
         // Create zero-length message
-        Message zeroMessage = createTestMessage(clientAddr, serverAddr, "");
+        Message zeroMessage = createTestMessage(serverAddr, "");
         client.send(zeroMessage);
 
         // Process ticks

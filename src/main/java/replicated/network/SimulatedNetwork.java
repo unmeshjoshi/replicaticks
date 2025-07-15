@@ -95,15 +95,13 @@ public class SimulatedNetwork implements Network {
     
 
     
-    @Override
-    public MessageContext getContextFor(Message message) {
-        return messageContexts.get(message);
-    }
+
     
     @Override
     public void sendOnChannel(SocketChannel channel, Message message) {
+        // TigerBeetle approach: Simple fallback for simulation
         // In SimulatedNetwork, we don't have real SocketChannels, so we fall back to normal send
-        // This maintains compatibility with the direct-channel API while working in simulation
+        // Correlation IDs handle all the routing complexity - no address manipulation needed
         send(message);
     }
     
@@ -151,6 +149,15 @@ public class SimulatedNetwork implements Network {
     }
     
     private NetworkLink linkFrom(Message message) {
+        // TigerBeetle approach: Handle null source addresses gracefully
+        if (message.source() == null) {
+            // For client messages, use destination-only routing
+            // This allows network partitioning and packet loss to work correctly
+            // without requiring fake client addresses
+            return new NetworkLink(message.destination(), message.destination());
+        }
+        
+        // For server messages, use normal source->destination routing
         return new NetworkLink(message.source(), message.destination());
     }
     
@@ -250,23 +257,7 @@ public class SimulatedNetwork implements Network {
         linkPacketLoss.put(new NetworkLink(source, destination), lossRate);
     }
     
-    @Override
-    public NetworkAddress establishConnection(NetworkAddress destination) {
-        if (destination == null) {
-            throw new IllegalArgumentException("Destination address cannot be null");
-        }
-        
-        // Simulate OS assigning an ephemeral port for this connection
-        // In SimulatedNetwork, we return localhost with a simulated ephemeral port
-        NetworkAddress ephemeralAddress = new NetworkAddress("127.0.0.1", nextEphemeralPort++);
-        
-        // In a real implementation, we would establish the actual connection here
-        // For simulation purposes, we just return the ephemeral address
-        // The connection is "established" conceptually but all actual communication
-        // goes through the send/receive methods
-        
-        return ephemeralAddress;
-    }
+
     
     /**
      * Returns the most recently delivered message (for testing).

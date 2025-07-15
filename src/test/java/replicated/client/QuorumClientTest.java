@@ -292,7 +292,6 @@ class QuorumClientTest {
             // No-op for testing
         }
         
-        @Override
         public NetworkAddress establishConnection(NetworkAddress destination) {
             // Return a test ephemeral address
             return new NetworkAddress("127.0.0.1", nextPort++);

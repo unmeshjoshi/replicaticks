@@ -250,7 +250,6 @@ class QuorumReplicaUnitTest {
             // Mock implementation
         }
         
-        @Override
         public NetworkAddress establishConnection(NetworkAddress destination) {
             return new NetworkAddress("127.0.0.1", nextPort++);
         }

@@ -37,19 +37,7 @@ public interface Network {
      */
     void tick();
     
-    /**
-     * Establishes a connection to the destination and returns the actual local address
-     * assigned by the network layer. This simulates the OS assigning an ephemeral port.
-     * 
-     * Implementation behavior:
-     * - SimulatedNetwork: Returns a localhost address with simulated ephemeral port
-     * - NioNetwork: Establishes actual socket connection and returns OS-assigned local address
-     * 
-     * @param destination the destination address to connect to
-     * @return the actual local address assigned for this connection
-     * @throws IllegalArgumentException if destination is null
-     */
-    NetworkAddress establishConnection(NetworkAddress destination);
+
     
     // Network Partitioning Methods
     
@@ -121,15 +109,7 @@ public interface Network {
         throw new UnsupportedOperationException("Direct channel send is not supported by this Network implementation");
     }
     
-    /**
-     * Retrieves preserved {@link MessageContext} for a given decoded {@link Message}, if available.
-     * Returns {@code null} when the network implementation does not track contexts or the message
-     * did not originate locally.
-     */
-    default MessageContext getContextFor(Message message) {
-        return null;
-    }
-    
+
     /**
      * Registers a single callback handler for push-based message delivery.
      * 

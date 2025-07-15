@@ -15,20 +15,51 @@ import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-import java.util.Spliterator;
-import java.util.Spliterators;
 
 /**
- * NIO-based network implementation.
+ * NIO-based network implementation for deterministic distributed simulation.
  * Uses Java NIO for non-blocking network I/O while maintaining tick() behavior.
- * <p>
+ * 
+ * ================================================================================
+ * ONE CONNECTION PER DIRECTION PRINCIPLE
+ * ================================================================================
+ * 
+ * This implementation follows a strict "One Connection per Direction" principle:
+ * 
+ * 1. INBOUND CONNECTIONS (Server Role)
+ *    - Created when clients connect to our bound server sockets
+ *    - Used ONLY for receiving messages from clients
+ *    - Never used for sending messages
+ *    - Stored in NetworkState.inboundConnections
+ * 
+ * 2. OUTBOUND CONNECTIONS (Client Role)  
+ *    - Created when we need to send messages to other nodes
+ *    - Used ONLY for sending messages to destinations
+ *    - Never used for receiving messages
+ *    - Stored in NetworkState.outboundConnections
+ * 
+ * BENEFITS:
+ * - Clear separation of concerns: each connection has a single purpose
+ * - Deterministic behavior: no ambiguity about which connection to use
+ * - Simplified connection management: no complex routing logic
+ * - Better resource utilization: connections are purpose-built
+ * - Easier debugging: connection state is predictable
+ * 
+ * IMPLEMENTATION DETAILS:
+ * - send() method always uses outbound connections (creates if needed)
+ * - sendOnChannel() is used for responses on existing inbound connections
+ * - No cross-usage: inbound connections never send, outbound connections never receive
+ * - Connection establishment is asynchronous and handled in tick() cycles
+ * 
+ * ================================================================================
+ * 
  * Key features:
  * - Non-blocking I/O using NIO channels
  * - Multiple server sockets can be bound to different addresses
  * - Maintains message queues for delivery
  * - Supports network partitioning for testing
  * - Thread-safe for concurrent access
+ * - Deterministic simulation behavior
  */
 public class NioNetwork implements Network {
 
@@ -119,6 +150,45 @@ public class NioNetwork implements Network {
         // Note: This method needs to be updated to handle address-based removal from inbound queue
     }
 
+    /**
+     * Sends a message through the network using outbound connections.
+     * 
+     * This method is the primary entry point for sending messages and implements
+     * the "One Connection per Direction" principle:
+     * 
+     * ROLE IN THE ARCHITECTURE:
+     * - Creates and manages OUTBOUND connections for sending messages
+     * - Never uses inbound connections for sending (maintains separation)
+     * - Queues messages for asynchronous processing in tick() cycles
+     * - Handles connection establishment, retry logic, and error recovery
+     * 
+     * CONNECTION MANAGEMENT:
+     * - For each destination, maintains at most one outbound connection
+     * - Creates new connections asynchronously when needed
+     * - Reuses existing connections for subsequent messages to same destination
+     * - Handles connection failures gracefully with message queuing
+     * 
+     * MESSAGE PROCESSING FLOW:
+     * 1. Message is validated and added to outbound queue
+     * 2. In tick() cycle, messages are processed from queue
+     * 3. For each message, outbound connection is acquired/created
+     * 4. Message is sent on the outbound connection
+     * 5. If connection not ready, message is queued for later delivery
+     * 
+     * RELATIONSHIP TO sendOnChannel():
+     * - send(): Creates outbound connections for new messages/requests
+     * - sendOnChannel(): Uses existing connections for responses
+     * - Together they provide complete connection management strategy
+     * 
+     * DETERMINISTIC BEHAVIOR:
+     * - All network operations happen in tick() cycles
+     * - Connection establishment is non-blocking and asynchronous
+     * - Message ordering is preserved within each connection
+     * - Fault injection (partitions, packet loss) is applied consistently
+     * 
+     * @param message the message to send (must not be null)
+     * @throws IllegalArgumentException if message is null
+     */
     @Override
     public void send(Message message) {
         validate(message);
@@ -197,19 +267,23 @@ public class NioNetwork implements Network {
             // Process inbound messages and deliver to callback
             processInboundMessages();
 
-            // === Backpressure management ===
-            if (state.shouldEnableBackpressure(config.backpressureHighWatermark())) {
-                toggleReadInterest(false);
-                state.enableBackpressure();
-                System.out.println("NIO: Backpressure ENABLED - queue size: " + state.getCurrentInboundQueueSize());
-            } else if (state.shouldDisableBackpressure(config.backpressureLowWatermark())) {
-                toggleReadInterest(true);
-                state.disableBackpressure();
-                System.out.println("NIO: Backpressure DISABLED - queue size: " + state.getCurrentInboundQueueSize());
-            }
+            toggleBackpressureIfNecessary();
 
         } catch (IOException e) {
             throw new RuntimeException("Error in network tick", e);
+        }
+    }
+
+    private void toggleBackpressureIfNecessary() {
+        // === Backpressure management ===
+        if (state.shouldEnableBackpressure(config.backpressureHighWatermark())) {
+            toggleReadInterest(false);
+            state.enableBackpressure();
+            System.out.println("NIO: Backpressure ENABLED - queue size: " + state.getCurrentInboundQueueSize());
+        } else if (state.shouldDisableBackpressure(config.backpressureLowWatermark())) {
+            toggleReadInterest(true);
+            state.disableBackpressure();
+            System.out.println("NIO: Backpressure DISABLED - queue size: " + state.getCurrentInboundQueueSize());
         }
     }
 
@@ -1007,7 +1081,17 @@ public class NioNetwork implements Network {
         faultConfig.setLinkPacketLoss(linkKey(source, destination), lossRate);
     }
 
-    @Override
+    /**
+     * Establishes a connection to the destination and returns the actual local address
+     * assigned by the network layer. This simulates the OS assigning an ephemeral port.
+     * 
+     * This method is primarily used for testing purposes to establish connections
+     * and get the actual local address assigned by the OS.
+     * 
+     * @param destination the destination address to connect to
+     * @return the actual local address assigned for this connection
+     * @throws IllegalArgumentException if destination is null
+     */
     public NetworkAddress establishConnection(NetworkAddress destination) {
         if (destination == null) {
             throw new IllegalArgumentException("Destination address cannot be null");
@@ -1212,6 +1296,39 @@ public class NioNetwork implements Network {
     }
 
     // === NEW PUBLIC API =========================================================
+    /**
+     * Sends a message directly on an already-established SocketChannel.
+     * 
+     * This method is a key part of the "One Connection per Direction" principle:
+     * 
+     * ROLE IN THE ARCHITECTURE:
+     * - Used for RESPONSES on existing INBOUND connections
+     * - Enables request-response patterns without opening new connections
+     * - Preserves connection affinity (response goes back on same channel as request)
+     * - Provides performance optimization by avoiding connection establishment overhead
+     * 
+     * USAGE PATTERN:
+     * 1. Client sends request via send() → creates outbound connection
+     * 2. Server receives request on inbound connection → processes request
+     * 3. Server sends response via sendOnChannel() → uses same inbound connection
+     * 4. Client receives response on same connection as request
+     * 
+     * IMPLEMENTATION DETAILS:
+     * - Only works on already-established channels (typically inbound connections)
+     * - Queues the message for writing in the next tick() cycle
+     * - Enables OP_WRITE interest to ensure the selector processes the write
+     * - Maintains the deterministic simulation model
+     * 
+     * RELATIONSHIP TO send():
+     * - send(): Creates outbound connections for new messages
+     * - sendOnChannel(): Uses existing connections for responses
+     * - Together they implement the complete connection management strategy
+     * 
+     * @param channel the already-established SocketChannel to send on
+     * @param message the message to send
+     * @throws IllegalArgumentException if channel or message is null
+     * @throws IllegalStateException if channel is closed
+     */
     @Override
     public void sendOnChannel(SocketChannel channel, Message message) {
         if (channel == null || message == null) {

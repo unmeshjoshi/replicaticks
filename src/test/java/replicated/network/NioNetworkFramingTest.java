@@ -2,7 +2,7 @@ package replicated.network;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-
+import replicated.TestUtils;
 import replicated.messaging.*;
 
 import java.io.IOException;
@@ -32,12 +32,6 @@ public class NioNetworkFramingTest {
     }
 
     // === Helpers ==============================================================
-    private static int freePort() throws IOException {
-        try (ServerSocket ss = new ServerSocket(0)) {
-            return ss.getLocalPort();
-        }
-    }
-
     private static void spinTicks(NioNetwork n, int count) {
         for (int i = 0; i < count; i++) n.tick();
     }
@@ -52,42 +46,33 @@ public class NioNetworkFramingTest {
 
     /**
      * Sends multiple small messages rapidly to verify that framing correctly
-     * distinguishes message boundaries even when they arrive concat-d.
+     * distinguishes message boundaries even when they arrive concatenated.
      */
     @Test
     public void shouldDecodeMultipleMessages() throws Exception {
         NioNetwork server = newNetwork();
         NioNetwork client = newNetwork();
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
-
+        NetworkAddress serverAddr = TestUtils.randomAddress();
         server.bind(serverAddr);
-        client.bind(clientAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
 
+        // Allow server to start listening
         spinTicks(server, 1);
-        spinTicks(client, 1);
-
-        client.establishConnection(serverAddr);
-        spinTicks(client, 1);
-        spinTicks(server, 5);
 
         int total = 30;
         for (int i = 0; i < total; i++) {
             byte[] payload = ("msg-" + i).getBytes();
-            Message m = new Message(clientAddr, serverAddr, MessageType.PING_REQUEST, payload, UUID.randomUUID().toString());
+            Message m = Message.unboundMessage(serverAddr, MessageType.PING_REQUEST, payload, UUID.randomUUID().toString());
             client.send(m);
         }
 
-        // Flush outbound queue
+        // Flush outbound queue and allow connections to establish
         for (int i = 0; i < 50; i++) {
             client.tick();
+            server.tick();
         }
 
         // Run event loops until all messages arrive or timeout
@@ -110,34 +95,24 @@ public class NioNetworkFramingTest {
         NioNetwork server = new NioNetwork(new JsonMessageCodec(), 1, 2, 1);
         NioNetwork client = newNetwork();
 
-        int serverPort = freePort();
-        int clientPort = freePort();
-
-        NetworkAddress serverAddr = new NetworkAddress("127.0.0.1", serverPort);
-        NetworkAddress clientAddr = new NetworkAddress("127.0.0.1", clientPort);
+        NetworkAddress serverAddr = TestUtils.randomAddress();
 
         // Register server
         server.bind(serverAddr);
-        // Register client
-        client.bind(clientAddr);
 
-        // Connect client to server
-        client.establishConnection(serverAddr);
-        // Tick both client and server to establish the connection
-        spinTicks(client, 2);
-        spinTicks(server, 2);
+        // Allow server to start listening
+        spinTicks(server, 1);
 
         // Flood the server with 10 messages before ticking the server
         int floodCount = 10;
         for (int i = 0; i < floodCount; i++) {
             byte[] payload = ("msg-" + i).getBytes();
-            Message m = new Message(clientAddr, serverAddr, MessageType.PING_REQUEST, payload, UUID.randomUUID().toString());
+            Message m = Message.unboundMessage(serverAddr, MessageType.PING_REQUEST, payload, UUID.randomUUID().toString());
             client.send(m);
         }
-        // Flush outbound queue
+        
+        // Flush outbound queue and allow connections to establish
         spinTicks(client, 10);
-
-        // Allow the server to read the burst of messages (no handler registered yet)
         spinTicks(server, 5);
 
         // Backpressure should be enabled after the burst
