@@ -11,6 +11,9 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.nio.channels.SocketChannel;
+
 class NioNetworkTest {
     
     private NioNetwork network;
@@ -224,5 +227,109 @@ class NioNetworkTest {
         
         // Cleanup
         limitedNetwork.close();
+    }
+
+    @Test
+    void shouldMaintainSeparateInboundAndOutboundConnectionMaps() throws IOException {
+        // Create network with two addresses
+        NetworkAddress serverAddress1 = new NetworkAddress("127.0.0.1", 9001);
+        NetworkAddress serverAddress2 = new NetworkAddress("127.0.0.1", 9002);
+        
+        NioNetwork network1 = new NioNetwork();
+        NioNetwork network2 = new NioNetwork();
+        
+        try {
+            // Bind both networks
+            network1.bind(serverAddress1);
+            network2.bind(serverAddress2);
+            
+            // Establish outbound connection from network1 to network2
+            NetworkAddress clientAddress = network1.establishConnection(serverAddress2);
+            
+            // Run ticks until connections are established
+            runUntil(() -> {
+                network1.tick();
+                network2.tick();
+                return (network1.getOutboundConnections().containsKey(serverAddress2) &&
+                network2.getInboundConnections().containsKey(clientAddress));},
+                5000);
+            
+            // Verify outbound connection is stored in outbound map
+            assertTrue(network1.getOutboundConnections().containsKey(serverAddress2));
+            assertTrue(network1.getInboundConnections().isEmpty());
+            
+            // Verify inbound connection is stored in inbound map on network2
+            assertTrue(network2.getInboundConnections().containsKey(clientAddress));
+            assertTrue(network2.getOutboundConnections().isEmpty());
+            
+            // Verify connection direction logic - both maps should have exactly one connection
+            assertEquals(1, network1.getOutboundConnections().size());
+            assertEquals(1, network2.getInboundConnections().size());
+            
+        } finally {
+            network1.close();
+            network2.close();
+        }
+    }
+
+    @Test
+    void shouldProcessMessagesWithSeparateQueues() throws IOException {
+        // Create network with three addresses
+        NetworkAddress serverAddress1 = new NetworkAddress("127.0.0.1", 9001);
+        NetworkAddress serverAddress2 = new NetworkAddress("127.0.0.1", 9002);
+        NetworkAddress serverAddress3 = new NetworkAddress("127.0.0.1", 9003);
+        
+        NioNetwork network1 = new NioNetwork();
+        NioNetwork network2 = new NioNetwork();
+        NioNetwork network3 = new NioNetwork();
+        
+        try {
+            // Bind all networks
+            network1.bind(serverAddress1);
+            network2.bind(serverAddress2);
+            network3.bind(serverAddress3);
+            
+            // Establish connections
+            NetworkAddress clientAddress1 = network1.establishConnection(serverAddress2);
+            NetworkAddress clientAddress2 = network1.establishConnection(serverAddress3);
+            
+            // Run ticks until connections are established
+            runUntil(() -> {
+                network1.tick();
+                network2.tick();
+                network3.tick();
+                return (network1.getOutboundConnections().containsKey(serverAddress2) &&
+                        network1.getOutboundConnections().containsKey(serverAddress3) &&
+                        network2.getInboundConnections().containsKey(clientAddress1) &&
+                        network3.getInboundConnections().containsKey(clientAddress2));
+            }, 5000);
+            
+            // Send messages to different destinations
+            Message msg1 = new Message(serverAddress1, serverAddress2, MessageType.CLIENT_GET_REQUEST, "test1".getBytes(), "corr1");
+            Message msg2 = new Message(serverAddress1, serverAddress3, MessageType.CLIENT_GET_REQUEST, "test2".getBytes(), "corr2");
+            Message msg3 = new Message(serverAddress1, serverAddress2, MessageType.CLIENT_GET_REQUEST, "test3".getBytes(), "corr3");
+            Message msg4 = new Message(serverAddress1, serverAddress3, MessageType.CLIENT_GET_REQUEST, "test4".getBytes(), "corr4");
+            
+            network1.send(msg1);
+            network1.send(msg2);
+            network1.send(msg3);
+            network1.send(msg4);
+            
+            // Verify messages are queued in separate destination queues
+            assertEquals(2, network1.getOutboundQueueSizeForDestination(serverAddress2));
+            assertEquals(2, network1.getOutboundQueueSizeForDestination(serverAddress3));
+            
+            // Process outbound messages
+            network1.tick();
+            
+            // Verify round-robin processing (should process from both destinations)
+            assertTrue(network1.getOutboundQueueSizeForDestination(serverAddress2) < 2 || 
+                      network1.getOutboundQueueSizeForDestination(serverAddress3) < 2);
+            
+        } finally {
+            network1.close();
+            network2.close();
+            network3.close();
+        }
     }
 } 

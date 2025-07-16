@@ -15,6 +15,7 @@ import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * NIO-based network implementation for deterministic distributed simulation.
@@ -275,15 +276,23 @@ public class NioNetwork implements Network {
     }
 
     private void toggleBackpressureIfNecessary() {
+        // Check if any source has exceeded the high watermark
+        boolean anySourceOverHighWatermark = state.getInboundSources().stream()
+                .anyMatch(source -> state.getInboundQueueSizeForSource(source) >= config.backpressureHighWatermark());
+        
+        // Check if all sources are below the low watermark
+        boolean allSourcesUnderLowWatermark = state.getInboundSources().stream()
+                .allMatch(source -> state.getInboundQueueSizeForSource(source) <= config.backpressureLowWatermark());
+        
         // === Backpressure management ===
-        if (state.shouldEnableBackpressure(config.backpressureHighWatermark())) {
+        if (anySourceOverHighWatermark && !state.isBackpressureEnabled()) {
             toggleReadInterest(false);
             state.enableBackpressure();
-            System.out.println("NIO: Backpressure ENABLED - queue size: " + state.getCurrentInboundQueueSize());
-        } else if (state.shouldDisableBackpressure(config.backpressureLowWatermark())) {
+            System.out.println("NIO: Backpressure ENABLED - at least one source over high watermark");
+        } else if (allSourcesUnderLowWatermark && state.isBackpressureEnabled()) {
             toggleReadInterest(true);
             state.disableBackpressure();
-            System.out.println("NIO: Backpressure DISABLED - queue size: " + state.getCurrentInboundQueueSize());
+            System.out.println("NIO: Backpressure DISABLED - all sources under low watermark");
         }
     }
 
@@ -339,6 +348,10 @@ public class NioNetwork implements Network {
         NetworkAddress clientAddress = extractClientAddress(clientChannel);
         //clientAddress can never be null for inbound connections.
         attachChannelState(clientKey, clientAddress);
+        
+        // Store in inbound connections map (client connections to us)
+        state.putInboundConnection(clientAddress, clientChannel);
+        
         metricsCollector.registerInboundConnection(clientChannel.toString(), clientChannel, clientAddress);
 
         logSuccessfulConnection(clientAddress);
@@ -622,16 +635,45 @@ public class NioNetwork implements Network {
     }
 
     private int processOutboundQueue() {
-        List<Message> messages = new ArrayList<>();
-        state.drainOutboundMessages(messages, config.maxOutboundPerTick());
-        
-        return messages.stream()
-            .peek(this::logProcessingMessage)
-            .mapToInt(message -> {
+        // Process messages from each destination in round-robin fashion
+        Set<NetworkAddress> destinations = state.getOutboundDestinations();
+        if (destinations.isEmpty()) {
+            return 0;
+        }
+
+        int maxMessagesPerDestination = Math.max(1, config.maxOutboundPerTick() / destinations.size());
+        int totalProcessed = 0;
+
+        for (NetworkAddress destination : destinations) {
+            if (totalProcessed >= config.maxOutboundPerTick()) {
+                break;
+            }
+
+            BlockingQueue<Message> destQueue = state.getOutboundQueues().get(destination);
+            if (destQueue == null || destQueue.isEmpty()) {
+                continue;
+            }
+
+            // Process up to maxMessagesPerDestination messages to this destination
+            List<Message> batch = new ArrayList<>();
+            int drained = destQueue.drainTo(batch, maxMessagesPerDestination);
+            
+            for (Message message : batch) {
+                logProcessingMessage(message);
                 sendMessageOverNetwork(message);
-                return 1;
-            })
-            .sum();
+                totalProcessed++;
+                
+                if (totalProcessed >= config.maxOutboundPerTick()) {
+                    break;
+                }
+            }
+        }
+
+        if (totalProcessed > 0) {
+            System.out.println("NIO: Processed " + totalProcessed + " outbound messages to " + destinations.size() + " destinations");
+        }
+
+        return totalProcessed;
     }
 
     private void logProcessingMessage(Message message) {
@@ -741,31 +783,71 @@ public class NioNetwork implements Network {
     }
 
     /**
-     * Process inbound messages from queues and deliver to registered callback.
-     * This implements the push-based delivery model.
+     * Process inbound messages from per-source queues and deliver to registered callback.
+     * This implements fair round-robin processing across all sources.
      */
     private void processInboundMessages() {
         if (messageCallback == null) {
             return; // No callback registered
         }
 
-        // Drain up to maxInboundPerTick messages from the queue in one shot to minimise contention
-        List<InboundMessage> batch = new ArrayList<>();
-        state.drainInboundMessages(batch, config.maxInboundPerTick());
+        // Process messages from each source in round-robin fashion
+        Set<NetworkAddress> sources = state.getInboundSources();
+        if (sources.isEmpty()) {
+            return;
+        }
 
-        for (InboundMessage im : batch) {
-            deliverInbound(im);
+        int maxMessagesPerSource = Math.max(1, config.maxInboundPerTick() / sources.size());
+        int totalProcessed = 0;
+
+        for (NetworkAddress source : sources) {
+            if (totalProcessed >= config.maxInboundPerTick()) {
+                break;
+            }
+
+            BlockingQueue<InboundMessage> sourceQueue = state.getInboundQueues().get(source);
+            if (sourceQueue == null || sourceQueue.isEmpty()) {
+                continue;
+            }
+
+            // Process up to maxMessagesPerSource messages from this source
+            List<InboundMessage> batch = new ArrayList<>();
+            int drained = sourceQueue.drainTo(batch, maxMessagesPerSource);
+            
+            for (InboundMessage im : batch) {
+                deliverInbound(im);
+                totalProcessed++;
+                
+                if (totalProcessed >= config.maxInboundPerTick()) {
+                    break;
+                }
+            }
+        }
+
+        if (totalProcessed > 0) {
+            System.out.println("NIO: Processed " + totalProcessed + " inbound messages from " + sources.size() + " sources");
         }
     }
 
     private void toggleReadInterest(boolean enable) {
         for (SelectionKey key : selector.keys()) {
             if (key.channel() instanceof SocketChannel) {
-                int ops = key.interestOps();
-                if (enable) {
-                    key.interestOps(ops | SelectionKey.OP_READ);
-                } else {
-                    key.interestOps(ops & ~SelectionKey.OP_READ);
+                SocketChannel channel = (SocketChannel) key.channel();
+                NetworkAddress source = getChannelSourceAddress(channel);
+                
+                if (source != null) {
+                    // Check if this specific source's queue is full
+                    int sourceQueueSize = state.getInboundQueueSizeForSource(source);
+                    boolean shouldDisableRead = enable && sourceQueueSize >= config.backpressureHighWatermark();
+                    
+                    int ops = key.interestOps();
+                    if (shouldDisableRead) {
+                        key.interestOps(ops & ~SelectionKey.OP_READ);
+                        System.out.println("NIO: Disabled read for source " + source + " (queue size: " + sourceQueueSize + ")");
+                    } else if (enable && sourceQueueSize <= config.backpressureLowWatermark()) {
+                        key.interestOps(ops | SelectionKey.OP_READ);
+                        System.out.println("NIO: Enabled read for source " + source + " (queue size: " + sourceQueueSize + ")");
+                    }
                 }
             }
         }
@@ -819,16 +901,20 @@ public class NioNetwork implements Network {
         try {
             NetworkAddress destination = message.destination();
             SocketChannel channel = acquireOutboundChannel(destination);
-            logSendAttempt(destination, channel);
-
-            if (isChannelReadyForSending(channel)) {
-                sendMessageOnReadyChannel(message, channel);
-            } else {
-                queueMessageForLaterDelivery(destination, message);
-            }
+            sendMessageOnChannel(message, destination, channel);
         } catch (IOException e) {
             System.err.println("Failed to send message: " + e);
             // Message failed to send, could retry or log
+        }
+    }
+
+    private void sendMessageOnChannel(Message message, NetworkAddress destination, SocketChannel channel) throws IOException {
+        logSendAttempt(destination, channel);
+
+        if (isChannelReadyForSending(channel)) {
+            sendMessageOnReadyChannel(message, channel);
+        } else {
+            queueMessageForLaterDelivery(destination, message);
         }
     }
 
@@ -1162,14 +1248,19 @@ public class NioNetwork implements Network {
 
                 // Determine whether it was inbound or outbound based on ChannelState
                 if (channelState != null && channelState.isInbound()) {
-                    // Inbound connection closed - no need to decrement counter as it's cumulative
-                    System.out.println("NIO: Inbound connection closed");
+                    // Inbound connection closed - remove from inbound connections map
+                    NetworkAddress clientAddress = channelState.getRemoteAddress();
+                    if (clientAddress != null) {
+                        state.removeInboundConnection(clientAddress);
+                        System.out.println("NIO: Inbound connection closed and removed from map: " + clientAddress);
+                    }
                 } else {
-                    // Outbound connection closed - clear pending messages
+                    // Outbound connection closed - remove from outbound connections map and clear pending messages
                     NetworkAddress destination = channelState != null ? channelState.getRemoteAddress() : null;
                     if (destination != null) {
+                        state.removeOutboundConnection(destination);
                         state.clearPendingMessages(destination);
-                        System.out.println("NIO: Cleared pending messages for closed connection to " + destination);
+                        System.out.println("NIO: Outbound connection closed and removed from map: " + destination);
                     }
                 }
             }
@@ -1401,5 +1492,37 @@ public class NioNetwork implements Network {
      */
     public int getOutboundQueueSize() {
         return state.getOutboundQueueSize();
+    }
+
+    // === TESTING METHODS =====================================================
+    /**
+     * Returns the inbound connections map for testing purposes.
+     * These are client connections to us (for receiving from clients, sending responses).
+     */
+    public Map<NetworkAddress, SocketChannel> getInboundConnections() {
+        return state.getInboundConnections();
+    }
+
+    /**
+     * Returns the outbound connections map for testing purposes.
+     * These are our connections to replicas (for sending to replicas).
+     */
+    public Map<NetworkAddress, SocketChannel> getOutboundConnections() {
+        return state.getOutboundConnections();
+    }
+
+    // === QUEUE SIZE METHODS FOR TESTING =====================================
+    /**
+     * Returns the queue size for a specific destination for testing purposes.
+     */
+    public int getOutboundQueueSizeForDestination(NetworkAddress destination) {
+        return state.getOutboundQueueSizeForDestination(destination);
+    }
+
+    /**
+     * Returns the queue size for a specific source for testing purposes.
+     */
+    public int getInboundQueueSizeForSource(NetworkAddress source) {
+        return state.getInboundQueueSizeForSource(source);
     }
 }
