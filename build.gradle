@@ -2,13 +2,14 @@ plugins {
     id 'java'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
     id 'maven-publish'
+    id 'signing'
 }
 
-group = 'io.github.unmeshjoshi'
+group = 'com.github.replicaticks'
 version = '0.1.0-alpha.1'
 
 repositories {
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
@@ -23,7 +24,7 @@ dependencies {
 
 // Configure the shadow plugin to create a fat JAR
 shadowJar {
-    archiveBaseName.set('replicated-server')
+    archiveBaseName.set('replicaticks-server')
     archiveClassifier.set('all')
     archiveVersion.set('')
     
@@ -49,7 +50,7 @@ task shadowClientJar(type: com.github.jengelman.gradle.plugins.shadow.tasks.Shad
     from sourceSets.main.output
     configurations = [project.configurations.runtimeClasspath]
     
-    archiveBaseName.set('replicated-client')
+    archiveBaseName.set('replicaticks-client')
     archiveClassifier.set('all')
     archiveVersion.set('')
     
@@ -176,11 +177,69 @@ publishing {
         mavenJava(MavenPublication) {
             from components.java
             groupId = project.group
-            artifactId = 'replicaticks'
+            artifactId = 'replicaticks-core'
             version = project.version
+            
+            pom {
+                name = 'ReplicaTicks'
+                description = 'Deterministic distributed key-value store with quorum-based consensus'
+                url = 'https://github.com/unmeshjoshi/replicaticks'
+                
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                
+                developers {
+                    developer {
+                        id = 'unmeshjoshi'
+                        name = 'Unmesh Joshi'
+                        email = 'unmeshjoshi@gmail.com'
+                    }
+                }
+                
+                scm {
+                    connection = 'scm:git:git://github.com/unmeshjoshi/replicaticks.git'
+                    developerConnection = 'scm:git:ssh://github.com:unmeshjoshi/replicaticks.git'
+                    url = 'https://github.com/unmeshjoshi/replicaticks'
+                }
+            }
         }
     }
     repositories {
         mavenLocal()
+        
+        // Maven Central (requires signing and proper credentials)
+        maven {
+            name = 'OSSRH'
+            url = 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
+            credentials {
+                username = findProperty('ossrhUsername') ?: System.getenv('OSSRH_USERNAME')
+                password = findProperty('ossrhPassword') ?: System.getenv('OSSRH_PASSWORD')
+            }
+        }
+        
+        // Snapshot repository
+        maven {
+            name = 'OSSRH-Snapshots'
+            url = 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+            credentials {
+                username = findProperty('ossrhUsername') ?: System.getenv('OSSRH_USERNAME')
+                password = findProperty('ossrhPassword') ?: System.getenv('OSSRH_PASSWORD')
+            }
+        }
+    }
+}
+
+// Signing configuration for Maven Central
+signing {
+    def signingKey = findProperty('signingKey') ?: System.getenv('SIGNING_KEY')
+    def signingPassword = findProperty('signingPassword') ?: System.getenv('SIGNING_PASSWORD')
+    
+    if (signingKey && signingPassword) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign publishing.publications.mavenJava
     }
 }
