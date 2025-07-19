@@ -1,10 +1,12 @@
 package replicated.network;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.TestUtils;
-import replicated.messaging.*;
+import replicated.messaging.JsonMessageCodec;
+import replicated.messaging.Message;
+import replicated.messaging.MessageType;
+import replicated.messaging.NetworkAddress;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -14,9 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Unit tests for partial message handling in NioNetwork.

@@ -14,46 +14,44 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
-import java.util.concurrent.BlockingQueue;
 
 /**
  * NIO-based network implementation for deterministic distributed simulation.
  * Uses Java NIO for non-blocking network I/O while maintaining tick() behavior.
- * 
+ * <p>
  * ================================================================================
  * ONE CONNECTION PER DIRECTION PRINCIPLE
  * ================================================================================
- * 
+ * <p>
  * This implementation follows a strict "One Connection per Direction" principle:
- * 
+ * <p>
  * 1. INBOUND CONNECTIONS (Server Role)
- *    - Created when clients connect to our bound server sockets
- *    - Used ONLY for receiving messages from clients
- *    - Never used for sending messages
- *    - Stored in NetworkState.inboundConnections
- * 
- * 2. OUTBOUND CONNECTIONS (Client Role)  
- *    - Created when we need to send messages to other nodes
- *    - Used ONLY for sending messages to destinations
- *    - Never used for receiving messages
- *    - Stored in NetworkState.outboundConnections
- * 
+ * - Created when clients connect to our bound server sockets
+ * - Used ONLY for receiving messages from clients
+ * - Never used for sending messages
+ * - Stored in NetworkState.inboundConnections
+ * <p>
+ * 2. OUTBOUND CONNECTIONS (Client Role)
+ * - Created when we need to send messages to other nodes
+ * - Used ONLY for sending messages to destinations
+ * - Never used for receiving messages
+ * - Stored in NetworkState.outboundConnections
+ * <p>
  * BENEFITS:
  * - Clear separation of concerns: each connection has a single purpose
  * - Deterministic behavior: no ambiguity about which connection to use
  * - Simplified connection management: no complex routing logic
  * - Better resource utilization: connections are purpose-built
  * - Easier debugging: connection state is predictable
- * 
+ * <p>
  * IMPLEMENTATION DETAILS:
  * - send() method always uses outbound connections (creates if needed)
  * - sendOnChannel() is used for responses on existing inbound connections
  * - No cross-usage: inbound connections never send, outbound connections never receive
  * - Connection establishment is asynchronous and handled in tick() cycles
- * 
+ * <p>
  * ================================================================================
- * 
+ * <p>
  * Key features:
  * - Non-blocking I/O using NIO channels
  * - Multiple server sockets can be bound to different addresses
@@ -74,7 +72,7 @@ public class NioNetwork implements Network {
     private final Selector selector;
     // Network state management
 
-    private final NetworkState state = new NetworkState();
+    private final NetworkState state;
 
     private final Random random = new Random();
     private final Logger logger = Logger.getLogger(NioNetwork.class.getName());
@@ -113,6 +111,7 @@ public class NioNetwork implements Network {
         } catch (IOException e) {
             throw new RuntimeException("Failed to create NIO selector", e);
         }
+        state = new NetworkState(codec, config);
     }
 
     /**
@@ -153,40 +152,40 @@ public class NioNetwork implements Network {
 
     /**
      * Sends a message through the network using outbound connections.
-     * 
+     * <p>
      * This method is the primary entry point for sending messages and implements
      * the "One Connection per Direction" principle:
-     * 
+     * <p>
      * ROLE IN THE ARCHITECTURE:
      * - Creates and manages OUTBOUND connections for sending messages
      * - Never uses inbound connections for sending (maintains separation)
      * - Queues messages for asynchronous processing in tick() cycles
      * - Handles connection establishment, retry logic, and error recovery
-     * 
+     * <p>
      * CONNECTION MANAGEMENT:
      * - For each destination, maintains at most one outbound connection
      * - Creates new connections asynchronously when needed
      * - Reuses existing connections for subsequent messages to same destination
      * - Handles connection failures gracefully with message queuing
-     * 
+     * <p>
      * MESSAGE PROCESSING FLOW:
      * 1. Message is validated and added to outbound queue
      * 2. In tick() cycle, messages are processed from queue
      * 3. For each message, outbound connection is acquired/created
      * 4. Message is sent on the outbound connection
      * 5. If connection not ready, message is queued for later delivery
-     * 
+     * <p>
      * RELATIONSHIP TO sendOnChannel():
      * - send(): Creates outbound connections for new messages/requests
      * - sendOnChannel(): Uses existing connections for responses
      * - Together they provide complete connection management strategy
-     * 
+     * <p>
      * DETERMINISTIC BEHAVIOR:
      * - All network operations happen in tick() cycles
      * - Connection establishment is non-blocking and asynchronous
      * - Message ordering is preserved within each connection
      * - Fault injection (partitions, packet loss) is applied consistently
-     * 
+     *
      * @param message the message to send (must not be null)
      * @throws IllegalArgumentException if message is null
      */
@@ -205,9 +204,98 @@ public class NioNetwork implements Network {
             return;
         }
 
-        // Add to outbound queue for async processing
-        state.addOutboundMessage(message);
-        System.out.println("NIO: Message added to outbound queue, queue size: " + state.getOutboundQueueSize());
+        try {
+            OutboundChannel outboundChannel = getOrCreateOutboundChannel(message.destination());
+            // Add to outbound queue for async processing
+            outboundChannel.addOutboundMessage(message);
+            System.out.println("NIO: Message added to outbound queue, queue size: " + state.getOutboundQueueSize());
+        } catch (IOException e) {
+            System.out.println("NIO: Failed to get outbound channel for " + message.destination() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Gets an existing outbound channel or creates a new one if needed.
+     * Follows the One Connection per Direction principle by always using outbound connections.
+     */
+    private OutboundChannel getOrCreateOutboundChannel(NetworkAddress address) throws IOException {
+        OutboundChannel channel = state.outboundConnections.get(address);
+        if (!isChannelUsable(channel)) {
+            logCreatingNewChannel(channel);
+            return createNewOutboundChannel(address);
+        }
+
+        logChannelStatus(address, channel.getChannel());
+        logUsingExistingChannel(channel.getChannel());
+        return channel;
+
+    }
+
+    private void logChannelStatus(NetworkAddress address, SocketChannel channel) {
+        System.out.println("NIO: getOrCreateOutboundChannel for " + address +
+                " (existing channel=" + channel +
+                ", connected=" + (channel != null ? channel.isConnected() : "null") +
+                ", isOpen=" + (channel != null ? channel.isOpen() : "null") + ")");
+    }
+
+    private boolean isChannelUsable(OutboundChannel channel) {
+        return channel != null && channel.getChannel().isOpen();
+    }
+
+    private void logUsingExistingChannel(SocketChannel channel) {
+        System.out.println("NIO: Using existing channel (connected=" + channel.isConnected() + ")");
+    }
+
+    private void logCreatingNewChannel(OutboundChannel channel) {
+        if (channel != null) {
+            System.out.println("NIO: Existing channel not open, creating new one");
+        } else {
+            System.out.println("NIO: No existing channel, creating new one");
+        }
+    }
+
+    private OutboundChannel createNewOutboundChannel(NetworkAddress address) throws IOException {
+        SocketChannel channel = createAndConfigureChannel();
+        SelectionKey key = establishConnection(channel, address);
+        setupChannelState(key, address);
+        storeChannel(address, channel);
+        return state.outboundConnections.get(address);
+    }
+
+    private SocketChannel createAndConfigureChannel() throws IOException {
+        SocketChannel channel = SocketChannel.open();
+        channel.configureBlocking(false);
+        return channel;
+    }
+
+    private SelectionKey establishConnection(SocketChannel channel, NetworkAddress address) throws IOException {
+        boolean connected = channel.connect(new InetSocketAddress(address.ipAddress(), address.port()));
+
+        if (!connected) {
+            logConnectionInProgress();
+            return channel.register(selector, SelectionKey.OP_CONNECT);
+        } else {
+            logImmediateConnection();
+            return channel.register(selector, SelectionKey.OP_READ);
+        }
+    }
+
+    private void logConnectionInProgress() {
+        System.out.println("NIO: Connection in progress, registering for connect events");
+    }
+
+    private void logImmediateConnection() {
+        System.out.println("NIO: Immediate connection, registering for read events");
+    }
+
+    private void setupChannelState(SelectionKey key, NetworkAddress address) {
+        ChannelState channelState = ChannelState.forOutbound(address);
+        key.attach(channelState);
+    }
+
+    private void storeChannel(NetworkAddress address, SocketChannel channel) {
+        state.outboundConnections.put(address, channel);
+        System.out.println("NIO: Stored new channel in outboundConnections map");
     }
 
     private boolean deliverIfSelf(Message message) {
@@ -260,6 +348,14 @@ public class NioNetwork implements Network {
             // Process selector events (non-blocking)
             selector.selectNow();
 
+            // In tick() method, before selectNow():
+            for (SelectionKey key : selector.keys()) {
+                if (key.channel() instanceof SocketChannel) {
+                    System.out.println("Interest ops: " + key.interestOps() +
+                            ", isWritable: " + key.isWritable());
+                }
+            }
+
             processSelectedKeys(selector.selectedKeys());
 
             // Process outbound messages
@@ -276,25 +372,9 @@ public class NioNetwork implements Network {
     }
 
     private void toggleBackpressureIfNecessary() {
-        // Check if any source has exceeded the high watermark
-        boolean anySourceOverHighWatermark = state.getInboundSources().stream()
-                .anyMatch(source -> state.getInboundQueueSizeForSource(source) >= config.backpressureHighWatermark());
-        
-        // Check if all sources are below the low watermark
-        boolean allSourcesUnderLowWatermark = state.getInboundSources().stream()
-                .allMatch(source -> state.getInboundQueueSizeForSource(source) <= config.backpressureLowWatermark());
-        
-        // === Backpressure management ===
-        if (anySourceOverHighWatermark && !state.isBackpressureEnabled()) {
-            toggleReadInterest(false);
-            state.enableBackpressure();
-            System.out.println("NIO: Backpressure ENABLED - at least one source over high watermark");
-        } else if (allSourcesUnderLowWatermark && state.isBackpressureEnabled()) {
-            toggleReadInterest(true);
-            state.disableBackpressure();
-            System.out.println("NIO: Backpressure DISABLED - all sources under low watermark");
-        }
+        state.inboundConnections.toggleBackpressureIfNecessary(selector, config);
     }
+
 
     private void processSelectedKeys(Set<SelectionKey> selectedKeys) {
         Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
@@ -317,6 +397,7 @@ public class NioNetwork implements Network {
                     handleAccept(key);
                 }
             } catch (IOException e) {
+                e.printStackTrace();
                 // Close problematic connection
                 key.cancel();
                 if (key.channel() != null) {
@@ -348,10 +429,12 @@ public class NioNetwork implements Network {
         NetworkAddress clientAddress = extractClientAddress(clientChannel);
         //clientAddress can never be null for inbound connections.
         attachChannelState(clientKey, clientAddress);
-        
+
+        //TODO: Once we move ProcessID based mapping, we initialise the time we process the first message
+        //      which will have the source ID as part of the message.
         // Store in inbound connections map (client connections to us)
-        state.putInboundConnection(clientAddress, clientChannel);
-        
+        state.inboundConnections.put(clientAddress, clientChannel);
+
         metricsCollector.registerInboundConnection(clientChannel.toString(), clientChannel, clientAddress);
 
         logSuccessfulConnection(clientAddress);
@@ -367,7 +450,7 @@ public class NioNetwork implements Network {
     }
 
     private SelectionKey registerChannelForRead(SocketChannel channel) throws IOException {
-        return channel.register(selector, SelectionKey.OP_READ);
+        return channel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
     }
 
     private void attachChannelState(SelectionKey clientKey, NetworkAddress clientAddress) {
@@ -403,6 +486,7 @@ public class NioNetwork implements Network {
         try {
             if (!channel.finishConnect()) {
                 System.out.println("NIO: Connection still pending, will retry later");
+                return;
             }
 
             System.out.println("NIO: Connection established successfully");
@@ -421,7 +505,7 @@ public class NioNetwork implements Network {
         System.out.println("NIO: Processing established connection to " + destination);
 
         try {
-            sendQueuedMessages(destination, channel);
+            state.outboundConnections.sendPendingMessages(selector, destination);
             registerOutboundConnectionMetrics(channel, destination);
             System.out.println("NIO: Successfully processed connection to " + destination);
 
@@ -473,19 +557,19 @@ public class NioNetwork implements Network {
         if (key == null) {
             throw new IllegalArgumentException("SelectionKey cannot be null");
         }
-        
+
         SocketChannel channel = (SocketChannel) key.channel();
         ChannelState channelState = validateChannelState(key, channel);
-        
+
         ReadFrame readFrame = channelState.getReadFrame();
         readFromChannel(channel, readFrame);
-        
+
         // Update activity
         channelState.updateActivity();
     }
 
     private ChannelState validateChannelState(SelectionKey key, SocketChannel channel) {
-        ChannelState channelState  = (ChannelState) key.attachment();
+        ChannelState channelState = (ChannelState) key.attachment();
         if (channelState == null) {
             throw new IllegalStateException("No ChannelState attached to SelectionKey for channel: " + channel);
         }
@@ -587,13 +671,14 @@ public class NioNetwork implements Network {
 
         // Get channel state from SelectionKey attachment
         ChannelState channelState = (ChannelState) key.attachment();
+        System.out.println("Handling write = " + key);
         if (channelState == null) {
             System.err.println("NIO: No channel state attached to SelectionKey for write operation");
             return;
         }
-
         // Process pending writes from the queue
         while (channelState.hasPendingWrites()) {
+            System.out.println("Writing pending writes = " + channelState);
             WriteFrame writeFrame = channelState.getPendingWrites().peek(); // peek to keep it if partial
             if (writeFrame == null) break;
 
@@ -622,234 +707,22 @@ public class NioNetwork implements Network {
         }
     }
 
-    private void processOutboundMessages() {
+    private void processOutboundMessages() throws IOException {
         // Process new outbound messages
-        sendOutboundMessages();
-        // Process messages pending for the connection establishment
-        sendMessagesPendingForConnectionEstablishment();
-    }
-
-    private void sendOutboundMessages() {
-        int processedCount = processOutboundQueue();
-        logProcessedCount(processedCount);
-    }
-
-    private int processOutboundQueue() {
-        // Process messages from each destination in round-robin fashion
-        Set<NetworkAddress> destinations = state.getOutboundDestinations();
-        if (destinations.isEmpty()) {
-            return 0;
-        }
-
-        int maxMessagesPerDestination = Math.max(1, config.maxOutboundPerTick() / destinations.size());
-        int totalProcessed = 0;
-
-        for (NetworkAddress destination : destinations) {
-            if (totalProcessed >= config.maxOutboundPerTick()) {
-                break;
-            }
-
-            BlockingQueue<Message> destQueue = state.getOutboundQueues().get(destination);
-            if (destQueue == null || destQueue.isEmpty()) {
-                continue;
-            }
-
-            // Process up to maxMessagesPerDestination messages to this destination
-            List<Message> batch = new ArrayList<>();
-            int drained = destQueue.drainTo(batch, maxMessagesPerDestination);
-            
-            for (Message message : batch) {
-                logProcessingMessage(message);
-                sendMessageOverNetwork(message);
-                totalProcessed++;
-                
-                if (totalProcessed >= config.maxOutboundPerTick()) {
-                    break;
-                }
-            }
-        }
-
-        if (totalProcessed > 0) {
-            System.out.println("NIO: Processed " + totalProcessed + " outbound messages to " + destinations.size() + " destinations");
-        }
-
-        return totalProcessed;
-    }
-
-    private void logProcessingMessage(Message message) {
-        System.out.println("NIO: Processing outbound message from " +
-                message.source() + " to " + message.destination());
-    }
-
-    private void logProcessedCount(int processedCount) {
-        if (processedCount > 0) {
-            System.out.println("NIO: Processed " + processedCount + " outbound messages");
-        }
-    }
-
-    /**
-     * Processes messages that are pending during the connection establishment.
-     * Attempts to send queued messages if connections become available.
-     */
-    private void sendMessagesPendingForConnectionEstablishment() {
-        if (hasNoPendingMessages()) {
-            return;
-        }
-
-        for (Map.Entry<NetworkAddress, Queue<Message>> entry : state.getPendingMessages().entrySet()) {
-            NetworkAddress destination = entry.getKey();
-            Queue<Message> queue = entry.getValue();
-
-            if (!queue.isEmpty()) {
-                sendIfConnected(destination, queue);
-            }
-        }
-    }
-
-    private boolean hasNoPendingMessages() {
-        return state.getPendingMessages().isEmpty();
-    }
-
-    private void sendIfConnected(NetworkAddress destination, Queue<Message> queue) {
-        logPendingMessages(destination, queue);
-        SocketChannel channel = getOutboundChannelForDestination(destination);
-        if (isChannelConnected(channel)) {
-            sendQueuedMessagesToConnectedChannel(destination, channel);
-        } else if (isChannelOpenButNotConnected(channel)) {
-            keepPendingMessagesForConnectingChannel(destination, channel);
-        } else {
-            clearPendingMessagesForDisconnectedDestination(destination, channel);
-        }
-    }
-
-    private void logPendingMessages(NetworkAddress destination, Queue<Message> queue) {
-        String messageTypes = extractMessageTypes(queue);
-        System.out.println("NIO: Found " + state.getPendingMessageCount(destination) + 
-                " pending messages for " + destination + " (types: " + messageTypes + ")");
-    }
-
-    private String extractMessageTypes(Queue<Message> queue) {
-        return queue.stream()
-                .map(msg -> msg.messageType().toString())
-                .distinct()
-                .collect(Collectors.joining(", "));
-    }
-
-    private SocketChannel getOutboundChannelForDestination(NetworkAddress destination) {
-        return state.getOutboundConnection(destination);
-    }
-
-    private void sendIfConnected(NetworkAddress destination, SocketChannel channel) {
-        if (isChannelConnected(channel)) {
-            sendQueuedMessagesToConnectedChannel(destination, channel);
-        } else if (isChannelOpenButNotConnected(channel)) {
-            keepPendingMessagesForConnectingChannel(destination, channel);
-        } else {
-            clearPendingMessagesForDisconnectedDestination(destination, channel);
-        }
-    }
-
-    private boolean isChannelConnected(SocketChannel channel) {
-        return channel != null && channel.isConnected();
-    }
-
-    private boolean isChannelOpenButNotConnected(SocketChannel channel) {
-        return channel != null && channel.isOpen() && !channel.isConnected();
-    }
-
-    private void sendQueuedMessagesToConnectedChannel(NetworkAddress destination, SocketChannel channel) {
-        System.out.println("NIO: Channel connected, sending queued messages to " + destination);
-        try {
-            sendQueuedMessages(destination, channel);
-        } catch (IOException e) {
-            logQueuedMessageSendFailure(destination, e);
-        }
-    }
-
-    private void logQueuedMessageSendFailure(NetworkAddress destination, IOException e) {
-        System.err.println("Failed to send queued messages to " + destination + ": " + e);
-    }
-
-    private void keepPendingMessagesForConnectingChannel(NetworkAddress destination, SocketChannel channel) {
-        System.out.println("NIO: Channel exists but not yet connected for " + destination +
-                " (channel=" + channel + ", connected=" + channel.isConnected() +
-                ", open=" + channel.isOpen() + ") - keeping pending messages");
-    }
-
-    private void clearPendingMessagesForDisconnectedDestination(NetworkAddress destination, SocketChannel channel) {
-        System.out.println("NIO: No channel for " + destination + " (channel=" + channel + ")");
-        System.out.println("NIO: Clearing pending messages for disconnected destination " + destination);
-        state.clearPendingMessages(destination);
+        state.outboundConnections.sendOutboundMessages(selector);
+        state.outboundConnections.processPendingMessages(selector);
     }
 
     /**
      * Process inbound messages from per-source queues and deliver to registered callback.
-     * This implements fair round-robin processing across all sources.
+     * This implements true round-robin processing across all sources to prevent starvation.
      */
     private void processInboundMessages() {
-        if (messageCallback == null) {
-            return; // No callback registered
-        }
+        if (messageCallback == null) return;
+        List<InboundMessage> messages = state.inboundConnections.getMessageToProcess(this.config);
 
-        // Process messages from each source in round-robin fashion
-        Set<NetworkAddress> sources = state.getInboundSources();
-        if (sources.isEmpty()) {
-            return;
-        }
-
-        int maxMessagesPerSource = Math.max(1, config.maxInboundPerTick() / sources.size());
-        int totalProcessed = 0;
-
-        for (NetworkAddress source : sources) {
-            if (totalProcessed >= config.maxInboundPerTick()) {
-                break;
-            }
-
-            BlockingQueue<InboundMessage> sourceQueue = state.getInboundQueues().get(source);
-            if (sourceQueue == null || sourceQueue.isEmpty()) {
-                continue;
-            }
-
-            // Process up to maxMessagesPerSource messages from this source
-            List<InboundMessage> batch = new ArrayList<>();
-            int drained = sourceQueue.drainTo(batch, maxMessagesPerSource);
-            
-            for (InboundMessage im : batch) {
-                deliverInbound(im);
-                totalProcessed++;
-                
-                if (totalProcessed >= config.maxInboundPerTick()) {
-                    break;
-                }
-            }
-        }
-
-        if (totalProcessed > 0) {
-            System.out.println("NIO: Processed " + totalProcessed + " inbound messages from " + sources.size() + " sources");
-        }
-    }
-
-    private void toggleReadInterest(boolean enable) {
-        for (SelectionKey key : selector.keys()) {
-            if (key.channel() instanceof SocketChannel) {
-                SocketChannel channel = (SocketChannel) key.channel();
-                NetworkAddress source = getChannelSourceAddress(channel);
-                
-                if (source != null) {
-                    // Check if this specific source's queue is full
-                    int sourceQueueSize = state.getInboundQueueSizeForSource(source);
-                    boolean shouldDisableRead = enable && sourceQueueSize >= config.backpressureHighWatermark();
-                    
-                    int ops = key.interestOps();
-                    if (shouldDisableRead) {
-                        key.interestOps(ops & ~SelectionKey.OP_READ);
-                        System.out.println("NIO: Disabled read for source " + source + " (queue size: " + sourceQueueSize + ")");
-                    } else if (enable && sourceQueueSize <= config.backpressureLowWatermark()) {
-                        key.interestOps(ops | SelectionKey.OP_READ);
-                        System.out.println("NIO: Enabled read for source " + source + " (queue size: " + sourceQueueSize + ")");
-                    }
-                }
-            }
+        for (InboundMessage message : messages) {
+            deliverInbound(message);
         }
     }
 
@@ -886,236 +759,6 @@ public class NioNetwork implements Network {
         } catch (Exception e) {
             System.err.println("NIO: Error delivering self-message: " + e.getMessage());
             e.printStackTrace();
-        }
-    }
-
-    /**
-     * Sends a message to the destination over the network via an outbound socket channel.
-     *
-     * This method follows the One Connection per Direction principle:
-     * - Always uses (and if needed, creates) an outbound connection for sending.
-     * - Never attempts to send on inbound connections.
-     * This ensures clear, deterministic connection management and avoids ambiguity.
-     */
-    private void sendMessageOverNetwork(Message message) {
-        try {
-            NetworkAddress destination = message.destination();
-            SocketChannel channel = acquireOutboundChannel(destination);
-            sendMessageOnChannel(message, destination, channel);
-        } catch (IOException e) {
-            System.err.println("Failed to send message: " + e);
-            // Message failed to send, could retry or log
-        }
-    }
-
-    private void sendMessageOnChannel(Message message, NetworkAddress destination, SocketChannel channel) throws IOException {
-        logSendAttempt(destination, channel);
-
-        if (isChannelReadyForSending(channel)) {
-            sendMessageOnReadyChannel(message, channel);
-        } else {
-            queueMessageForLaterDelivery(destination, message);
-        }
-    }
-
-    private SocketChannel acquireOutboundChannel(NetworkAddress destination) throws IOException {
-        SocketChannel channel = getOrCreateOutboundChannel(destination);
-        System.out.println("NIO: Using outbound connection for " + destination);
-        return channel;
-    }
-
-    private void logSendAttempt(NetworkAddress destination, SocketChannel channel) {
-        System.out.println("NIO: sendMessageDirectly to " + destination +
-                " (channel=" + channel + ", connected=" +
-                (channel != null ? channel.isConnected() : "null") + ")");
-    }
-
-    private boolean isChannelReadyForSending(SocketChannel channel) {
-        return channel != null && channel.isConnected();
-    }
-
-    private void sendMessageOnReadyChannel(Message message, SocketChannel channel) throws IOException {
-        WriteFrame writeFrame = createWriteFrame(message);
-        int bytesWritten = attemptImmediateWrite(channel, writeFrame);
-        
-        if (writeFrame.hasRemaining()) {
-            queuePartialWrite(channel, writeFrame);
-        } else {
-            logCompleteSend();
-        }
-        
-        recordSendMetrics(channel, bytesWritten);
-    }
-
-    private WriteFrame createWriteFrame(Message message) {
-        byte[] messageData = codec.encode(message);
-        return new WriteFrame(messageData);
-    }
-
-    private int attemptImmediateWrite(SocketChannel channel, WriteFrame writeFrame) throws IOException {
-        int bytesWritten = writeFrame.write(channel);
-        System.out.println("NIO: Wrote " + bytesWritten + " bytes immediately, remaining=" + writeFrame.remaining());
-        return bytesWritten;
-    }
-
-    private void queuePartialWrite(SocketChannel channel, WriteFrame writeFrame) {
-        SelectionKey key = channel.keyFor(selector);
-        if (key != null) {
-            ChannelState channelState = (ChannelState) key.attachment();
-            if (channelState != null) {
-                channelState.addPendingWrite(writeFrame);
-                enableWriteInterest(key);
-                System.out.println("NIO: Registered for write events, frame queued");
-            }
-        }
-    }
-
-    private void enableWriteInterest(SelectionKey key) {
-        key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-    }
-
-    private void logCompleteSend() {
-        System.out.println("NIO: Message sent completely");
-    }
-
-    private void recordSendMetrics(SocketChannel channel, int bytesWritten) {
-        metricsCollector.recordBytesSent(channel.toString(), bytesWritten);
-    }
-
-    private void queueMessageForLaterDelivery(NetworkAddress destination, Message message) {
-        state.addPendingMessage(destination, message);
-        System.out.println("NIO: Message queued for later delivery, pending count for " + destination +
-                ": " + state.getPendingMessageCount(destination));
-    }
-
-
-    /**
-     * Gets an existing outbound channel or creates a new one if needed.
-     * Follows the One Connection per Direction principle by always using outbound connections.
-     */
-    private SocketChannel getOrCreateOutboundChannel(NetworkAddress address) throws IOException {
-        SocketChannel channel = state.getOutboundConnection(address);
-        logChannelStatus(address, channel);
-
-        if (isChannelUsable(channel)) {
-            logUsingExistingChannel(channel);
-            return channel;
-        }
-
-        logCreatingNewChannel(channel);
-        return createNewOutboundChannel(address);
-    }
-
-    private void logChannelStatus(NetworkAddress address, SocketChannel channel) {
-        System.out.println("NIO: getOrCreateOutboundChannel for " + address +
-                " (existing channel=" + channel +
-                ", connected=" + (channel != null ? channel.isConnected() : "null") +
-                ", isOpen=" + (channel != null ? channel.isOpen() : "null") + ")");
-    }
-
-    private boolean isChannelUsable(SocketChannel channel) {
-        return channel != null && channel.isOpen();
-    }
-
-    private void logUsingExistingChannel(SocketChannel channel) {
-        System.out.println("NIO: Using existing channel (connected=" + channel.isConnected() + ")");
-    }
-
-    private void logCreatingNewChannel(SocketChannel channel) {
-        if (channel != null) {
-            System.out.println("NIO: Existing channel not open, creating new one");
-        } else {
-            System.out.println("NIO: No existing channel, creating new one");
-        }
-    }
-
-    private SocketChannel createNewOutboundChannel(NetworkAddress address) throws IOException {
-        SocketChannel channel = createAndConfigureChannel();
-        SelectionKey key = establishConnection(channel, address);
-        setupChannelState(key, address);
-        storeChannel(address, channel);
-        return channel;
-    }
-
-    private SocketChannel createAndConfigureChannel() throws IOException {
-        SocketChannel channel = SocketChannel.open();
-        channel.configureBlocking(false);
-        return channel;
-    }
-
-    private SelectionKey establishConnection(SocketChannel channel, NetworkAddress address) throws IOException {
-        boolean connected = channel.connect(new InetSocketAddress(address.ipAddress(), address.port()));
-        
-        if (!connected) {
-            logConnectionInProgress();
-            return channel.register(selector, SelectionKey.OP_CONNECT);
-        } else {
-            logImmediateConnection();
-            return channel.register(selector, SelectionKey.OP_READ);
-        }
-    }
-
-    private void logConnectionInProgress() {
-        System.out.println("NIO: Connection in progress, registering for connect events");
-    }
-
-    private void logImmediateConnection() {
-        System.out.println("NIO: Immediate connection, registering for read events");
-    }
-
-    private void setupChannelState(SelectionKey key, NetworkAddress address) {
-        ChannelState channelState = ChannelState.forOutbound(address);
-        key.attach(channelState);
-    }
-
-    private void storeChannel(NetworkAddress address, SocketChannel channel) {
-        state.putOutboundConnection(address, channel);
-        System.out.println("NIO: Stored new channel in outboundConnections map");
-    }
-
-
-
-    /**
-     * Sends all queued messages for a destination once the connection is established.
-     */
-    private void sendQueuedMessages(NetworkAddress destination, SocketChannel channel) throws IOException {
-        System.out.println("NIO: sendQueuedMessages called for " + destination);
-
-        Queue<Message> queue = state.getOrCreatePendingMessages(destination);
-        if (queue != null) {
-            System.out.println("NIO: Found pending queue with " + queue.size() + " messages");
-
-            Message message;
-            int sentCount = 0;
-            while ((message = queue.poll()) != null) {
-                System.out.println("NIO: Sending queued message " + (++sentCount) + " from " +
-                        message.source() + " to " + message.destination());
-
-                byte[] messageData = codec.encode(message);
-                WriteFrame writeFrame = new WriteFrame(messageData);
-
-                int bytesWritten = writeFrame.write(channel);
-                System.out.println("NIO: Wrote " + bytesWritten + " bytes, remaining=" + writeFrame.remaining());
-
-                if (writeFrame.hasRemaining()) {
-                    // Couldn't write everything, add to pending writes queue
-                    SelectionKey key = channel.keyFor(selector);
-                    if (key != null) {
-                        ChannelState channelState = (ChannelState) key.attachment();
-                        if (channelState != null) {
-                            channelState.addPendingWrite(writeFrame);
-                            // Register for write events if not already registered
-                            key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-                            System.out.println("NIO: Partial write, registered for write events");
-                        }
-                    }
-                    break; // Stop processing more messages until this one is sent
-                }
-            }
-
-            System.out.println("NIO: Sent " + sentCount + " queued messages, remaining in queue: " + queue.size());
-        } else {
-            System.out.println("NIO: No pending messages queue found for " + destination);
         }
     }
 
@@ -1170,10 +813,10 @@ public class NioNetwork implements Network {
     /**
      * Establishes a connection to the destination and returns the actual local address
      * assigned by the network layer. This simulates the OS assigning an ephemeral port.
-     * 
+     * <p>
      * This method is primarily used for testing purposes to establish connections
      * and get the actual local address assigned by the OS.
-     * 
+     *
      * @param destination the destination address to connect to
      * @return the actual local address assigned for this connection
      * @throws IllegalArgumentException if destination is null
@@ -1217,7 +860,8 @@ public class NioNetwork implements Network {
             key.attach(channelState);
 
             // Store the channel for future use
-            state.getOutboundConnections().put(destination, channel);
+            //TODO: We will map this to ProcessID later.
+            state.outboundConnections.put(destination, channel);
 
             return actualClientAddress;
 
@@ -1230,7 +874,6 @@ public class NioNetwork implements Network {
         return source != null ? source.toString() + "->" + destination.toString()
                 : "->" + destination.toString();
     }
-
 
 
     /**
@@ -1251,7 +894,7 @@ public class NioNetwork implements Network {
                     // Inbound connection closed - remove from inbound connections map
                     NetworkAddress clientAddress = channelState.getRemoteAddress();
                     if (clientAddress != null) {
-                        state.removeInboundConnection(clientAddress);
+                        state.inboundConnections.remove(clientAddress);
                         System.out.println("NIO: Inbound connection closed and removed from map: " + clientAddress);
                     }
                 } else {
@@ -1312,15 +955,14 @@ public class NioNetwork implements Network {
                 message.source() + " to " + message.destination());
 
         try {
-            state.addInboundMessage(im);
+            state.inboundConnections.addInboundMessage(im);
             System.out.println("NIO: Message added to receive queue for " + message.destination() +
-                    ", queue size: " + state.getInboundMessageQueueSize());
+                    ", queue size: " + state.inboundConnections.getTotalQueueSize());
         } catch (Exception e) {
             System.err.println("NIO: Exception in routeInboundMessage: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
 
 
     /**
@@ -1330,7 +972,7 @@ public class NioNetwork implements Network {
         try {
             System.out.println("NIO: Starting network shutdown...");
 
-            clearAllPendingMessages();
+            state.clearAllPendingMessages();
 
             if (selector.isOpen()) {
                 // Close all inbound connections
@@ -1363,65 +1005,45 @@ public class NioNetwork implements Network {
         }
     }
 
-    private void clearAllPendingMessages() {
-        // Clear all pending messages first
-        int pendingCount = state.getTotalMessageCount();
-        if (pendingCount > 0) {
-            System.out.println("NIO: Clearing " + pendingCount + " pending messages during shutdown");
-
-            // Log what message types are being cleared
-            for (Map.Entry<NetworkAddress, Queue<Message>> entry : state.getPendingMessages().entrySet()) {
-                NetworkAddress destination = entry.getKey();
-                Queue<Message> queue = entry.getValue();
-                if (!queue.isEmpty()) {
-                    String messageTypes = queue.stream()
-                            .map(msg -> msg.messageType().toString())
-                            .distinct()
-                            .collect(Collectors.joining(", "));
-                    System.out.println("NIO: Clearing pending messages for " + destination + " (types: " + messageTypes + ")");
-                }
-            }
-
-            state.clearAllPendingMessages();
-        }
-    }
 
     // === NEW PUBLIC API =========================================================
+
     /**
      * Sends a message directly on an already-established SocketChannel.
-     * 
+     * <p>
      * This method is a key part of the "One Connection per Direction" principle:
-     * 
+     * <p>
      * ROLE IN THE ARCHITECTURE:
      * - Used for RESPONSES on existing INBOUND connections
      * - Enables request-response patterns without opening new connections
      * - Preserves connection affinity (response goes back on same channel as request)
      * - Provides performance optimization by avoiding connection establishment overhead
-     * 
+     * <p>
      * USAGE PATTERN:
      * 1. Client sends request via send() → creates outbound connection
      * 2. Server receives request on inbound connection → processes request
      * 3. Server sends response via sendOnChannel() → uses same inbound connection
      * 4. Client receives response on same connection as request
-     * 
+     * <p>
      * IMPLEMENTATION DETAILS:
      * - Only works on already-established channels (typically inbound connections)
      * - Queues the message for writing in the next tick() cycle
      * - Enables OP_WRITE interest to ensure the selector processes the write
      * - Maintains the deterministic simulation model
-     * 
+     * <p>
      * RELATIONSHIP TO send():
      * - send(): Creates outbound connections for new messages
      * - sendOnChannel(): Uses existing connections for responses
      * - Together they implement the complete connection management strategy
-     * 
+     *
      * @param channel the already-established SocketChannel to send on
      * @param message the message to send
      * @throws IllegalArgumentException if channel or message is null
-     * @throws IllegalStateException if channel is closed
+     * @throws IllegalStateException    if channel is closed
      */
     @Override
     public void sendOnChannel(SocketChannel channel, Message message) {
+        System.out.println("Writing message on channel " + message.messageType() + " to " + message.destination());
         if (channel == null || message == null) {
             throw new IllegalArgumentException("Channel and message must not be null");
         }
@@ -1436,18 +1058,31 @@ public class NioNetwork implements Network {
         if (key != null) {
             ChannelState channelState = (ChannelState) key.attachment();
             if (channelState != null) {
+                System.out.println("adding pending write to channelState = " + message.messageType());
                 channelState.addPendingWrite(writeFrame);
             } else {
                 // Create a default channel state if none exists
                 channelState = new ChannelState();
                 key.attach(channelState);
+                System.out.println("adding pending write to channelState = " + message.messageType());
                 channelState.addPendingWrite(writeFrame);
             }
         }
 
         // Ensure OP_WRITE interest so selector wakes up next tick
         if (key != null && key.isValid()) {
-            key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+            int oldOps = key.interestOps();
+            System.out.println("NIO: Before setting OP_WRITE - oldOps=" + oldOps);
+
+            key.interestOps(oldOps | SelectionKey.OP_WRITE);
+
+            int newOps = key.interestOps();
+            System.out.println("NIO: After setting OP_WRITE - newOps=" + newOps +
+                    ", expected=" + (oldOps | SelectionKey.OP_WRITE));
+
+            if (newOps != (oldOps | SelectionKey.OP_WRITE)) {
+                System.err.println("NIO: Interest ops update failed!");
+            }
         }
     }
 
@@ -1468,11 +1103,6 @@ public class NioNetwork implements Network {
         this.messageCallback = callback;
     }
 
-    // Package-private for test visibility
-    boolean isBackpressureEnabled() {
-        return state.isBackpressureEnabled();
-    }
-
     /**
      * Gets the client channel for a specific destination address.
      * This is primarily used for testing purposes.
@@ -1481,9 +1111,9 @@ public class NioNetwork implements Network {
      * @return the SocketChannel for the destination, or null if no connection exists
      */
     public SocketChannel getClientChannel(NetworkAddress destination) {
-        return state.getOutboundConnections().get(destination);
+        return state.getClientChannel(destination);
     }
-    
+
     /**
      * Gets the current size of the outbound message queue.
      * This is primarily used for testing purposes.
@@ -1495,23 +1125,25 @@ public class NioNetwork implements Network {
     }
 
     // === TESTING METHODS =====================================================
+
     /**
      * Returns the inbound connections map for testing purposes.
      * These are client connections to us (for receiving from clients, sending responses).
      */
     public Map<NetworkAddress, SocketChannel> getInboundConnections() {
-        return state.getInboundConnections();
+        return state.inboundConnections.getChannels();
     }
 
     /**
      * Returns the outbound connections map for testing purposes.
      * These are our connections to replicas (for sending to replicas).
      */
-    public Map<NetworkAddress, SocketChannel> getOutboundConnections() {
+    public OutboundConnections getOutboundConnections() {
         return state.getOutboundConnections();
     }
 
     // === QUEUE SIZE METHODS FOR TESTING =====================================
+
     /**
      * Returns the queue size for a specific destination for testing purposes.
      */
@@ -1519,10 +1151,7 @@ public class NioNetwork implements Network {
         return state.getOutboundQueueSizeForDestination(destination);
     }
 
-    /**
-     * Returns the queue size for a specific source for testing purposes.
-     */
-    public int getInboundQueueSizeForSource(NetworkAddress source) {
-        return state.getInboundQueueSizeForSource(source);
+    public boolean isBackpressureEnabled() {
+        return state.inboundConnections.isBackpressureEnabled();
     }
 }

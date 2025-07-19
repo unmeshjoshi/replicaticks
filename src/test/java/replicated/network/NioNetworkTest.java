@@ -3,6 +3,7 @@ package replicated.network;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.Message;
 import replicated.messaging.MessageType;
 import replicated.messaging.NetworkAddress;
@@ -179,16 +180,18 @@ class NioNetworkTest {
     @Test
     void shouldRespectMaxOutboundPerTickLimit() {
         // Given
+        network.bind(address1);
+
         int noOfPerTickMessages = 3;
         NetworkConfig config = NetworkConfig.builder()
             .maxOutboundPerTick(noOfPerTickMessages)  // Limit to 3 messages per tick
             .build();
-        NioNetwork limitedNetwork = new NioNetwork(null, config);
+        NioNetwork limitedNetwork = new NioNetwork(new JsonMessageCodec(), config);
         
         // Send 10 messages (more than the limit)
         int totalNoOfMessages = 10;
         for (int i = 0; i < totalNoOfMessages; i++) {
-            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, 
+            Message message = new Message(address2, address1, MessageType.CLIENT_GET_REQUEST,
                 ("test-" + i).getBytes(), "correlation-" + i);
             limitedNetwork.send(message);
         }
@@ -205,22 +208,23 @@ class NioNetworkTest {
     
     @Test
     void shouldProcessAllMessagesWhenUnderLimit() {
+        network.bind(address2);
         // Given
         NetworkConfig config = NetworkConfig.builder()
             .maxOutboundPerTick(10)  // Limit higher than message count
             .build();
-        NioNetwork limitedNetwork = new NioNetwork(null, config);
-        
+        NioNetwork limitedNetwork = new NioNetwork(new JsonMessageCodec(), config);
+
         // Send 5 messages (under the limit)
         for (int i = 0; i < 5; i++) {
-            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, 
+            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST,
                 ("test-" + i).getBytes(), "correlation-" + i);
             limitedNetwork.send(message);
         }
         
         // When - process one tick
         limitedNetwork.tick();
-        
+
         // Then - all messages should have been processed
         assertEquals(0, limitedNetwork.getOutboundQueueSize(), 
             "Should have 0 messages remaining when under the limit");
@@ -250,12 +254,12 @@ class NioNetworkTest {
             runUntil(() -> {
                 network1.tick();
                 network2.tick();
-                return (network1.getOutboundConnections().containsKey(serverAddress2) &&
+                return (network1.getOutboundConnections().hasConnection(serverAddress2) &&
                 network2.getInboundConnections().containsKey(clientAddress));},
                 5000);
             
             // Verify outbound connection is stored in outbound map
-            assertTrue(network1.getOutboundConnections().containsKey(serverAddress2));
+            assertTrue(network1.getOutboundConnections().hasConnection(serverAddress2));
             assertTrue(network1.getInboundConnections().isEmpty());
             
             // Verify inbound connection is stored in inbound map on network2
@@ -298,8 +302,8 @@ class NioNetworkTest {
                 network1.tick();
                 network2.tick();
                 network3.tick();
-                return (network1.getOutboundConnections().containsKey(serverAddress2) &&
-                        network1.getOutboundConnections().containsKey(serverAddress3) &&
+                return (network1.getOutboundConnections().hasConnection(serverAddress2) &&
+                        network1.getOutboundConnections().hasConnection(serverAddress3) &&
                         network2.getInboundConnections().containsKey(clientAddress1) &&
                         network3.getInboundConnections().containsKey(clientAddress2));
             }, 5000);
