@@ -205,9 +205,9 @@ public class NioNetwork implements Network {
         }
 
         try {
-            OutboundChannel outboundChannel = getOrCreateOutboundChannel(message.destination());
+            NioConnection outboundChannel = getOrCreateOutboundChannel(message.destination());
             // Add to outbound queue for async processing
-            outboundChannel.addOutboundMessage(message);
+            outboundChannel.addOutgoingMessage(message);
             System.out.println("NIO: Message added to outbound queue, queue size: " + state.getOutboundQueueSize());
         } catch (IOException e) {
             System.out.println("NIO: Failed to get outbound channel for " + message.destination() + ": " + e.getMessage());
@@ -218,8 +218,8 @@ public class NioNetwork implements Network {
      * Gets an existing outbound channel or creates a new one if needed.
      * Follows the One Connection per Direction principle by always using outbound connections.
      */
-    private OutboundChannel getOrCreateOutboundChannel(NetworkAddress address) throws IOException {
-        OutboundChannel channel = state.outboundConnections.get(address);
+    private NioConnection getOrCreateOutboundChannel(NetworkAddress address) throws IOException {
+        NioConnection channel = state.outboundConnections.get(address);
         if (!isChannelUsable(channel)) {
             logCreatingNewChannel(channel);
             return createNewOutboundChannel(address);
@@ -238,7 +238,7 @@ public class NioNetwork implements Network {
                 ", isOpen=" + (channel != null ? channel.isOpen() : "null") + ")");
     }
 
-    private boolean isChannelUsable(OutboundChannel channel) {
+    private boolean isChannelUsable(NioConnection channel) {
         return channel != null && channel.getChannel().isOpen();
     }
 
@@ -246,7 +246,7 @@ public class NioNetwork implements Network {
         System.out.println("NIO: Using existing channel (connected=" + channel.isConnected() + ")");
     }
 
-    private void logCreatingNewChannel(OutboundChannel channel) {
+    private void logCreatingNewChannel(NioConnection channel) {
         if (channel != null) {
             System.out.println("NIO: Existing channel not open, creating new one");
         } else {
@@ -254,7 +254,7 @@ public class NioNetwork implements Network {
         }
     }
 
-    private OutboundChannel createNewOutboundChannel(NetworkAddress address) throws IOException {
+    private NioConnection createNewOutboundChannel(NetworkAddress address) throws IOException {
         SocketChannel channel = createAndConfigureChannel();
         SelectionKey key = establishConnection(channel, address);
         setupChannelState(key, address);

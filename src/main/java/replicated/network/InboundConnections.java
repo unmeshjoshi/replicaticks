@@ -18,10 +18,10 @@ import java.util.stream.Collectors;
 class InboundConnections {
     // INBOUND CONNECTIONS: Connections to us (for receiving from clients, sending responses)
     //TODO:NetworkAddress to be replaced by ProcessID.
-    private final Map<NetworkAddress, InboundChannel> channels = new ConcurrentHashMap<>();
+    private final Map<NetworkAddress, NioConnection> channels = new ConcurrentHashMap<>();
 
     public void put(NetworkAddress address, SocketChannel channel) {
-        channels.put(address, new InboundChannel(address, channel));
+        channels.put(address, new NioConnection(address, channel));
     }
 
     public void addInboundMessage(InboundMessage message) {
@@ -47,17 +47,17 @@ class InboundConnections {
             }
         }
 
-        InboundChannel inboundChannel = channels.get(source);
-        if (inboundChannel == null) {
+        NioConnection NioConnection = channels.get(source);
+        if (NioConnection == null) {
             // If no channel for the source exists, create one
-            inboundChannel = new InboundChannel(source, message.messageContext().getSourceChannel());
-            channels.put(source, inboundChannel);
+            NioConnection = new NioConnection(source, message.messageContext().getSourceChannel());
+            channels.put(source, NioConnection);
         }
-        inboundChannel.addMessage(message);
+        NioConnection.addIncomingMessage(message);
     }
 
     public SocketChannel remove(NetworkAddress address) {
-        InboundChannel channel = channels.remove(address);
+        NioConnection channel = channels.remove(address);
         return channel.getChannel();
     }
 
@@ -73,7 +73,7 @@ class InboundConnections {
 
 
     public Map<NetworkAddress, SocketChannel> getChannels() {
-        return channels.values().stream().collect(Collectors.toMap(InboundChannel::getRemoteAddress, InboundChannel::getChannel));
+        return channels.values().stream().collect(Collectors.toMap(NioConnection::getRemoteAddress, NioConnection::getChannel));
     }
 
     public List<InboundMessage> getMessageToProcess(NetworkConfig config) {
@@ -83,8 +83,8 @@ class InboundConnections {
         List<InboundMessage> messages = new ArrayList<>(maxPerTick);
         for (NetworkAddress source : channels.keySet()) {
             if (totalInboundMessages >= maxPerTick) break;
-            InboundChannel channel = channels.get(source);
-            totalInboundMessages += channel.transferMessagesTo(messages, maxPerSource);
+            NioConnection channel = channels.get(source);
+            totalInboundMessages += channel.drainIncomingMessages(messages, maxPerSource);
         }
         return messages;
     }
@@ -127,7 +127,7 @@ class InboundConnections {
     private List<SocketChannel> getAllChannels(Predicate<Queue<InboundMessage>> predicate) {
         return channels.values().stream()
                 .filter(channel -> predicate.test(channel.getReceivedMessages()))
-                .map(InboundChannel::getChannel).collect(Collectors.toList());
+                .map(NioConnection::getChannel).collect(Collectors.toList());
     }
 
     public void toggleBackpressureIfNecessary(Selector selector, NetworkConfig config) {

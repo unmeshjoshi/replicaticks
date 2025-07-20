@@ -17,8 +17,8 @@ import java.util.stream.Collectors;
  * Manages outbound connections and message queues for sending to other nodes.
  * <p>
  * FOLLOWS "ONE CONNECTION PER DIRECTION" PRINCIPLE:
- * - outboundChannels: Each destination has its own OutboundChannel with all state
- * - Each OutboundChannel contains: SocketChannel, outbound queue, pending messages
+ * - outboundChannels: Each destination has its own NioConnection with all state
+ * - Each NioConnection contains: SocketChannel, outbound queue, pending messages
  * <p>
  * QUEUE DESIGN:
  * - Per-destination outbound queues: Fair sending, isolation from slow destinations
@@ -26,8 +26,8 @@ import java.util.stream.Collectors;
  */
 class OutboundConnections {
 
-    // OUTBOUND CHANNELS: Each destination has its own OutboundChannel with all state
-    private final Map<NetworkAddress, OutboundChannel> outboundChannels = new ConcurrentHashMap<>();
+    // OUTBOUND CHANNELS: Each destination has its own NioConnection with all state
+    private final Map<NetworkAddress, NioConnection> outboundChannels = new ConcurrentHashMap<>();
     private final NetworkConfig config;
     private MessageCodec codec;
 
@@ -40,10 +40,10 @@ class OutboundConnections {
      * Adds an outbound connection for the specified destination.
      */
     public void put(NetworkAddress address, SocketChannel channel) {
-        outboundChannels.computeIfAbsent(address, (addr) -> new OutboundChannel(codec, addr, channel));
+        outboundChannels.computeIfAbsent(address, (addr) -> new NioConnection(addr, channel, codec));
     }
 
-    public OutboundChannel get(NetworkAddress address) {
+    public NioConnection get(NetworkAddress address) {
         return outboundChannels.get(address);
 
     }
@@ -52,7 +52,7 @@ class OutboundConnections {
      * Removes an outbound connection for the specified destination.
      */
     public SocketChannel remove(NetworkAddress address) {
-        OutboundChannel outboundChannel = outboundChannels.remove(address);
+        NioConnection outboundChannel = outboundChannels.remove(address);
         if (outboundChannel != null) {
             SocketChannel channel = outboundChannel.getChannel();
             outboundChannel.cleanup();
@@ -65,7 +65,7 @@ class OutboundConnections {
      * Gets the outbound connection for the specified destination.
      */
     public SocketChannel getChannel(NetworkAddress address) {
-        OutboundChannel outboundChannel = outboundChannels.get(address);
+        NioConnection outboundChannel = outboundChannels.get(address);
         return outboundChannel != null ? outboundChannel.getChannel() : null;
     }
 
@@ -73,7 +73,7 @@ class OutboundConnections {
      * Checks if an outbound connection exists for the specified destination.
      */
     public boolean hasConnection(NetworkAddress address) {
-        OutboundChannel outboundChannel = outboundChannels.get(address);
+        NioConnection outboundChannel = outboundChannels.get(address);
         return outboundChannel != null && outboundChannel.isConnected();
     }
 
@@ -87,14 +87,14 @@ class OutboundConnections {
     /**
      * Gets all outbound channels.
      */
-    public Map<NetworkAddress, OutboundChannel> getOutboundChannels() {
+    public Map<NetworkAddress, NioConnection> getNioConnections() {
         return outboundChannels;
     }
 
     /**
      * Gets the entry set of outbound channels for iteration.
      */
-    public Set<Map.Entry<NetworkAddress, OutboundChannel>> getOutboundChannelsEntrySet() {
+    public Set<Map.Entry<NetworkAddress, NioConnection>> getNioConnectionsEntrySet() {
         return outboundChannels.entrySet();
     }
 
@@ -103,8 +103,8 @@ class OutboundConnections {
      */
     public void addOutboundMessage(Message message) {
         NetworkAddress destination = message.destination();
-        OutboundChannel outboundChannel = outboundChannels.get(destination);
-        outboundChannel.addOutboundMessage(message);
+        NioConnection outboundChannel = outboundChannels.get(destination);
+        outboundChannel.addOutgoingMessage(message);
     }
 
     /**
@@ -112,8 +112,8 @@ class OutboundConnections {
      */
     public Message pollOutboundMessage() {
         // Round-robin through destinations for fair sending
-        for (OutboundChannel outboundChannel : outboundChannels.values()) {
-            Message message = outboundChannel.pollOutboundMessage();
+        for (NioConnection outboundChannel : outboundChannels.values()) {
+            Message message = outboundChannel.pollOutgoingMessage();
             if (message != null) {
                 return message;
             }
@@ -129,12 +129,12 @@ class OutboundConnections {
         int remainingElements = maxElements;
 
         // Round-robin through destinations for fair sending
-        for (OutboundChannel outboundChannel : outboundChannels.values()) {
+        for (NioConnection outboundChannel : outboundChannels.values()) {
             if (remainingElements <= 0) break;
 
             // Create a temporary queue to collect messages from this channel
             Queue<Message> tempQueue = new LinkedBlockingQueue<>();
-            int drained = outboundChannel.drainOutboundMessages(tempQueue, remainingElements);
+            int drained = outboundChannel.drainOutgoingMessages(tempQueue, remainingElements);
             if (drained > 0) {
                 // Transfer messages from temp queue to the target collection
                 tempQueue.forEach(collection::add);
@@ -151,7 +151,7 @@ class OutboundConnections {
      */
     public int getTotalQueueSize() {
         return outboundChannels.values().stream()
-                .mapToInt(OutboundChannel::getOutboundQueueSize)
+                .mapToInt(NioConnection::getOutgoingQueueSize)
                 .sum();
     }
 
@@ -159,17 +159,17 @@ class OutboundConnections {
      * Gets the queue size for a specific destination.
      */
     public int getQueueSizeForDestination(NetworkAddress destination) {
-        OutboundChannel outboundChannel = outboundChannels.get(destination);
-        return outboundChannel != null ? outboundChannel.getOutboundQueueSize() : 0;
+        NioConnection outboundChannel = outboundChannels.get(destination);
+        return outboundChannel != null ? outboundChannel.getOutgoingQueueSize() : 0;
     }
 
     /**
      * Gets all outbound channels that match the given predicate.
      */
-    public List<SocketChannel> getAllChannels(Predicate<OutboundChannel> predicate) {
+    public List<SocketChannel> getAllChannels(Predicate<NioConnection> predicate) {
         return outboundChannels.values().stream()
                 .filter(predicate)
-                .map(OutboundChannel::getChannel)
+                .map(NioConnection::getChannel)
                 .filter(channel -> channel != null) // Filter out null channels
                 .toList();
     }
@@ -178,7 +178,7 @@ class OutboundConnections {
      * Gets the pending message count for the specified address.
      */
     public int getPendingMessageCount(NetworkAddress address) {
-        OutboundChannel outboundChannel = outboundChannels.get(address);
+        NioConnection outboundChannel = outboundChannels.get(address);
         return outboundChannel != null ? outboundChannel.getPendingMessageCount() : 0;
     }
 
@@ -186,7 +186,7 @@ class OutboundConnections {
      * Clears pending messages for the specified address.
      */
     public void clearPendingMessages(NetworkAddress address) {
-        OutboundChannel outboundChannel = outboundChannels.get(address);
+        NioConnection outboundChannel = outboundChannels.get(address);
         if (outboundChannel != null) {
             outboundChannel.clearPendingMessages();
         }
@@ -196,7 +196,7 @@ class OutboundConnections {
      * Clears all pending messages.
      */
     public void clearAllPendingMessages() {
-        outboundChannels.values().forEach(OutboundChannel::clearPendingMessages);
+        outboundChannels.values().forEach(NioConnection::clearPendingMessages);
     }
 
     /**
@@ -204,11 +204,11 @@ class OutboundConnections {
      */
     public int getTotalMessageCount() {
         return outboundChannels.values().stream()
-                .mapToInt(OutboundChannel::getTotalMessageCount)
+                .mapToInt(NioConnection::getTotalMessageCount)
                 .sum();
     }
 
-    private void sendIfConnected(Selector selector, NetworkAddress destination, OutboundChannel outboundChannel) throws IOException {
+    private void sendIfConnected(Selector selector, NetworkAddress destination, NioConnection outboundChannel) throws IOException {
         logPendingMessages(destination, outboundChannel.getPendingMessages());
         if (outboundChannel.isConnected()) {
             outboundChannel.sendPendingMessages(selector);
@@ -235,7 +235,7 @@ class OutboundConnections {
     }
 
     public void processPendingMessages(Selector selector) throws IOException {
-        for (OutboundChannel outboundChannel : outboundChannels.values()) {
+        for (NioConnection outboundChannel : outboundChannels.values()) {
             if (!outboundChannel.isConnected()) {
                 continue;
             }
@@ -250,7 +250,7 @@ class OutboundConnections {
                 if (!outboundChannel.isConnected()) {
                     return;
                 }
-                outboundChannel.sendOutboundMessages(selector, config.maxOutboundPerTick());
+                outboundChannel.sendOutgoingMessages(selector, config.maxOutboundPerTick());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
