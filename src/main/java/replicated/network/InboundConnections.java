@@ -2,15 +2,12 @@ package replicated.network;
 
 import replicated.messaging.NetworkAddress;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -20,8 +17,8 @@ class InboundConnections {
     //TODO:NetworkAddress to be replaced by ProcessID.
     private final Map<NetworkAddress, NioConnection> channels = new ConcurrentHashMap<>();
 
-    public void put(NetworkAddress address, SocketChannel channel) {
-        channels.put(address, new NioConnection(address, channel));
+    public void put(NetworkAddress address, NioConnection nioConnection) {
+        channels.put(address, nioConnection);
     }
 
     public void addInboundMessage(InboundMessage message) {
@@ -49,20 +46,22 @@ class InboundConnections {
 
         NioConnection NioConnection = channels.get(source);
         if (NioConnection == null) {
-            // If no channel for the source exists, create one
-            NioConnection = new NioConnection(source, message.messageContext().getSourceChannel());
-            channels.put(source, NioConnection);
+            System.out.println("No connection for = " + source);
+            Exception e = new Exception("No connection for " + source);
+            e.printStackTrace();
         }
+//
+//        if (NioConnection == null) {
+//            // If no channel for the source exists, create one
+//            NioConnection = new NioConnection(source, message.messageContext().getSourceChannel());
+//            channels.put(source, NioConnection);
+//        }
         NioConnection.addIncomingMessage(message);
     }
 
     public SocketChannel remove(NetworkAddress address) {
         NioConnection channel = channels.remove(address);
         return channel.getChannel();
-    }
-
-    public SocketChannel getChannel(NetworkAddress address) {
-        return channels.get(address).getChannel();
     }
 
     public int getTotalQueueSize() {

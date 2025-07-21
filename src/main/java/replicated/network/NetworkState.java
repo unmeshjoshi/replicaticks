@@ -2,13 +2,10 @@ package replicated.network;
 
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.Collection;
+import java.util.List;
 import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 import replicated.messaging.Message;
 import replicated.messaging.MessageCodec;
@@ -33,15 +30,16 @@ public final class NetworkState {
     // Server sockets bound to specific addresses
     private final Map<NetworkAddress, ServerSocketChannel> serverChannels = new ConcurrentHashMap<>();
 
-    final InboundConnections inboundConnections = new InboundConnections();
     private final MessageCodec codec;
-    final OutboundConnections outboundConnections;
+    final Connections connections;
     private final NetworkConfig config;
+    private final MetricsCollector metricsCollector;
 
-    public NetworkState(MessageCodec codec, NetworkConfig config) {
+    public NetworkState(MessageCodec codec, NetworkConfig config, MetricsCollector metricsCollector) {
         this.codec = codec;
         this.config = config;
-        outboundConnections = new OutboundConnections(config, codec);
+        this.metricsCollector = metricsCollector;
+        connections = new Connections(config, codec, metricsCollector);
     }
     // Getters for server channels
     public Map<NetworkAddress, ServerSocketChannel> getServerChannels() {
@@ -59,40 +57,38 @@ public final class NetworkState {
     // Getters for INBOUND connections (client connections to us)
 
     // Getters for OUTBOUND connections (our connections to replicas)
-    public OutboundConnections getOutboundConnections() {
-        return outboundConnections;
-    }
+
 
 
     public SocketChannel removeOutboundConnection(NetworkAddress address) {
-        return outboundConnections.remove(address);
+        return connections.remove(address);
     }
 
     // Helper methods for PER-SOURCE inbound message queues
 
     // Helper methods for PER-DESTINATION outbound message queues
     public int getOutboundQueueSize() {
-        return outboundConnections.getTotalQueueSize();
+        return connections.getTotalQueueSize();
     }
 
     public void addOutboundMessage(Message message) {
-       outboundConnections.addOutboundMessage(message);
+       connections.addOutboundMessage(message);
     }
 
     // Get queue size for a specific destination
     public int getOutboundQueueSizeForDestination(NetworkAddress destination) {
-        return outboundConnections.getQueueSizeForDestination(destination);
+        return connections.getQueueSizeForDestination(destination);
     }
 
     public void clearPendingMessages(NetworkAddress address) {
-        outboundConnections.clearPendingMessages(address);
+        connections.clearPendingMessages(address);
     }
 
     public void clearAllPendingMessages() {
-        outboundConnections.clearAllPendingMessages();
+        connections.clearAllPendingMessages();
     }
 
     public SocketChannel getClientChannel(NetworkAddress destination) {
-        return outboundConnections.getChannel(destination);
+        return connections.getChannel(destination);
     }
 }
