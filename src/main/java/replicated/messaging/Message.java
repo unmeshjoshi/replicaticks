@@ -1,15 +1,38 @@
 package replicated.messaging;
 
+import replicated.network.id.ProcessId;
+
 import java.util.Arrays;
 import java.util.Objects;
 
 public record Message(
-    NetworkAddress source,
-    NetworkAddress destination,
-    MessageType messageType,
-    byte[] payload,
-    String correlationId
+        NetworkAddress source,
+        NetworkAddress destination,
+        MessageType messageType,
+        byte[] payload,
+        String correlationId,
+
+        //New for migrating to Process Id based routing.
+        //while the migration is in progress, this is defaulted to null.
+        ProcessId sourceProcess,
+        ProcessId destinationProcess
+
 ) {
+
+    // FACTORY METHODS - only way to create Message instances
+    public static Message networkMessage(ProcessId source, ProcessId destination,
+                                         MessageType messageType, byte[] payload, String correlationId) {
+        return new Message(null, null, messageType, payload, correlationId, source, destination);
+    }
+
+    /**
+     * Creates a message with NetworkAddress source and destination.
+     * Legacy method for backward compatibility.
+     */
+    public static Message networkMessage(NetworkAddress source, NetworkAddress destination,
+                                         MessageType messageType, byte[] payload, String correlationId) {
+        return new Message(source, destination, messageType, payload, correlationId, null, null);
+    }
     
     /**
      * Creates a message with a null source address.
@@ -26,7 +49,7 @@ public record Message(
         if (!messageType.isClientMessage() && !messageType.isSystemMessage()) {
             throw new IllegalArgumentException("Message type must be a client or system message, but was: " + messageType);
         }
-        return new Message(null, destination, messageType, payload, correlationId);
+        return new Message(null, destination, messageType, payload, correlationId, null, null);
     }
     
     /**

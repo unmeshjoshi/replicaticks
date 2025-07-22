@@ -3,6 +3,7 @@ package replicated.algorithms.quorum;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
+import replicated.network.id.ReplicaId;
 import replicated.replica.Replica;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
@@ -22,17 +23,17 @@ public final class QuorumReplica extends Replica {
     /**
      * Creates a QuorumBasedReplica with the specified configuration.
      */
-    public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+    public QuorumReplica(ReplicaId replicaId, NetworkAddress networkAddress, List<NetworkAddress> peers,
                          MessageBus messageBus, MessageCodec messageCodec, Storage storage, int requestTimeoutTicks) {
-        super(name, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks);
+        super(replicaId, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks);
     }
 
     /**
      * Creates a QuorumBasedReplica with default timeout.
      */
-    public QuorumReplica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+    public QuorumReplica(ReplicaId replicaId, NetworkAddress networkAddress, List<NetworkAddress> peers,
                          MessageBus messageBus, MessageCodec messageCodec, Storage storage) {
-        this(name, networkAddress, peers, messageBus, messageCodec, storage, 1000); // Default 1000 ticks timeout
+        this(replicaId, networkAddress, peers, messageBus, messageCodec, storage, 1000); // Default 1000 ticks timeout
     }
 
     @Override
@@ -74,7 +75,7 @@ public final class QuorumReplica extends Replica {
 
         broadcastToAllReplicas(quorumCallback, (node, correlationId1) -> {
             InternalGetRequest internalRequest = new InternalGetRequest(clientRequest.key(), correlationId1);
-            return new Message(
+            return Message.networkMessage(
                     networkAddress, node, MessageType.INTERNAL_GET_REQUEST,
                     serializePayload(internalRequest), correlationId1
             );
@@ -99,7 +100,7 @@ public final class QuorumReplica extends Replica {
                                         MessageContext ctx, Map<NetworkAddress, InternalGetResponse> responses) {
         VersionedValue latestValue = getLatestValueFromResponses(responses);
         GetResponse clientResponse = new GetResponse(req.key(), latestValue);
-        Message clientMessage = new Message(
+        Message clientMessage = Message.networkMessage(
                 networkAddress, null, MessageType.CLIENT_GET_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
@@ -111,7 +112,7 @@ public final class QuorumReplica extends Replica {
     private void sendFailureGetResponse(GetRequest req, String correlationId, NetworkAddress clientAddr,
                                         MessageContext ctx, Throwable error) {
         GetResponse clientResponse = new GetResponse(req.key(), null);
-        Message clientMessage = new Message(
+        Message clientMessage = Message.networkMessage(
                 networkAddress, null, MessageType.CLIENT_GET_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
@@ -148,7 +149,7 @@ public final class QuorumReplica extends Replica {
                    clientRequest.key(), clientRequest.value(), 0, correlationId1
            );
 
-           return new Message(
+           return Message.networkMessage(
                    networkAddress, node, MessageType.INTERNAL_SET_REQUEST,
                    serializePayload(internalRequest), correlationId1
            );
@@ -174,7 +175,7 @@ public final class QuorumReplica extends Replica {
     private void sendSuccessSetResponseToClient(SetRequest req, String correlationId, NetworkAddress clientAddr,
                                                 MessageContext ctx) {
         SetResponse clientResponse = new SetResponse(req.key(), true);
-        Message clientMessage = new Message(
+        Message clientMessage = Message.networkMessage(
                 networkAddress, null, MessageType.CLIENT_SET_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
@@ -186,7 +187,7 @@ public final class QuorumReplica extends Replica {
     private void sendFailureSetResponseToClient(SetRequest req, String correlationId, NetworkAddress clientAddr,
                                                 MessageContext ctx, Throwable error) {
         SetResponse clientResponse = new SetResponse(req.key(), false);
-        Message clientMessage = new Message(
+        Message clientMessage = Message.networkMessage(
                 networkAddress, null, MessageType.CLIENT_SET_RESPONSE,
                 serializePayload(clientResponse), correlationId
         );
@@ -240,7 +241,7 @@ public final class QuorumReplica extends Replica {
                     ", value: " + valueStr + ", correlationId: " + getRequest.correlationId());
 
             InternalGetResponse response = new InternalGetResponse(getRequest.key(), value, getRequest.correlationId());
-            messageBus.sendMessage(new Message(
+            messageBus.sendMessage(Message.networkMessage(
                     networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
                     serializePayload(response), getRequest.correlationId()
             ));
@@ -249,7 +250,7 @@ public final class QuorumReplica extends Replica {
                     ", error: " + error.getMessage() + ", correlationId: " + getRequest.correlationId());
 
             InternalGetResponse response = new InternalGetResponse(getRequest.key(), null, getRequest.correlationId());
-            messageBus.sendMessage(new Message(
+            messageBus.sendMessage(Message.networkMessage(
                     networkAddress, message.source(), MessageType.INTERNAL_GET_RESPONSE,
                     serializePayload(response), getRequest.correlationId()
             ));
@@ -272,7 +273,7 @@ public final class QuorumReplica extends Replica {
                     ", success: " + success + ", correlationId: " + setRequest.correlationId());
 
             InternalSetResponse response = new InternalSetResponse(setRequest.key(), success, setRequest.correlationId());
-            messageBus.sendMessage(new Message(
+            messageBus.sendMessage(Message.networkMessage(
                     networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
                     serializePayload(response), setRequest.correlationId()
             ));
@@ -281,7 +282,7 @@ public final class QuorumReplica extends Replica {
                     ", error: " + error.getMessage() + ", correlationId: " + setRequest.correlationId());
 
             InternalSetResponse response = new InternalSetResponse(setRequest.key(), false, setRequest.correlationId());
-            messageBus.sendMessage(new Message(
+            messageBus.sendMessage(Message.networkMessage(
                     networkAddress, message.source(), MessageType.INTERNAL_SET_RESPONSE,
                     serializePayload(response), setRequest.correlationId()
             ));

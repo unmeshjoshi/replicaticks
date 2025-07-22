@@ -8,6 +8,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.Storage;
 
@@ -61,9 +62,9 @@ class NetworkMetricsTest {
         Storage s3 = new SimulatedStorage(new Random());
 
         JsonMessageCodec codec = new JsonMessageCodec();
-        r1 = new QuorumReplica("r1", r1Addr, peersExcept(r1Addr, all), messageBus, codec, s1);
-        r2 = new QuorumReplica("r2", r2Addr, peersExcept(r2Addr, all), messageBus, codec, s2);
-        r3 = new QuorumReplica("r3", r3Addr, peersExcept(r3Addr, all), messageBus, codec, s3);
+        r1 = new QuorumReplica(ReplicaId.of(1), r1Addr, peersExcept(r1Addr, all), messageBus, codec, s1);
+        r2 = new QuorumReplica(ReplicaId.of(2), r2Addr, peersExcept(r2Addr, all), messageBus, codec, s2);
+        r3 = new QuorumReplica(ReplicaId.of(3),  r3Addr, peersExcept(r3Addr, all), messageBus, codec, s3);
 
         messageBus.registerHandler(r1Addr, r1);
         messageBus.registerHandler(r2Addr, r2);

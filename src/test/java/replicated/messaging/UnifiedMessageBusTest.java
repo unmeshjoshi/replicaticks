@@ -48,7 +48,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(serverAddress, addressHandler);
         
         // When - sending a message with both correlation ID and destination address
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
+        Message message = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                     "test-payload".getBytes(), correlationId);
         MessageContext context = new MessageContext(message);
         
@@ -69,7 +69,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(serverAddress, addressHandler);
         
         // When - sending a message with correlation ID but no correlation handler
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
                                     "test-payload".getBytes(), "unregistered-correlation-id");
         MessageContext context = new MessageContext(message);
         
@@ -88,7 +88,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(correlationId, correlationHandler);
         
         // When - sending a message with the correlation ID
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
+        Message message = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                     "test-payload".getBytes(), correlationId);
         MessageContext context = new MessageContext(message);
         
@@ -101,7 +101,7 @@ class UnifiedMessageBusTest {
         TestMessageHandler addressHandler = new TestMessageHandler();
         messageBus.registerHandler(serverAddress, addressHandler);
         
-        Message secondMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
+        Message secondMessage = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                           "second-payload".getBytes(), correlationId);
         messageBus.onMessage(secondMessage, new MessageContext(secondMessage));
         
@@ -132,13 +132,13 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(address2, addressHandler2);
         
         // When - sending messages with different routing patterns
-        Message corrMessage1 = new Message(serverAddress, address1, MessageType.CLIENT_GET_RESPONSE, 
+        Message corrMessage1 = Message.networkMessage(serverAddress, address1, MessageType.CLIENT_GET_RESPONSE, 
                                          "corr1".getBytes(), correlationId1);
-        Message corrMessage2 = new Message(serverAddress, address2, MessageType.CLIENT_GET_RESPONSE, 
+        Message corrMessage2 = Message.networkMessage(serverAddress, address2, MessageType.CLIENT_GET_RESPONSE, 
                                          "corr2".getBytes(), correlationId2);
-        Message addrMessage1 = new Message(clientAddress, address1, MessageType.CLIENT_GET_REQUEST, 
+        Message addrMessage1 = Message.networkMessage(clientAddress, address1, MessageType.CLIENT_GET_REQUEST, 
                                          "addr1".getBytes(), "unused-corr-id");
-        Message addrMessage2 = new Message(clientAddress, address2, MessageType.CLIENT_SET_REQUEST, 
+        Message addrMessage2 = Message.networkMessage(clientAddress, address2, MessageType.CLIENT_SET_REQUEST, 
                                          "addr2".getBytes(), "unused-corr-id");
         
         messageBus.onMessage(corrMessage1, new MessageContext(corrMessage1));
@@ -165,7 +165,7 @@ class UnifiedMessageBusTest {
         // Given - no handlers registered
         
         // When - sending a message with no matching handlers
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
                                     "unroutable".getBytes(), "unregistered-correlation-id");
         MessageContext context = new MessageContext(message);
         
@@ -186,12 +186,12 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(serverAddress, addressHandler);
         
         // Then - handlers should be registered
-        Message corrMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
+        Message corrMessage = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_RESPONSE, 
                                         "test".getBytes(), correlationId);
         messageBus.onMessage(corrMessage, new MessageContext(corrMessage));
         assertEquals(1, correlationHandler.receivedMessages.size());
         
-        Message addrMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
+        Message addrMessage = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
                                         "test".getBytes(), "other-corr");
         messageBus.onMessage(addrMessage, new MessageContext(addrMessage));
         assertEquals(1, addressHandler.receivedMessages.size());
@@ -200,7 +200,7 @@ class UnifiedMessageBusTest {
         messageBus.unregisterHandler(serverAddress);
         
         // Then - unregistered handler should not receive messages
-        Message newAddrMessage = new Message(clientAddress, serverAddress, MessageType.CLIENT_SET_REQUEST, 
+        Message newAddrMessage = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_SET_REQUEST, 
                                            "test2".getBytes(), "other-corr-2");
         messageBus.onMessage(newAddrMessage, new MessageContext(newAddrMessage));
         assertEquals(1, addressHandler.receivedMessages.size()); // Still 1, not 2
@@ -229,7 +229,7 @@ class UnifiedMessageBusTest {
         messageBus.registerHandler(serverAddress, handler);
         
         // When - sending a message through the MessageBus
-        Message message = new Message(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(clientAddress, serverAddress, MessageType.CLIENT_GET_REQUEST, 
                                     "test-payload".getBytes(), "test-corr");
         messageBus.sendMessage(message);
         

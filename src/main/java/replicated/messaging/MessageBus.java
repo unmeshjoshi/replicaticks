@@ -224,7 +224,7 @@ public class MessageBus implements MessageCallback {
         for (NetworkAddress recipient : recipients) {
             if (!recipient.equals(source)) {  // Don't send to self
                 String correlationId = generateCorrelationId();
-                Message message = new Message(source, recipient, messageType, payload, correlationId);
+                Message message = Message.networkMessage(source, recipient, messageType, payload, correlationId);
                 sendMessage(message);
             }
         }

@@ -7,6 +7,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
 
@@ -178,7 +179,7 @@ public class SimulationRunner {
             
             SimulatedStorage storage = new SimulatedStorage(new Random(seed + 100 + i), 1, 0.0);
             QuorumReplica replica = new QuorumReplica(
-                "replica-" + i, address, peers, messageBus, codec, storage, 50 // 50 tick timeout
+                ReplicaId.of(i), address, peers, messageBus, codec, storage, 50 // 50 tick timeout
             );
             
             storages.add(storage);

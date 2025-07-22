@@ -3,6 +3,7 @@ package replicated.algorithms.quorum;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.messaging.*;
+import replicated.network.id.ReplicaId;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
@@ -34,7 +35,7 @@ class QuorumReplicaUnitTest {
         
         // Create enhanced replica
         JsonMessageCodec codec = new JsonMessageCodec();
-        replica = new QuorumReplica("replica1", replicaAddress, peers, messageBus, codec, storage);
+        replica = new QuorumReplica(ReplicaId.of(1),  replicaAddress, peers, messageBus, codec, storage);
     }
     
     @Test
@@ -42,7 +43,7 @@ class QuorumReplicaUnitTest {
         // Given dependencies are provided in setUp()
         // Then replica should be created successfully
         assertNotNull(replica);
-        assertEquals("replica1", replica.getName());
+        assertEquals("replica-1", replica.getName());
         assertEquals(replicaAddress, replica.getNetworkAddress());
         assertEquals(peers, replica.getPeers());
     }
@@ -52,7 +53,7 @@ class QuorumReplicaUnitTest {
         // When & Then
         JsonMessageCodec codec = new JsonMessageCodec();
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumReplica("test", replicaAddress, peers, null, codec, storage));
+            () -> new QuorumReplica(ReplicaId.of(1, "test"), replicaAddress, peers, null, codec, storage));
     }
     
     @Test
@@ -60,7 +61,7 @@ class QuorumReplicaUnitTest {
         // When & Then
         JsonMessageCodec codec = new JsonMessageCodec();
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumReplica("test", replicaAddress, peers, messageBus, codec, null));
+            () -> new QuorumReplica(ReplicaId.of(1, "test"), replicaAddress, peers, messageBus, codec, null));
     }
     
     @Test
@@ -189,7 +190,7 @@ class QuorumReplicaUnitTest {
     @Test
     void shouldTimeoutPendingRequests() {
         // Given - replica with timeout configuration
-        replica = new QuorumReplica("replica1", replicaAddress, peers, messageBus, new JsonMessageCodec(), storage, 5); // 5 tick timeout
+        replica = new QuorumReplica(ReplicaId.of(1), replicaAddress, peers, messageBus, new JsonMessageCodec(), storage, 5); // 5 tick timeout
         
         NetworkAddress clientAddress = new NetworkAddress("192.168.1.100", 9000);
         GetRequest getRequest = new GetRequest("test-key");
@@ -232,7 +233,7 @@ class QuorumReplicaUnitTest {
                                  MessageType messageType, Object payload) {
         JsonMessageCodec codec = new JsonMessageCodec();
         byte[] serializedPayload = codec.encode(payload);
-        return new Message(source, destination, messageType, serializedPayload, "test-correlation-id");
+        return Message.networkMessage(source, destination, messageType, serializedPayload, "test-correlation-id");
     }
     
     // Test implementations

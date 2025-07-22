@@ -11,6 +11,7 @@ import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
 import replicated.network.Network;
 import replicated.network.SimulatedNetwork;
+import replicated.network.id.ReplicaId;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.Storage;
@@ -70,7 +71,7 @@ class QuorumReplicaClusterTest {
             // Use a fixed seed for each replica to ensure test isolation
             Storage storage = new SimulatedStorage(new Random(42L + i));
             storages.add(storage);
-            QuorumReplica replica = new QuorumReplica("replica-" + address.port(), address, peers, messageBus, new JsonMessageCodec(), storage);
+            QuorumReplica replica = new QuorumReplica(ReplicaId.of(i + 1), address, peers, messageBus, new JsonMessageCodec(), storage);
             replicas.add(replica);
             
             // Register replica with message bus

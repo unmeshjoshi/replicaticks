@@ -10,6 +10,7 @@ import replicated.messaging.NetworkAddress;
 import replicated.network.MessageContext;
 import replicated.network.SimulatedNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
@@ -44,7 +45,7 @@ public class DirectChannelOrderTest {
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
         quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddr));
         SimulatedStorage storage = new SimulatedStorage(new Random());
-        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), messageBus, codec, storage);
+        QuorumReplica replica = new QuorumReplica(ReplicaId.of(1), replicaAddr, List.of(), messageBus, codec, storage);
         messageBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         

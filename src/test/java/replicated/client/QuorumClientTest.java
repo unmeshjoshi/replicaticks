@@ -38,7 +38,7 @@ class QuorumClientTest {
         // Then client should be created successfully
         assertNotNull(quorumClient);
         assertNotNull(quorumClient.getClientId());
-        assertTrue(quorumClient.getClientId().startsWith("quorum-client-"));
+        assertTrue(quorumClient.getClientId().name().startsWith("quorum-client"));
     }
     
     @Test
@@ -270,7 +270,7 @@ class QuorumClientTest {
             JsonMessageCodec codec = new JsonMessageCodec();
             byte[] payloadBytes = JsonMessageCodec.createConfiguredObjectMapper()
                 .writeValueAsBytes(payload);
-            return new Message(source, destination, messageType, payloadBytes, "test-correlation-id");
+            return Message.networkMessage(source, destination, messageType, payloadBytes, "test-correlation-id");
         } catch (Exception e) {
             throw new RuntimeException("Failed to create test message", e);
         }

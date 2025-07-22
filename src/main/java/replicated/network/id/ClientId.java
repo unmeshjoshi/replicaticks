@@ -36,30 +36,31 @@ public record ClientId(UUID uuid, String name) implements ProcessId {
     /**
      * Factory method to create a ClientId with a random UUID and custom name.
      * 
-     * @param name the client name (must not be null)
+     * @param prefix the client name (must not be null)
      * @return a new ClientId instance with random UUID and specified name
      * @throws NullPointerException if name is null
      */
-    public static ClientId random(String name) {
-        Objects.requireNonNull(name, "Client name cannot be null");
-        return new ClientId(UUID.randomUUID(), name);
+    public static ClientId random(String prefix) {
+        Objects.requireNonNull(prefix, "Client name cannot be null");
+        UUID uuid1 = UUID.randomUUID();
+        return of(uuid1.toString(), prefix);
     }
     
     /**
      * Factory method to create a ClientId from a UUID string and name.
      * 
      * @param uuidString the UUID as a string (must be valid UUID format)
-     * @param name the client name (must not be null)
+     * @param prefix the client name (must not be null)
      * @return a new ClientId instance
      * @throws IllegalArgumentException if uuidString is not a valid UUID
      * @throws NullPointerException if uuidString or name is null
      */
-    public static ClientId of(String uuidString, String name) {
+    public static ClientId of(String uuidString, String prefix) {
         Objects.requireNonNull(uuidString, "UUID string cannot be null");
-        Objects.requireNonNull(name, "Client name cannot be null");
+        Objects.requireNonNull(prefix, "Client name cannot be null");
         try {
             UUID uuid = UUID.fromString(uuidString);
-            return new ClientId(uuid, name);
+            return new ClientId(uuid, prefix + "-" + uuidString.substring(0, 8));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid UUID format: " + uuidString, e);
         }

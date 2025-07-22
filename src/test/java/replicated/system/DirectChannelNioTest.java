@@ -10,6 +10,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
@@ -50,7 +51,7 @@ public class DirectChannelNioTest {
         
         storage = new SimulatedStorage(new Random());
         JsonMessageCodec codec = new JsonMessageCodec();
-        QuorumReplica replica = new QuorumReplica("r1", replicaAddr, List.of(), messageBus, codec, storage);
+        QuorumReplica replica = new QuorumReplica(ReplicaId.of(1), replicaAddr, List.of(), messageBus, codec, storage);
         messageBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         

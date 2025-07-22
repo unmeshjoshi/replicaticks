@@ -88,7 +88,7 @@ class SimpleNioIntegrationTest {
     void shouldSendSimpleMessage() {
         // Given
         String testPayload = "test-message";
-        Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, testPayload.getBytes(), "test-correlation-id");
+        Message message = Message.networkMessage(address1, address2, MessageType.CLIENT_GET_REQUEST, testPayload.getBytes(), "test-correlation-id");
         
         // When
         messageBus.sendMessage(message);
@@ -111,8 +111,8 @@ class SimpleNioIntegrationTest {
         String payload1to2 = "message-1-to-2";
         String payload2to1 = "message-2-to-1";
         
-        Message message1to2 = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, payload1to2.getBytes(), "test-correlation-id-1");
-        Message message2to1 = new Message(address2, address1, MessageType.CLIENT_SET_REQUEST, payload2to1.getBytes(), "test-correlation-id-2");
+        Message message1to2 = Message.networkMessage(address1, address2, MessageType.CLIENT_GET_REQUEST, payload1to2.getBytes(), "test-correlation-id-1");
+        Message message2to1 = Message.networkMessage(address2, address1, MessageType.CLIENT_SET_REQUEST, payload2to1.getBytes(), "test-correlation-id-2");
         
         // When
         messageBus.sendMessage(message1to2);
@@ -144,7 +144,7 @@ class SimpleNioIntegrationTest {
         // When - send multiple messages
         for (int i = 0; i < numMessages; i++) {
             String payload = "message-" + i;
-            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, payload.getBytes(), "test-correlation-id-3");
+            Message message = Message.networkMessage(address1, address2, MessageType.CLIENT_GET_REQUEST, payload.getBytes(), "test-correlation-id-3");
             System.out.println("About to send message " + i + " via MessageBus: " + payload);
             messageBus.sendMessage(message);
             System.out.println("MessageBus.sendMessage() completed for message " + i);

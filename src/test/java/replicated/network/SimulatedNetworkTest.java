@@ -37,7 +37,7 @@ public class SimulatedNetworkTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id");
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id");
         
         // When
         network.send(message);
@@ -69,8 +69,8 @@ public class SimulatedNetworkTest {
         NetworkAddress address2 = new NetworkAddress("192.168.1.2", 8080);
         NetworkAddress source = new NetworkAddress("192.168.1.3", 8080);
         
-        Message message1 = new Message(source, address1, MessageType.CLIENT_GET_REQUEST, "msg1".getBytes(), "test-correlation-id-1");
-        Message message2 = new Message(source, address2, MessageType.CLIENT_SET_REQUEST, "msg2".getBytes(), "test-correlation-id-2");
+        Message message1 = Message.networkMessage(source, address1, MessageType.CLIENT_GET_REQUEST, "msg1".getBytes(), "test-correlation-id-1");
+        Message message2 = Message.networkMessage(source, address2, MessageType.CLIENT_SET_REQUEST, "msg2".getBytes(), "test-correlation-id-2");
         
         // When
         network.send(message1);
@@ -91,8 +91,8 @@ public class SimulatedNetworkTest {
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
         
-        Message message1 = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, "msg1".getBytes(), "test-correlation-id-3");
-        Message message2 = new Message(source, destination, MessageType.CLIENT_SET_REQUEST, "msg2".getBytes(), "test-correlation-id-4");
+        Message message1 = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, "msg1".getBytes(), "test-correlation-id-3");
+        Message message2 = Message.networkMessage(source, destination, MessageType.CLIENT_SET_REQUEST, "msg2".getBytes(), "test-correlation-id-4");
         
         // When
         network.send(message1);
@@ -120,7 +120,7 @@ public class SimulatedNetworkTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, "delayed".getBytes(), "test-correlation-id-5");
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, "delayed".getBytes(), "test-correlation-id-5");
         
         // When
         delayedNetwork.send(message);
@@ -144,7 +144,7 @@ public class SimulatedNetworkTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, "lost".getBytes(), "test-correlation-id-6");
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, "lost".getBytes(), "test-correlation-id-6");
         
         // When
         lossyNetwork.send(message);
@@ -172,8 +172,8 @@ public class SimulatedNetworkTest {
         
         // When - send multiple messages to both networks
         for (int i = 0; i < 10; i++) {
-            Message msg1 = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, ("msg" + i).getBytes(), "test-correlation-id-7-" + i);
-            Message msg2 = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, ("msg" + i).getBytes(), "test-correlation-id-8-" + i);
+            Message msg1 = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, ("msg" + i).getBytes(), "test-correlation-id-7-" + i);
+            Message msg2 = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, ("msg" + i).getBytes(), "test-correlation-id-8-" + i);
             network1.send(msg1);
             network2.send(msg2);
             network1.tick();
@@ -192,8 +192,8 @@ public class SimulatedNetworkTest {
         NetworkAddress nodeA = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress nodeB = new NetworkAddress("192.168.1.2", 8080);
         
-        Message messageAtoB = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "A->B".getBytes(), "test-correlation-id-9");
-        Message messageBtoA = new Message(nodeB, nodeA, MessageType.CLIENT_SET_REQUEST, "B->A".getBytes(), "test-correlation-id-10");
+        Message messageAtoB = Message.networkMessage(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "A->B".getBytes(), "test-correlation-id-9");
+        Message messageBtoA = Message.networkMessage(nodeB, nodeA, MessageType.CLIENT_SET_REQUEST, "B->A".getBytes(), "test-correlation-id-10");
         
         // When - partition the link between A and B
         network.partition(nodeA, nodeB);
@@ -214,8 +214,8 @@ public class SimulatedNetworkTest {
         NetworkAddress nodeA = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress nodeB = new NetworkAddress("192.168.1.2", 8080);
         
-        Message messageAtoB = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "A->B".getBytes(), "test-correlation-id-11");
-        Message messageBtoA = new Message(nodeB, nodeA, MessageType.CLIENT_SET_REQUEST, "B->A".getBytes(), "test-correlation-id-12");
+        Message messageAtoB = Message.networkMessage(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "A->B".getBytes(), "test-correlation-id-11");
+        Message messageBtoA = Message.networkMessage(nodeB, nodeA, MessageType.CLIENT_SET_REQUEST, "B->A".getBytes(), "test-correlation-id-12");
         
         // When - one-way partition: A can send to B, but B cannot send to A
         network.partitionOneWay(nodeB, nodeA);
@@ -237,7 +237,7 @@ public class SimulatedNetworkTest {
         NetworkAddress nodeA = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress nodeB = new NetworkAddress("192.168.1.2", 8080);
         
-        Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "healed".getBytes(), "test-correlation-id-13");
+        Message message = Message.networkMessage(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "healed".getBytes(), "test-correlation-id-13");
         
         // When - partition, send message (blocked), then heal partition
         network.partition(nodeA, nodeB);
@@ -270,8 +270,8 @@ public class SimulatedNetworkTest {
         network.setDelay(nodeA, nodeB, 3); // 3 tick delay
         network.setDelay(nodeA, nodeC, 1); // 1 tick delay
         
-        Message messageToB = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "to-B".getBytes(), "test-correlation-id-14");
-        Message messageToC = new Message(nodeA, nodeC, MessageType.CLIENT_SET_REQUEST, "to-C".getBytes(), "test-correlation-id-15");
+        Message messageToB = Message.networkMessage(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "to-B".getBytes(), "test-correlation-id-14");
+        Message messageToC = Message.networkMessage(nodeA, nodeC, MessageType.CLIENT_SET_REQUEST, "to-C".getBytes(), "test-correlation-id-15");
         
         // When - send messages simultaneously
         network.send(messageToB);
@@ -305,8 +305,8 @@ public class SimulatedNetworkTest {
         network.setPacketLoss(nodeA, nodeB, 1.0); // 100% loss rate
         network.setPacketLoss(nodeA, nodeC, 0.0); // 0% loss rate
         
-        Message messageToB = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "to-B".getBytes(), "test-correlation-id-16");
-        Message messageToC = new Message(nodeA, nodeC, MessageType.CLIENT_SET_REQUEST, "to-C".getBytes(), "test-correlation-id-17");
+        Message messageToB = Message.networkMessage(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, "to-B".getBytes(), "test-correlation-id-16");
+        Message messageToC = Message.networkMessage(nodeA, nodeC, MessageType.CLIENT_SET_REQUEST, "to-C".getBytes(), "test-correlation-id-17");
         
         // When - send messages
         network.send(messageToB);
@@ -330,7 +330,7 @@ public class SimulatedNetworkTest {
         network.partition(nodeA, nodeB);
         
         for (int i = 0; i < 5; i++) {
-            Message message = new Message(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, ("msg" + i).getBytes(), "test-correlation-id-18-" + i);
+            Message message = Message.networkMessage(nodeA, nodeB, MessageType.CLIENT_GET_REQUEST, ("msg" + i).getBytes(), "test-correlation-id-18-" + i);
             network.send(message);
             network.tick();
         }

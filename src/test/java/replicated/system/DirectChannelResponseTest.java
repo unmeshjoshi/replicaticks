@@ -9,6 +9,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
@@ -52,7 +53,7 @@ class DirectChannelResponseTest {
         storage = new SimulatedStorage(new java.util.Random(42), 0, 0.0);
         
         // Setup replica - use empty peers list for single-node setup (peers should not include self)
-        replica = new QuorumReplica("test-replica", replicaAddress, List.of(), messageBus, codec, storage);
+        replica = new QuorumReplica(ReplicaId.of(1, "test-replica") , replicaAddress, List.of(), messageBus, codec, storage);
         messageBus.registerHandler(replicaAddress, replica);
         
         // Setup client

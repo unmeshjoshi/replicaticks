@@ -66,7 +66,7 @@ log_info "Starting 3-node ReplicaTicks distributed key-value store cluster..."
 # Start replica 1
 log_info "Starting replica 1 on port $REPLICA1_PORT..."
 java -jar build/libs/replicaticks-server-all.jar \
-    --name=replica1 \
+    --index=1 \
     --ip=127.0.0.1 \
     --port=$REPLICA1_PORT \
     --peers=127.0.0.1:$REPLICA2_PORT,127.0.0.1:$REPLICA3_PORT \
@@ -76,7 +76,7 @@ REPLICA1_PID=$!
 # Start replica 2
 log_info "Starting replica 2 on port $REPLICA2_PORT..."
 java -jar build/libs/replicaticks-server-all.jar \
-    --name=replica2 \
+    --index=2 \
     --ip=127.0.0.1 \
     --port=$REPLICA2_PORT \
     --peers=127.0.0.1:$REPLICA1_PORT,127.0.0.1:$REPLICA3_PORT \
@@ -86,7 +86,7 @@ REPLICA2_PID=$!
 # Start replica 3
 log_info "Starting replica 3 on port $REPLICA3_PORT..."
 java -jar build/libs/replicaticks-server-all.jar \
-    --name=replica3 \
+    --index=3 \
     --ip=127.0.0.1 \
     --port=$REPLICA3_PORT \
     --peers=127.0.0.1:$REPLICA1_PORT,127.0.0.1:$REPLICA2_PORT \

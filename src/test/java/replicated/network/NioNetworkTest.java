@@ -112,7 +112,7 @@ class NioNetworkTest {
     @Test
     void shouldAcceptMessagesForSending() {
         // Given
-        Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id");
+        Message message = Message.networkMessage(address1, address2, MessageType.CLIENT_GET_REQUEST, "test".getBytes(), "test-correlation-id");
         
         // When/Then - should not throw
         assertDoesNotThrow(() -> network.send(message));
@@ -190,7 +190,7 @@ class NioNetworkTest {
         // Send 10 messages (more than the limit)
         int totalNoOfMessages = 10;
         for (int i = 0; i < totalNoOfMessages; i++) {
-            Message message = new Message(address2, address1, MessageType.CLIENT_GET_REQUEST,
+            Message message = Message.networkMessage(address2, address1, MessageType.CLIENT_GET_REQUEST,
                 ("test-" + i).getBytes(), "correlation-" + i);
             limitedNetwork.send(message);
         }
@@ -216,7 +216,7 @@ class NioNetworkTest {
 
         // Send 5 messages (under the limit)
         for (int i = 0; i < 5; i++) {
-            Message message = new Message(address1, address2, MessageType.CLIENT_GET_REQUEST,
+            Message message = Message.networkMessage(address1, address2, MessageType.CLIENT_GET_REQUEST,
                 ("test-" + i).getBytes(), "correlation-" + i);
             limitedNetwork.send(message);
         }
@@ -309,10 +309,10 @@ class NioNetworkTest {
             }, 5000);
             
             // Send messages to different destinations
-            Message msg1 = new Message(serverAddress1, serverAddress2, MessageType.CLIENT_GET_REQUEST, "test1".getBytes(), "corr1");
-            Message msg2 = new Message(serverAddress1, serverAddress3, MessageType.CLIENT_GET_REQUEST, "test2".getBytes(), "corr2");
-            Message msg3 = new Message(serverAddress1, serverAddress2, MessageType.CLIENT_GET_REQUEST, "test3".getBytes(), "corr3");
-            Message msg4 = new Message(serverAddress1, serverAddress3, MessageType.CLIENT_GET_REQUEST, "test4".getBytes(), "corr4");
+            Message msg1 = Message.networkMessage(serverAddress1, serverAddress2, MessageType.CLIENT_GET_REQUEST, "test1".getBytes(), "corr1");
+            Message msg2 = Message.networkMessage(serverAddress1, serverAddress3, MessageType.CLIENT_GET_REQUEST, "test2".getBytes(), "corr2");
+            Message msg3 = Message.networkMessage(serverAddress1, serverAddress2, MessageType.CLIENT_GET_REQUEST, "test3".getBytes(), "corr3");
+            Message msg4 = Message.networkMessage(serverAddress1, serverAddress3, MessageType.CLIENT_GET_REQUEST, "test4".getBytes(), "corr4");
             
             network1.send(msg1);
             network1.send(msg2);

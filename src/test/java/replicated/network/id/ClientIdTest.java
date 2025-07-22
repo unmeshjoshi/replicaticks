@@ -82,7 +82,7 @@ class ClientIdTest {
     void testRandomWithCustomName() {
         ClientId clientId = ClientId.random("custom-client");
         
-        assertEquals("custom-client", clientId.name());
+        assertTrue(clientId.name().startsWith("custom-client-"));
         assertNotNull(clientId.uuid());
     }
     
@@ -102,7 +102,7 @@ class ClientIdTest {
         ClientId clientId = ClientId.of(uuidString, "test-client");
         
         assertEquals(UUID.fromString(uuidString), clientId.uuid());
-        assertEquals("test-client", clientId.name());
+        assertTrue(clientId.name().startsWith("test-client-"));
     }
     
     @Test
@@ -164,7 +164,7 @@ class ClientIdTest {
         ClientId clientId = ClientId.random("interface-test");
         ProcessId processId = clientId;
         
-        assertEquals("interface-test", processId.name());
+        assertTrue(processId.name().startsWith("interface-test"));
         assertInstanceOf(ProcessId.class, clientId);
     }
     

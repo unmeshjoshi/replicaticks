@@ -34,7 +34,7 @@ public class PushBasedNetworkTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST,
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent
@@ -63,9 +63,9 @@ public class PushBasedNetworkTest {
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
         
-        Message message1 = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message1 = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST,
                                      "test1".getBytes(), "correlation-1");
-        Message message2 = new Message(source, destination, MessageType.CLIENT_SET_REQUEST, 
+        Message message2 = Message.networkMessage(source, destination, MessageType.CLIENT_SET_REQUEST,
                                      "test2".getBytes(), "correlation-2");
         
         // When - multiple messages are sent
@@ -89,7 +89,7 @@ public class PushBasedNetworkTest {
         // Given - network with no registered callback
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST,
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent and network ticks
@@ -108,7 +108,7 @@ public class PushBasedNetworkTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST,
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent and network ticks
@@ -127,7 +127,7 @@ public class PushBasedNetworkTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST,
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent

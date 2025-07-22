@@ -7,6 +7,7 @@ import replicated.messaging.NetworkAddress;
 import replicated.network.Network;
 import replicated.network.NioNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.Storage;
 
@@ -19,7 +20,7 @@ import java.util.List;
  */
 public class ServerApplication {
     
-    private final String name;
+    private final ReplicaId replicaId;
     private final NetworkAddress myAddress;
     private final List<NetworkAddress> peers;
     private final String storagePath;
@@ -30,8 +31,8 @@ public class ServerApplication {
     private QuorumReplica replica;
     private volatile boolean running = false;
     
-    public ServerApplication(String name, String ipAddress, int port, List<NetworkAddress> peers, String storagePath) {
-        this.name = name;
+    public ServerApplication(ReplicaId name, String ipAddress, int port, List<NetworkAddress> peers, String storagePath) {
+        this.replicaId = name;
         this.myAddress = new NetworkAddress(ipAddress, port);
         this.peers = peers;
         this.storagePath = storagePath;
@@ -43,7 +44,7 @@ public class ServerApplication {
      */
     public boolean start() {
         try {
-            System.out.println("Starting replica " + name + " at " + myAddress + "...");
+            System.out.println("Starting replica " + replicaId + " at " + myAddress + "...");
             
             // 1. Initialize network
             System.out.println("Initializing network...");
@@ -67,7 +68,7 @@ public class ServerApplication {
 
             // 4. Initialize replica
             System.out.println("Initializing replica with " + peers.size() + " peers...");
-            this.replica = new QuorumReplica(name, myAddress, peers, messageBus, codec, storage);
+            this.replica = new QuorumReplica(replicaId, myAddress, peers, messageBus, codec, storage);
             System.out.println("Replica initialized");
 
             // 5. Register replica as message handler
@@ -76,12 +77,12 @@ public class ServerApplication {
 
             // 6. Add shutdown hook for clean shutdown
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.println("Shutdown signal received, stopping replica " + name + "...");
+                System.out.println("Shutdown signal received, stopping replica " + replicaId + "...");
                 stop();
             }));
 
             running = true;
-            System.out.println("Replica " + name + " started successfully at " + myAddress);
+            System.out.println("Replica " + replicaId + " started successfully at " + myAddress);
             System.out.println("Peers: " + peers);
             System.out.println("Storage: " + storagePath);
             return true;
@@ -116,13 +117,13 @@ public class ServerApplication {
     }
 
     public static ServerApplication fromArgs(String[] args) {
-        String name = "replica-1";
+        String index = "1";
         String ip = "localhost";
         int port = 9092;
         List<NetworkAddress> peers = List.of();
         String storagePath = "data/replica-1";
         for (String arg : args) {
-            if (arg.startsWith("--name=")) name = arg.substring(7);
+            if (arg.startsWith("--index=")) index = arg.substring(8);
             else if (arg.startsWith("--ip=")) ip = arg.substring(5);
             else if (arg.startsWith("--port=")) port = Integer.parseInt(arg.substring(7));
             else if (arg.startsWith("--peers=")) {
@@ -135,7 +136,7 @@ public class ServerApplication {
             }
             else if (arg.startsWith("--storage=")) storagePath = arg.substring(10);
         }
-        return new ServerApplication(name, ip, port, peers, storagePath);
+        return new ServerApplication(ReplicaId.of(Integer.parseInt(index)), ip, port, peers, storagePath);
     }
 
     public void runEventLoop() {
@@ -157,7 +158,7 @@ public class ServerApplication {
                 
                 tickCount++;
                 if (tickCount % 1000 == 0) {
-                    System.out.println("Replica " + name + " processed " + tickCount + " ticks");
+                    System.out.println("Replica " + replicaId + " processed " + tickCount + " ticks");
                 }
                 
                 // Small sleep to prevent busy-waiting
@@ -176,7 +177,7 @@ public class ServerApplication {
     }
 
     public void stop() {
-        System.out.println("Stopping replica " + name + "...");
+        System.out.println("Stopping replica " + replicaId + "...");
         running = false;
         
         try {
@@ -188,7 +189,7 @@ public class ServerApplication {
                 System.out.println("Closing storage...");
                 ((RocksDbStorage) storage).close();
             }
-            System.out.println("Replica " + name + " stopped successfully");
+            System.out.println("Replica " + replicaId + " stopped successfully");
         } catch (Exception e) {
             System.err.println("Error during shutdown: " + e.getMessage());
             e.printStackTrace();
@@ -196,7 +197,7 @@ public class ServerApplication {
     }
 
     // Getters for testing and diagnostics
-    public String getName() { return name; }
+    public ReplicaId getReplicaId() { return replicaId; }
     public String getIpAddress() { return myAddress.ipAddress(); }
     public int getPort() { return myAddress.port(); }
     public List<NetworkAddress> getPeers() { return peers; }

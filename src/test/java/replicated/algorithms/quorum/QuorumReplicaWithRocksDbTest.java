@@ -11,6 +11,7 @@ import replicated.messaging.MessageBus;
 import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
+import replicated.network.id.ReplicaId;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.VersionedValue;
@@ -86,9 +87,9 @@ class QuorumReplicaWithRocksDbTest {
         // Setup replicas with production storage
         // Constructor: name, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks
         int replicaRequestTimeoutTicks = 1000;
-        replica1 = new QuorumReplica("replica1", address1, peers1, messageBus, codec, storage1, replicaRequestTimeoutTicks);
-        replica2 = new QuorumReplica("replica2", address2, peers2, messageBus, codec, storage2, replicaRequestTimeoutTicks);
-        replica3 = new QuorumReplica("replica3", address3, peers3, messageBus, codec, storage3, replicaRequestTimeoutTicks);
+        replica1 = new QuorumReplica(ReplicaId.of(1), address1, peers1, messageBus, codec, storage1, replicaRequestTimeoutTicks);
+        replica2 = new QuorumReplica(ReplicaId.of(2), address2, peers2, messageBus, codec, storage2, replicaRequestTimeoutTicks);
+        replica3 = new QuorumReplica(ReplicaId.of(3), address3, peers3, messageBus, codec, storage3, replicaRequestTimeoutTicks);
         
         // Setup client (address will be auto-assigned by MessageBus)
         quorumClient = new QuorumClient(messageBus, codec, List.of(address1, address2, address3));

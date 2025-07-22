@@ -2,6 +2,7 @@ package replicated.replica;
 
 import replicated.messaging.*;
 import replicated.network.MessageContext;
+import replicated.network.id.ReplicaId;
 import replicated.storage.Storage;
 
 import java.util.ArrayList;
@@ -108,7 +109,7 @@ import java.util.function.BiFunction;
 public abstract class Replica implements MessageHandler {
 
     // Core replica identity
-    protected final String name;
+    protected final ReplicaId replicaId;
     protected final NetworkAddress networkAddress;
     protected final List<NetworkAddress> peers;
 
@@ -133,11 +134,11 @@ public abstract class Replica implements MessageHandler {
      * @param storage             storage layer for persistence
      * @param requestTimeoutTicks timeout for requests in ticks
      */
-    protected Replica(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+    protected Replica(ReplicaId replicaId, NetworkAddress networkAddress, List<NetworkAddress> peers,
                       MessageBus messageBus, MessageCodec messageCodec, Storage storage, int requestTimeoutTicks) {
-        checkArguments(name, networkAddress, peers, messageBus, messageCodec, storage);
+        checkArguments(replicaId, networkAddress, peers, messageBus, messageCodec, storage);
 
-        this.name = name;
+        this.replicaId = replicaId;
         this.networkAddress = networkAddress;
         this.peers = List.copyOf(peers); // Defensive copy to ensure immutability
         this.messageBus = messageBus;
@@ -148,9 +149,9 @@ public abstract class Replica implements MessageHandler {
 
     }
 
-    private static void checkArguments(String name, NetworkAddress networkAddress, List<NetworkAddress> peers,
+    private static void checkArguments(ReplicaId replicaId, NetworkAddress networkAddress, List<NetworkAddress> peers,
                                        MessageBus messageBus, MessageCodec messageCodec, Storage storage) {
-        if (name == null) {
+        if (replicaId == null) {
             throw new IllegalArgumentException("Name cannot be null");
         }
         if (networkAddress == null) {
@@ -167,7 +168,7 @@ public abstract class Replica implements MessageHandler {
 
     // Getters for common properties
     public String getName() {
-        return name;
+        return replicaId.name();
     }
 
     public NetworkAddress getNetworkAddress() {
@@ -211,7 +212,7 @@ public abstract class Replica implements MessageHandler {
      * Generates a unique request ID for this replica.
      */
     protected String generateRequestId() {
-        return name + "-" + requestIdGenerator.incrementAndGet();
+        return replicaId.name() + "-" + requestIdGenerator.incrementAndGet();
     }
 
 
@@ -232,7 +233,7 @@ public abstract class Replica implements MessageHandler {
     @Override
     public String toString() {
         return getClass().getSimpleName() + "{" +
-                "name='" + name + '\'' +
+                "name='" + replicaId + '\'' +
                 ", networkAddress=" + networkAddress +
                 ", peers=" + peers +
                 '}';

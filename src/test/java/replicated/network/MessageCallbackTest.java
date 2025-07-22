@@ -36,7 +36,7 @@ public class MessageCallbackTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, 
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent and network ticks
@@ -59,7 +59,7 @@ public class MessageCallbackTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, 
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent and network ticks
@@ -85,7 +85,7 @@ public class MessageCallbackTest {
         
         NetworkAddress source = new NetworkAddress("192.168.1.1", 8080);
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8080);
-        Message message = new Message(source, destination, MessageType.CLIENT_GET_REQUEST, 
+        Message message = Message.networkMessage(source, destination, MessageType.CLIENT_GET_REQUEST, 
                                     "test".getBytes(), "test-correlation-id");
         
         // When - message is sent and network ticks

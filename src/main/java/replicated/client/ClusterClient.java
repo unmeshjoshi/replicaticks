@@ -3,6 +3,7 @@ package replicated.client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
+import replicated.network.id.ClientId;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,7 +18,7 @@ public final class ClusterClient implements MessageHandler {
     private final MessageBus messageBus;
     private final MessageCodec messageCodec;
     private final int requestTimeoutTicks;
-    private final String clientId;
+    private final ClientId clientId;
     
     // Bootstrap and cluster discovery
     private final List<NetworkAddress> bootstrapReplicas;
@@ -71,7 +72,7 @@ public final class ClusterClient implements MessageHandler {
         this.messageCodec = messageCodec;
         this.bootstrapReplicas = new ArrayList<>(bootstrapReplicas);
         this.requestTimeoutTicks = requestTimeoutTicks;
-        this.clientId = clientIdPrefix + "-" + UUID.randomUUID().toString().substring(0, 8);
+        this.clientId = ClientId.random(clientIdPrefix);
         
         // Initialize request tracking using RequestWaitingList
         this.requestWaitingList = new RequestWaitingList<>(requestTimeoutTicks);
@@ -88,7 +89,7 @@ public final class ClusterClient implements MessageHandler {
         this.protocolHandler = protocolHandler;
     }
     
-    public String getClientId() {
+    public ClientId getClientId() {
         return clientId;
     }
     
@@ -185,7 +186,7 @@ public final class ClusterClient implements MessageHandler {
             currentClientAddress = clientAddress;
         }
 
-        Message message = new Message(currentClientAddress, destination, messageType, payload, correlationId);
+        Message message = Message.networkMessage(currentClientAddress, destination, messageType, payload, correlationId);
         messageBus.sendMessage(message);
     }
 

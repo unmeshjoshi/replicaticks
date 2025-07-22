@@ -3,6 +3,7 @@ package replicated.client;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
+import replicated.network.id.ClientId;
 import replicated.storage.VersionedValue;
 
 import java.util.List;
@@ -61,7 +62,7 @@ public class QuorumClient implements MessageHandler {
     /**
      * Get the client ID from the underlying cluster client.
      */
-    public String getClientId() {
+    public ClientId getClientId() {
         return clusterClient.getClientId();
     }
     

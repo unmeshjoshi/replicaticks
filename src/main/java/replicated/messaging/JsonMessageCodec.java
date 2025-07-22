@@ -63,7 +63,7 @@ public final class JsonMessageCodec implements MessageCodec {
                 }
                 byte[] payload = objectMapper.treeToValue(node.get("payload"), byte[].class);
                 String correlationId = node.get("correlationId").asText();
-                return type.cast(new Message(source, destination, msgType, payload, correlationId));
+                return type.cast(Message.networkMessage(source, destination, msgType, payload, correlationId));
             }
             return objectMapper.readValue(data, type);
         } catch (Exception e) {

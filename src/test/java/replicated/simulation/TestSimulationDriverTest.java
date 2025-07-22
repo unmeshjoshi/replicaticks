@@ -11,6 +11,7 @@ import replicated.messaging.NetworkAddress;
 import replicated.network.MessageCallback;
 import replicated.network.Network;
 import replicated.algorithms.quorum.QuorumReplica;
+import replicated.network.id.ReplicaId;
 import replicated.storage.Storage;
 import replicated.storage.VersionedValue;
 
@@ -39,7 +40,7 @@ class TestSimulationDriverTest {
         
         // Create replica and client
         JsonMessageCodec codec = new JsonMessageCodec();
-        replica = new QuorumReplica("test-replica", replicaAddress, List.of(),
+        replica = new QuorumReplica(ReplicaId.of(1, "test-replica"),  replicaAddress, List.of(),
                                         new MessageBus(network, codec), codec, storage, 10);
         quorumClient = new QuorumClient(new MessageBus(network, codec), codec, List.of(replicaAddress));
         

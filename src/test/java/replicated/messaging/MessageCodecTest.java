@@ -14,7 +14,7 @@ class MessageCodecTest {
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8081);
         MessageType messageType = MessageType.CLIENT_GET_REQUEST;
         byte[] payload = "test payload".getBytes();
-        Message originalMessage = new Message(source, destination, messageType, payload, "test-correlation-id");
+        Message originalMessage = Message.networkMessage(source, destination, messageType, payload, "test-correlation-id");
         
         // When
         byte[] encoded = codec.encode(originalMessage);
@@ -34,7 +34,7 @@ class MessageCodecTest {
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8081);
         MessageType messageType = MessageType.CLIENT_GET_RESPONSE;
         byte[] emptyPayload = new byte[0];
-        Message originalMessage = new Message(source, destination, messageType, emptyPayload, "test-correlation-id-1");
+        Message originalMessage = Message.networkMessage(source, destination, messageType, emptyPayload, "test-correlation-id-1");
         
         // When
         byte[] encoded = codec.encode(originalMessage);
@@ -55,7 +55,7 @@ class MessageCodecTest {
         
         // Create binary payload with various byte values
         byte[] binaryPayload = {0, 1, -1, 127, -128, 50, -50};
-        Message originalMessage = new Message(source, destination, messageType, binaryPayload, "test-correlation-id-2");
+        Message originalMessage = Message.networkMessage(source, destination, messageType, binaryPayload, "test-correlation-id-2");
         
         // When
         byte[] encoded = codec.encode(originalMessage);
@@ -93,7 +93,7 @@ class MessageCodecTest {
         NetworkAddress destination = new NetworkAddress("192.168.1.2", 8081);
         MessageType messageType = MessageType.CLIENT_GET_REQUEST;
         byte[] payload = "hello".getBytes();
-        Message message = new Message(source, destination, messageType, payload, "test-correlation-id-3");
+        Message message = Message.networkMessage(source, destination, messageType, payload, "test-correlation-id-3");
         
         // When
         byte[] encoded = codec.encode(message);
