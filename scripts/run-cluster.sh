@@ -120,19 +120,19 @@ log_info "Running cluster operations..."
 
 # Set a value
 log_info "Setting key 'demo-key' to value 'Hello, Distributed World!'"
-java -jar build/libs/replicaticks-client-all.jar set 127.0.0.1:9001 demo-key "Hello, Distributed World!"
+java -jar build/libs/replicaticks-client-all.jar set 1 127.0.0.1:9001 demo-key "Hello, Distributed World!"
 
 # Get the value
 log_info "Getting value for key 'demo-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:9001 demo-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:9001 demo-key
 
 # Set another value
 log_info "Setting key 'test-key' to value 'Quorum consensus working!'"
-java -jar build/libs/replicaticks-client-all.jar set 127.0.0.1:9002 test-key "Quorum consensus working!"
+java -jar build/libs/replicaticks-client-all.jar set 1 127.0.0.1:9002 test-key "Quorum consensus working!"
 
 # Get the second value
 log_info "Getting value for key 'test-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:9002 test-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:9002 test-key
 
 log_success "Cluster operations completed!"
 
@@ -142,24 +142,24 @@ log_info "Testing individual servers for data replication..."
 # Test each server for the first key
 log_info "=== Testing 'demo-key' on all servers ==="
 log_info "Testing Replica 1 (127.0.0.1:$REPLICA1_PORT) for key 'demo-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:$REPLICA1_PORT demo-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:$REPLICA1_PORT demo-key
 
 log_info "Testing Replica 2 (127.0.0.1:$REPLICA2_PORT) for key 'demo-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:$REPLICA2_PORT demo-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:$REPLICA2_PORT demo-key
 
 log_info "Testing Replica 3 (127.0.0.1:$REPLICA3_PORT) for key 'demo-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:$REPLICA3_PORT demo-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:$REPLICA3_PORT demo-key
 
 # Test each server for the second key
 log_info "=== Testing 'test-key' on all servers ==="
 log_info "Testing Replica 1 (127.0.0.1:$REPLICA1_PORT) for key 'test-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:$REPLICA1_PORT test-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:$REPLICA1_PORT test-key
 
 log_info "Testing Replica 2 (127.0.0.1:$REPLICA2_PORT) for key 'test-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:$REPLICA2_PORT test-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:$REPLICA2_PORT test-key
 
 log_info "Testing Replica 3 (127.0.0.1:$REPLICA3_PORT) for key 'test-key'"
-java -jar build/libs/replicaticks-client-all.jar get 127.0.0.1:$REPLICA3_PORT test-key
+java -jar build/libs/replicaticks-client-all.jar get 1 127.0.0.1:$REPLICA3_PORT test-key
 
 log_success "Individual server testing completed!"
 

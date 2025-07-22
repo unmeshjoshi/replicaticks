@@ -8,6 +8,8 @@ import replicated.network.Network;
 import replicated.network.NioNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
 import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 import replicated.storage.RocksDbStorage;
 import replicated.storage.Storage;
 
@@ -45,10 +47,11 @@ public class ServerApplication {
     public boolean start() {
         try {
             System.out.println("Starting replica " + replicaId + " at " + myAddress + "...");
-            
+            //FIXME: Add configuration to support creating topology from peers list
+            Topology topology = new Topology(Arrays.asList(new ReplicaConfig(replicaId, myAddress)));
             // 1. Initialize network
             System.out.println("Initializing network...");
-            this.network = new NioNetwork();
+            this.network = new NioNetwork(topology);
             ((NioNetwork) network).bind(myAddress);
             System.out.println("Network bound to " + myAddress);
 
@@ -68,7 +71,9 @@ public class ServerApplication {
 
             // 4. Initialize replica
             System.out.println("Initializing replica with " + peers.size() + " peers...");
-            this.replica = new QuorumReplica(replicaId, myAddress, peers, messageBus, codec, storage);
+            int requestTimeoutTicks = 1000;
+            //FIXME: Add support for peer replicaIds
+            this.replica = new QuorumReplica(replicaId, myAddress, peers, messageBus, codec, storage, requestTimeoutTicks, List.of());
             System.out.println("Replica initialized");
 
             // 5. Register replica as message handler

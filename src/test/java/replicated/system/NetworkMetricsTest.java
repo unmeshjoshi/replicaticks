@@ -9,6 +9,8 @@ import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
 import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.Storage;
 
@@ -39,17 +41,28 @@ class NetworkMetricsTest {
 
     @BeforeEach
     void setUp() {
-        network = new NioNetwork();
-        messageBus = new MessageBus(network, new JsonMessageCodec());
-        
-        // Register message bus directly with network (no multiplexer needed)
-        network.registerMessageHandler(messageBus);
+
 
         r1Addr = new NetworkAddress("127.0.0.1", 9201);
         r2Addr = new NetworkAddress("127.0.0.1", 9202);
         r3Addr = new NetworkAddress("127.0.0.1", 9203);
 
         List<NetworkAddress> all = List.of(r1Addr, r2Addr, r3Addr);
+
+        ReplicaId replicaId1 = ReplicaId.of(1);
+        ReplicaId replicaId2 = ReplicaId.of(2);
+        ReplicaId replicaId3 = ReplicaId.of(3);
+
+        Topology topology = new Topology(List.of(
+            new ReplicaConfig(replicaId1, r1Addr),
+            new ReplicaConfig(replicaId2, r2Addr),
+            new ReplicaConfig(replicaId3, r3Addr)
+        ));
+        network = new NioNetwork(topology);
+        messageBus = new MessageBus(network, new JsonMessageCodec());
+
+        // Register message bus directly with network (no multiplexer needed)
+        network.registerMessageHandler(messageBus);
 
         // Bind server sockets
         network.bind(r1Addr);
@@ -61,19 +74,26 @@ class NetworkMetricsTest {
         Storage s2 = new SimulatedStorage(new Random());
         Storage s3 = new SimulatedStorage(new Random());
 
+        List<ReplicaId> allReplicaIds = List.of(replicaId1, replicaId2, replicaId3);
+
         JsonMessageCodec codec = new JsonMessageCodec();
-        r1 = new QuorumReplica(ReplicaId.of(1), r1Addr, peersExcept(r1Addr, all), messageBus, codec, s1);
-        r2 = new QuorumReplica(ReplicaId.of(2), r2Addr, peersExcept(r2Addr, all), messageBus, codec, s2);
-        r3 = new QuorumReplica(ReplicaId.of(3),  r3Addr, peersExcept(r3Addr, all), messageBus, codec, s3);
+        r1 = new QuorumReplica(replicaId1, r1Addr, peersExcept(r1Addr, all), messageBus, codec, s1, 60, peerExcept(replicaId1, allReplicaIds));
+        r2 = new QuorumReplica(replicaId2, r2Addr, peersExcept(r2Addr, all), messageBus, codec, s2, 60, peerExcept(replicaId2, allReplicaIds));
+        r3 = new QuorumReplica(replicaId3,  r3Addr, peersExcept(r3Addr, all), messageBus, codec, s3, 60, peerExcept(replicaId2, allReplicaIds));
 
         messageBus.registerHandler(r1Addr, r1);
         messageBus.registerHandler(r2Addr, r2);
         messageBus.registerHandler(r3Addr, r3);
 
         // client collaborates via the same MessageBus for simplicity
-        quorumClient = new QuorumClient(messageBus, codec, List.of(r1Addr, r2Addr, r3Addr));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(r1Addr, r2Addr, r3Addr), allReplicaIds);
     }
 
+    private List<ReplicaId> peerExcept(ReplicaId self, List<ReplicaId> all) {
+        List<ReplicaId> peers = new ArrayList<>(all);
+        peers.remove(self);
+        return peers;
+    }
     private List<NetworkAddress> peersExcept(NetworkAddress self, List<NetworkAddress> all) {
         List<NetworkAddress> peers = new ArrayList<>(all);
         peers.remove(self);

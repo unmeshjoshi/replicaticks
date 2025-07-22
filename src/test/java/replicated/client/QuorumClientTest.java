@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.Network;
+import replicated.network.id.ReplicaId;
 import replicated.storage.VersionedValue;
 
 import java.util.List;
@@ -15,11 +16,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class QuorumClientTest {
     
     private MessageBus messageBus;
+    private ReplicaId replicaId;
     private NetworkAddress replicaAddress;
     private QuorumClient quorumClient;
-    
+
     @BeforeEach
     void setUp() {
+        replicaId = ReplicaId.of(1);
         // Setup addresses
         replicaAddress = new NetworkAddress("192.168.1.1", 8080);
         
@@ -29,7 +32,7 @@ class QuorumClientTest {
         // Create client with bootstrap replicas (new API)
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas);
+        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, List.of(replicaId));
     }
     
     @Test
@@ -45,7 +48,7 @@ class QuorumClientTest {
     void shouldThrowExceptionForNullMessageBus() {
         // When & Then
         assertThrows(IllegalArgumentException.class, 
-            () -> new QuorumClient( null, new JsonMessageCodec(), List.of(replicaAddress)));
+            () -> new QuorumClient( null, new JsonMessageCodec(), List.of(replicaAddress), List.of(ReplicaId.of(1))));
     }
     
     @Test
@@ -169,7 +172,7 @@ class QuorumClientTest {
         // Given - client with short timeout
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, 3); // 3 tick timeout
+        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, 3, List.of(replicaId)); // 3 tick timeout
         
         String key = "user:123";
         ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
@@ -226,9 +229,8 @@ class QuorumClientTest {
     void shouldHandleInvalidResponses() {
         // Given - invalid timeout (less than minimum)
         int invalidTimeout = 2;
-        List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        quorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, invalidTimeout);
+        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddress), invalidTimeout, List.of(replicaId));
         
         String key = "user:123";
         ListenableFuture<VersionedValue> future = quorumClient.sendGetRequest(key, replicaAddress);
@@ -251,7 +253,7 @@ class QuorumClientTest {
         int customTimeout = 10;
         List<NetworkAddress> bootstrapReplicas = List.of(replicaAddress);
         JsonMessageCodec codec = new JsonMessageCodec();
-        QuorumClient customQuorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, customTimeout);
+        QuorumClient customQuorumClient = new QuorumClient(messageBus, codec, bootstrapReplicas, customTimeout, List.of(replicaId));
         
         // When - send request
         ListenableFuture<VersionedValue> future = customQuorumClient.sendGetRequest("key", replicaAddress);

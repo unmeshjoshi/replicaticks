@@ -11,6 +11,10 @@ public final class NetworkFaultConfig {
     private final Map<String, Double> linkPacketLoss;
     private final Map<String, Integer> linkDelays;
 
+    public NetworkFaultConfig() {
+        this(new HashSet<>(), new HashMap<>(), new HashMap<>());
+    }
+
     public NetworkFaultConfig(Set<String> partitionedLinks, Map<String, Double> linkPacketLoss, Map<String, Integer> linkDelays) {
         this.partitionedLinks = Collections.unmodifiableSet(new HashSet<>(partitionedLinks));
         this.linkPacketLoss = Collections.unmodifiableMap(new HashMap<>(linkPacketLoss));

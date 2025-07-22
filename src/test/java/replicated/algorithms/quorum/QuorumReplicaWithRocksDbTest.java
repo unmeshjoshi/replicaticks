@@ -50,7 +50,11 @@ class QuorumReplicaWithRocksDbTest {
     private RocksDbStorage storage1;
     private RocksDbStorage storage2;
     private RocksDbStorage storage3;
-    
+
+    private ReplicaId replicaId1;
+    private ReplicaId replicaId2;
+    private ReplicaId replicaId3;
+
     private NetworkAddress address1;
     private NetworkAddress address2;
     private NetworkAddress address3;
@@ -61,6 +65,10 @@ class QuorumReplicaWithRocksDbTest {
 
     @BeforeEach
     void setUp() {
+        replicaId1 = ReplicaId.of(1);
+        replicaId2 = ReplicaId.of(2);
+        replicaId3 = ReplicaId.of(3);
+
         // Setup network addresses
         address1 = new NetworkAddress("127.0.0.1", 9001);
         address2 = new NetworkAddress("127.0.0.1", 9002);
@@ -83,16 +91,21 @@ class QuorumReplicaWithRocksDbTest {
         List<NetworkAddress> peers1 = List.of(address2, address3);  // replica1's peers
         List<NetworkAddress> peers2 = List.of(address1, address3);  // replica2's peers
         List<NetworkAddress> peers3 = List.of(address1, address2);  // replica3's peers
+
+        //create list of peerids for each replica (excluding itself)
+        List<ReplicaId> peerIds1 = List.of(replicaId2, replicaId3);  // replica1's peerIds
+        List<ReplicaId> peerIds2 = List.of(replicaId1, replicaId3);  // replica2's peerIds
+        List<ReplicaId> peerIds3 = List.of(replicaId1, replicaId2);  // replica3's peerIds
         
         // Setup replicas with production storage
         // Constructor: name, networkAddress, peers, messageBus, messageCodec, storage, requestTimeoutTicks
         int replicaRequestTimeoutTicks = 1000;
-        replica1 = new QuorumReplica(ReplicaId.of(1), address1, peers1, messageBus, codec, storage1, replicaRequestTimeoutTicks);
-        replica2 = new QuorumReplica(ReplicaId.of(2), address2, peers2, messageBus, codec, storage2, replicaRequestTimeoutTicks);
-        replica3 = new QuorumReplica(ReplicaId.of(3), address3, peers3, messageBus, codec, storage3, replicaRequestTimeoutTicks);
+        replica1 = new QuorumReplica(ReplicaId.of(1), address1, peers1, messageBus, codec, storage1, replicaRequestTimeoutTicks, peerIds1);
+        replica2 = new QuorumReplica(ReplicaId.of(2), address2, peers2, messageBus, codec, storage2, replicaRequestTimeoutTicks, peerIds2);
+        replica3 = new QuorumReplica(ReplicaId.of(3), address3, peers3, messageBus, codec, storage3, replicaRequestTimeoutTicks, peerIds3);
         
         // Setup client (address will be auto-assigned by MessageBus)
-        quorumClient = new QuorumClient(messageBus, codec, List.of(address1, address2, address3));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(address1, address2, address3), List.of(replicaId1, replicaId2, replicaId3));
         
         // Register replica message handlers
         messageBus.registerHandler(address1, replica1);

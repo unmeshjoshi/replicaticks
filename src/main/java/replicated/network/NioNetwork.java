@@ -4,10 +4,10 @@ import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.Message;
 import replicated.messaging.MessageCodec;
 import replicated.messaging.NetworkAddress;
+import replicated.network.topology.Topology;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -76,42 +76,49 @@ public class NioNetwork implements Network {
 
     private final Random random = new Random();
     private final Logger logger = Logger.getLogger(NioNetwork.class.getName());
+    private final Topology topology;
 
-
-    public NioNetwork() {
-        this(new JsonMessageCodec(), NetworkConfig.defaults(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
+    /**
+     * Creates a NioNetwork with all default values.
+     * Equivalent to: new NioNetwork(topology, new JsonMessageCodec(), NetworkConfig.defaults(),
+     *                               new NetworkFaultConfig(Set.of(), Map.of(), Map.of()), new MetricsCollector())
+     */
+    public NioNetwork(Topology topology) {
+        this(topology, new JsonMessageCodec(), NetworkConfig.defaults(),
+                new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
     }
 
-    public NioNetwork(MessageCodec codec) {
-        this(codec, NetworkConfig.defaults(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
-    }
+    /**
+     * Creates a NioNetwork with all parameters specified.
+     * Use this constructor when you need full control over all configuration.
+     */
+    public NioNetwork(Topology topology, MessageCodec codec, NetworkConfig config,
+                      NetworkFaultConfig faultConfig) {
+        if (topology == null) {
+            throw new IllegalArgumentException("Topology cannot be null");
+        }
+        if (codec == null) {
+            throw new IllegalArgumentException("MessageCodec cannot be null");
+        }
+        if (config == null) {
+            throw new IllegalArgumentException("NetworkConfig cannot be null");
+        }
+        if (faultConfig == null) {
+            throw new IllegalArgumentException("NetworkFaultConfig cannot be null");
+        }
 
-    public NioNetwork(MessageCodec codec, int maxInboundPerTick) {
-        this(codec, NetworkConfig.builder().maxInboundPerTick(maxInboundPerTick).build(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
-    }
-
-    public NioNetwork(MessageCodec codec, int maxInboundPerTick, int backpressureHighWatermark, int backpressureLowWatermark) {
-        this(codec, NetworkConfig.builder()
-                .maxInboundPerTick(maxInboundPerTick)
-                .backpressureHighWatermark(backpressureHighWatermark)
-                .backpressureLowWatermark(backpressureLowWatermark)
-                .build(), new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
-    }
-
-    public NioNetwork(MessageCodec codec, NetworkConfig config) {
-        this(codec, config, new NetworkFaultConfig(Set.of(), Map.of(), Map.of()));
-    }
-
-    public NioNetwork(MessageCodec codec, NetworkConfig config, NetworkFaultConfig faultConfig) {
+        this.topology = topology;
         this.codec = codec;
         this.config = config;
         this.faultConfig = faultConfig;
+
         try {
             this.selector = Selector.open();
         } catch (IOException e) {
             throw new RuntimeException("Failed to create NIO selector", e);
         }
-        state = new NetworkState(codec, config, metricsCollector);
+
+        this.state = new NetworkState(codec, config, metricsCollector);
     }
 
     /**

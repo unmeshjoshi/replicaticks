@@ -3,6 +3,7 @@ package replicated.messaging;
 import replicated.network.MessageCallback;
 import replicated.network.MessageContext;
 import replicated.network.Network;
+import replicated.network.id.ProcessId;
 
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +30,7 @@ public class MessageBus implements MessageCallback {
     private final Map<String, MessageHandler> correlationIdHandlers;
     private final Map<NetworkAddress, MessageHandler> addressHandlers;
 
+    private final Map<ProcessId, MessageHandler> processMessageHandlers;
     /**
      * Creates a MessageBus with the given network and codec dependencies.
      *
@@ -48,6 +50,7 @@ public class MessageBus implements MessageCallback {
         this.messageCodec = messageCodec;
         this.correlationIdHandlers = new HashMap<>();
         this.addressHandlers = new HashMap<>();
+        this.processMessageHandlers = new HashMap<>();
     }
 
     /**
@@ -82,6 +85,16 @@ public class MessageBus implements MessageCallback {
             throw new IllegalArgumentException("Handler cannot be null");
         }
         correlationIdHandlers.put(correlationId, handler);
+    }
+
+    public void registerHandler(ProcessId processId, MessageHandler handler) {
+        if (processId == null) {
+            throw new IllegalArgumentException("Process ID cannot be null");
+        }
+        if (handler == null) {
+            throw new IllegalArgumentException("Handler cannot be null");
+        }
+        processMessageHandlers.put(processId, handler);
     }
 
     /**

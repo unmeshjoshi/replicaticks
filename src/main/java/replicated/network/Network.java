@@ -25,9 +25,20 @@ public interface Network {
      * @throws IllegalArgumentException if message is null
      */
     void send(Message message);
-    
 
-    
+    /**
+     * Sends a message directly on the provided <i>already-connected</i> SocketChannel.
+     * This allows servers to route a response back on the exact TCP connection on which
+     * the request was received, avoiding the overhead of opening a new connection and
+     * preserving message ordering. Default implementation throws {@link
+     * UnsupportedOperationException}; network implementations that support real sockets
+     * (e.g. {@code NioNetwork}) should override it.
+     */
+    default void sendOnChannel(SocketChannel channel, Message message) {
+        throw new UnsupportedOperationException("Direct channel send is not supported by this Network implementation");
+    }
+
+
     /**
      * Processes pending network operations in the simulation tick.
      * This is the reactive Service Layer tick() - it processes I/O operations
@@ -97,19 +108,7 @@ public interface Network {
      */
     void setPacketLoss(NetworkAddress source, NetworkAddress destination, double lossRate);
     
-    // --- Direct Channel Response Support (Phase 11 Fixes) ---
-    /**
-     * Sends a message directly on the provided <i>already-connected</i> SocketChannel.
-     * This allows servers to route a response back on the exact TCP connection on which
-     * the request was received, avoiding the overhead of opening a new connection and
-     * preserving message ordering. Default implementation throws {@link
-     * UnsupportedOperationException}; network implementations that support real sockets
-     * (e.g. {@code NioNetwork}) should override it.
-     */
-    default void sendOnChannel(SocketChannel channel, Message message) {
-        throw new UnsupportedOperationException("Direct channel send is not supported by this Network implementation");
-    }
-    
+
 
     /**
      * Registers a single callback handler for push-based message delivery.

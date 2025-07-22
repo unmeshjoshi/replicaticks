@@ -11,6 +11,8 @@ import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
 import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
@@ -37,21 +39,24 @@ public class DirectChannelNioTest {
 
     @BeforeEach
     void setup() {
-        network = new NioNetwork(new JsonMessageCodec());
-        messageBus = new MessageBus(network, new JsonMessageCodec());
-        
-        // Register message bus directly with network (no multiplexer needed)
-        network.registerMessageHandler(messageBus);
-        
+        ReplicaId replicaId = ReplicaId.of(1);
         replicaAddr = new NetworkAddress("127.0.0.1", 7000);
-        quorumClient = new QuorumClient(messageBus, new JsonMessageCodec(), List.of(replicaAddr));
+        Topology topology = new Topology(List.of(new ReplicaConfig(replicaId, replicaAddr)));
+
+        // Register message bus directly with network (no multiplexer needed)
+        network = new NioNetwork(topology);
+        messageBus = new MessageBus(network, new JsonMessageCodec());
+        network.registerMessageHandler(messageBus);
+
+
+        quorumClient = new QuorumClient(messageBus, new JsonMessageCodec(), List.of(replicaAddr), List.of(replicaId));
         
         // Bind the network to the replica address
         network.bind(replicaAddr);
         
         storage = new SimulatedStorage(new Random());
         JsonMessageCodec codec = new JsonMessageCodec();
-        QuorumReplica replica = new QuorumReplica(ReplicaId.of(1), replicaAddr, List.of(), messageBus, codec, storage);
+        QuorumReplica replica = new QuorumReplica(replicaId, replicaAddr, List.of(), messageBus, codec, storage, 60, List.of());
         messageBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         

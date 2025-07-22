@@ -4,6 +4,7 @@ import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
 import replicated.network.id.ClientId;
+import replicated.network.id.ReplicaId;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -19,7 +20,10 @@ public final class ClusterClient implements MessageHandler {
     private final MessageCodec messageCodec;
     private final int requestTimeoutTicks;
     private final ClientId clientId;
-    
+
+    //ReplicaId based bootstrap
+    private final List<ReplicaId> bootstrapReplicasNew = new ArrayList<>();
+    private final Set<ReplicaId> knownReplicasNew = new HashSet<>();
     // Bootstrap and cluster discovery
     private final List<NetworkAddress> bootstrapReplicas;
     private final Set<NetworkAddress> knownReplicas = new HashSet<>();
@@ -48,13 +52,32 @@ public final class ClusterClient implements MessageHandler {
      * @param clientIdPrefix prefix for generating unique client IDs
      */
     public ClusterClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, String clientIdPrefix) {
-        this(messageBus, messageCodec, bootstrapReplicas, clientIdPrefix, 200);
+        this(messageBus, messageCodec, bootstrapReplicas, clientIdPrefix, 200, Collections.emptyList());
     }
-    
+
+
     /**
      * Full constructor with configurable timeout.
      */
-    public ClusterClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, String clientIdPrefix, int requestTimeoutTicks) {
+    public ClusterClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, String clientIdPrefix, int requestTimeoutTicks, List<ReplicaId> bootstrapReplicaIds) {
+        validate(messageBus, messageCodec, bootstrapReplicas, clientIdPrefix);
+
+        this.messageBus = messageBus;
+        this.messageCodec = messageCodec;
+        this.bootstrapReplicas = new ArrayList<>(bootstrapReplicas);
+        this.requestTimeoutTicks = requestTimeoutTicks;
+        this.clientId = ClientId.random(clientIdPrefix);
+        
+        // Initialize request tracking using RequestWaitingList
+        this.requestWaitingList = new RequestWaitingList<>(requestTimeoutTicks);
+
+        this.knownReplicasNew.addAll(bootstrapReplicaIds);
+        this.bootstrapReplicasNew.addAll(bootstrapReplicaIds);
+        // Initialize known replicas with bootstrap replicas
+        this.knownReplicas.addAll(bootstrapReplicas);
+    }
+
+    private static void validate(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, String clientIdPrefix) {
         if (messageBus == null) {
             throw new IllegalArgumentException("MessageBus cannot be null");
         }
@@ -67,20 +90,8 @@ public final class ClusterClient implements MessageHandler {
         if (clientIdPrefix == null || clientIdPrefix.trim().isEmpty()) {
             throw new IllegalArgumentException("Client ID prefix cannot be null or empty");
         }
-        
-        this.messageBus = messageBus;
-        this.messageCodec = messageCodec;
-        this.bootstrapReplicas = new ArrayList<>(bootstrapReplicas);
-        this.requestTimeoutTicks = requestTimeoutTicks;
-        this.clientId = ClientId.random(clientIdPrefix);
-        
-        // Initialize request tracking using RequestWaitingList
-        this.requestWaitingList = new RequestWaitingList<>(requestTimeoutTicks);
-        
-        // Initialize known replicas with bootstrap replicas
-        this.knownReplicas.addAll(bootstrapReplicas);
     }
-    
+
     /**
      * Set the protocol-specific message handler that will receive messages.
      * This allows the embedding client to handle protocol-specific logic.

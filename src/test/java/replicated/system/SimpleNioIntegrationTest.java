@@ -6,7 +6,11 @@ import org.junit.jupiter.api.Test;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
 import replicated.network.NioNetwork;
+import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -21,7 +25,9 @@ class SimpleNioIntegrationTest {
     private NioNetwork network;
     private MessageCodec codec;
     private MessageBus messageBus;
-    
+
+    private ReplicaId replicaId1;
+    private ReplicaId replicaId2;
     private NetworkAddress address1;
     private NetworkAddress address2;
     
@@ -30,12 +36,17 @@ class SimpleNioIntegrationTest {
     
     @BeforeEach
     void setUp() {
+        replicaId1 = ReplicaId.of(1);
+        replicaId2 = ReplicaId.of(2);
         // Setup network addresses
         address1 = new NetworkAddress("127.0.0.1", 9001);
         address2 = new NetworkAddress("127.0.0.1", 9002);
         
         // Setup network and messaging
-        network = new NioNetwork();
+        Topology topology = new Topology(List.of(
+            new ReplicaConfig(replicaId1, address1), new ReplicaConfig(replicaId2, address2)));
+
+        network = new NioNetwork(topology);
         codec = new JsonMessageCodec();
         messageBus = new MessageBus(network, codec);
         

@@ -6,6 +6,9 @@ import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.MessageBus;
 import replicated.messaging.NetworkAddress;
 import replicated.network.NioNetwork;
+import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 import replicated.storage.VersionedValue;
 
 import java.util.List;
@@ -21,12 +24,13 @@ public class ClientApplication {
     private final NioNetwork network;
     private final MessageBus messageBus;
 
-    public ClientApplication(String serverAddress) {
+    public ClientApplication(Integer serverId, String serverAddress) {
         this.serverAddress = serverAddress;
         NetworkAddress serverAddr = NetworkAddress.parse(serverAddress);
-        
+
+        Topology topology = new Topology(List.of(new ReplicaConfig(ReplicaId.of(serverId), serverAddr)));
         // Create network and unified message bus for the client
-        network = new NioNetwork();
+        network = new NioNetwork(topology);
         JsonMessageCodec codec = new JsonMessageCodec();
         messageBus = new MessageBus(network, codec);
         
@@ -34,7 +38,7 @@ public class ClientApplication {
         network.registerMessageHandler(messageBus);
         
         // Create client with bootstrap replicas
-        this.quorumClient = new QuorumClient(messageBus, codec, List.of(serverAddr));
+        this.quorumClient = new QuorumClient(messageBus, codec, List.of(serverAddr), List.of(ReplicaId.of(serverId)));
     }
     
     /**
@@ -48,9 +52,10 @@ public class ClientApplication {
         }
         
         String operation = args[0];
-        String serverAddress = args[1];
-        
-        ClientApplication clientApp = new ClientApplication(serverAddress);
+        String serverId = args[1];
+        String serverAddress = args[2];
+
+        ClientApplication clientApp = new ClientApplication(Integer.parseInt(serverId), serverAddress);
         
         try {
             switch (operation.toLowerCase()) {

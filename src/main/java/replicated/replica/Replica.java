@@ -112,6 +112,7 @@ public abstract class Replica implements MessageHandler {
     protected final ReplicaId replicaId;
     protected final NetworkAddress networkAddress;
     protected final List<NetworkAddress> peers;
+    protected final List<ReplicaId> peerIds;
 
     // Infrastructure dependencies
     protected final MessageBus messageBus;
@@ -135,17 +136,23 @@ public abstract class Replica implements MessageHandler {
      * @param requestTimeoutTicks timeout for requests in ticks
      */
     protected Replica(ReplicaId replicaId, NetworkAddress networkAddress, List<NetworkAddress> peers,
-                      MessageBus messageBus, MessageCodec messageCodec, Storage storage, int requestTimeoutTicks) {
+                      MessageBus messageBus, MessageCodec messageCodec, Storage storage, int requestTimeoutTicks, List<ReplicaId> peerIds) {
         checkArguments(replicaId, networkAddress, peers, messageBus, messageCodec, storage);
 
         this.replicaId = replicaId;
         this.networkAddress = networkAddress;
+        this.peerIds = List.copyOf(peerIds);
         this.peers = List.copyOf(peers); // Defensive copy to ensure immutability
         this.messageBus = messageBus;
+        messageBus.registerHandler(replicaId, this);
+        messageBus.registerHandler(networkAddress, this);
+
         this.messageCodec = messageCodec;
         this.storage = storage;
         this.requestTimeoutTicks = requestTimeoutTicks;
         this.waitingList = new RequestWaitingList(requestTimeoutTicks);
+
+
 
     }
 
@@ -270,5 +277,9 @@ public abstract class Replica implements MessageHandler {
             Message internalMessage = messageBuilder.apply(node, internalCorrelationId);
             messageBus.sendMessage(internalMessage);
         }
+    }
+
+    public ReplicaId getReplicaId() {
+        return replicaId;
     }
 }

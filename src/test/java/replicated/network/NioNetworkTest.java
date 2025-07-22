@@ -7,7 +7,11 @@ import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.Message;
 import replicated.messaging.MessageType;
 import replicated.messaging.NetworkAddress;
+import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -17,14 +21,24 @@ import java.io.IOException;
 class NioNetworkTest {
     
     private NioNetwork network;
+
+    private ReplicaId replicaId1;
+    private ReplicaId replicaId2;
+    private Topology topology;
     private NetworkAddress address1;
     private NetworkAddress address2;
     
     @BeforeEach
     void setUp() {
-        network = new NioNetwork();
+        replicaId1 = ReplicaId.of(1);
+        replicaId2 = ReplicaId.of(2);
+
         address1 = new NetworkAddress("127.0.0.1", 9001);
         address2 = new NetworkAddress("127.0.0.1", 9002);
+
+        topology = new Topology(List.of(
+            new ReplicaConfig(replicaId1, address1), new ReplicaConfig(replicaId2, address2)));
+        network = new NioNetwork(topology);
     }
     
     @AfterEach
@@ -60,7 +74,7 @@ class NioNetworkTest {
     @Test
     void shouldCreateNioNetworkSuccessfully() {
         // Given/When
-        NioNetwork network = new NioNetwork();
+        NioNetwork network = new NioNetwork(topology);
         
         // Then
         assertNotNull(network);
@@ -169,7 +183,7 @@ class NioNetworkTest {
         // Given
         // Use a different network because the teardown closes the network created in the setup.
 
-        NioNetwork testNetwork = new NioNetwork();
+        NioNetwork testNetwork = new NioNetwork(topology);
         testNetwork.bind(address1);
         
         // When/Then - should not throw
@@ -185,7 +199,8 @@ class NioNetworkTest {
         NetworkConfig config = NetworkConfig.builder()
             .maxOutboundPerTick(noOfPerTickMessages)  // Limit to 3 messages per tick
             .build();
-        NioNetwork limitedNetwork = new NioNetwork(new JsonMessageCodec(), config);
+        NioNetwork limitedNetwork = new NioNetwork(topology, new JsonMessageCodec(), config, new NetworkFaultConfig());
+        limitedNetwork.bind(address2);
         
         // Send 10 messages (more than the limit)
         int totalNoOfMessages = 10;
@@ -212,7 +227,7 @@ class NioNetworkTest {
         NetworkConfig config = NetworkConfig.builder()
             .maxOutboundPerTick(10)  // Limit higher than message count
             .build();
-        NioNetwork limitedNetwork = new NioNetwork(new JsonMessageCodec(), config);
+        NioNetwork limitedNetwork = new NioNetwork(topology, new JsonMessageCodec(), config, new NetworkFaultConfig());
 
         // Send 5 messages (under the limit)
         for (int i = 0; i < 5; i++) {
@@ -238,8 +253,8 @@ class NioNetworkTest {
         NetworkAddress serverAddress1 = new NetworkAddress("127.0.0.1", 9001);
         NetworkAddress serverAddress2 = new NetworkAddress("127.0.0.1", 9002);
         
-        NioNetwork network1 = new NioNetwork();
-        NioNetwork network2 = new NioNetwork();
+        NioNetwork network1 = new NioNetwork(topology);
+        NioNetwork network2 = new NioNetwork(topology);
         
         try {
             // Bind both networks
@@ -281,9 +296,9 @@ class NioNetworkTest {
         NetworkAddress serverAddress2 = new NetworkAddress("127.0.0.1", 9002);
         NetworkAddress serverAddress3 = new NetworkAddress("127.0.0.1", 9003);
         
-        NioNetwork network1 = new NioNetwork();
-        NioNetwork network2 = new NioNetwork();
-        NioNetwork network3 = new NioNetwork();
+        NioNetwork network1 = new NioNetwork(topology);
+        NioNetwork network2 = new NioNetwork(topology);
+        NioNetwork network3 = new NioNetwork(topology);
         
         try {
             // Bind all networks

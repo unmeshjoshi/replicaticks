@@ -30,10 +30,12 @@ class TestSimulationDriverTest {
     private QuorumReplica replica;
     private QuorumClient quorumClient;
     private NetworkAddress replicaAddress;
+    private ReplicaId replicaId;
     
     @BeforeEach
     void setUp() {
         // Setup test components
+        replicaId = ReplicaId.of(1, "test-replica");
         replicaAddress = new NetworkAddress("127.0.0.1", 8080);
         network = new TestNetwork();
         storage = new TestStorage();
@@ -41,8 +43,8 @@ class TestSimulationDriverTest {
         // Create replica and client
         JsonMessageCodec codec = new JsonMessageCodec();
         replica = new QuorumReplica(ReplicaId.of(1, "test-replica"),  replicaAddress, List.of(),
-                                        new MessageBus(network, codec), codec, storage, 10);
-        quorumClient = new QuorumClient(new MessageBus(network, codec), codec, List.of(replicaAddress));
+                                        new MessageBus(network, codec), codec, storage, 10, List.of());
+        quorumClient = new QuorumClient(new MessageBus(network, codec), codec, List.of(replicaAddress), List.of(replicaId));
         
         // Create driver with test components
         driver = new SimulationDriver(

@@ -10,56 +10,35 @@ import java.util.Objects;
  */
 public record ReplicaConfig(
     ReplicaId replicaId,
-    NetworkAddress internodeAddress,
-    NetworkAddress clientRpcAddress
+    NetworkAddress address
 ) {
     
     /**
      * Compact constructor with validation.
      * 
      * @param replicaId the replica identifier (must not be null)
-     * @param internodeAddress the network address for internode communication (must not be null)
-     * @param clientRpcAddress the network address for client RPC communication (must not be null)
+     * @param address the network address for internode communication (must not be null)
      * @throws NullPointerException if any parameter is null
      * @throws IllegalArgumentException if addresses are the same
      */
     public ReplicaConfig {
         Objects.requireNonNull(replicaId, "ReplicaId cannot be null");
-        Objects.requireNonNull(internodeAddress, "Internode address cannot be null");
-        Objects.requireNonNull(clientRpcAddress, "Client RPC address cannot be null");
-        
-        if (internodeAddress.equals(clientRpcAddress)) {
-            throw new IllegalArgumentException("Internode address and client RPC address cannot be the same: " + internodeAddress);
-        }
+        Objects.requireNonNull(address, "Internode address cannot be null");
     }
-    
-    /**
-     * Factory method to create a ReplicaConfig with localhost and default port offset.
-     * 
-     * @param index the replica index (must be non-negative)
-     * @param basePort the base port number (internode port = basePort, client RPC port = basePort + 1000)
-     * @return a new ReplicaConfig instance
-     */
-    public static ReplicaConfig localhost(int index, int basePort) {
-        ReplicaId replicaId = ReplicaId.of(index);
-        NetworkAddress internodeAddr = new NetworkAddress("localhost", basePort);
-        NetworkAddress clientRpcAddr = new NetworkAddress("localhost", basePort + 1000);
-        return new ReplicaConfig(replicaId, internodeAddr, clientRpcAddr);
-    }
+
     
     /**
      * Factory method to create a ReplicaConfig with custom host and default port offset.
      * 
      * @param index the replica index (must be non-negative)
      * @param host the hostname or IP address
-     * @param basePort the base port number (internode port = basePort, client RPC port = basePort + 1000)
+     * @param port the base port number (internode port = port, client RPC port = port + 1000)
      * @return a new ReplicaConfig instance
      */
-    public static ReplicaConfig of(int index, String host, int basePort) {
+    public static ReplicaConfig of(int index, String host, int port) {
         ReplicaId replicaId = ReplicaId.of(index);
-        NetworkAddress internodeAddr = new NetworkAddress(host, basePort);
-        NetworkAddress clientRpcAddr = new NetworkAddress(host, basePort + 1000);
-        return new ReplicaConfig(replicaId, internodeAddr, clientRpcAddr);
+        NetworkAddress internodeAddr = new NetworkAddress(host, port);
+        return new ReplicaConfig(replicaId, internodeAddr);
     }
     
     /**
@@ -70,22 +49,5 @@ public record ReplicaConfig(
     public int index() {
         return replicaId.index();
     }
-    
-    /**
-     * Returns a string representation of the internode address.
-     * 
-     * @return host:internodePort format
-     */
-    public String internodeAddressString() {
-        return internodeAddress.ipAddress() + ":" + internodeAddress.port();
-    }
-    
-    /**
-     * Returns a string representation of the client RPC address.
-     * 
-     * @return host:clientRpcPort format
-     */
-    public String clientRpcAddressString() {
-        return clientRpcAddress.ipAddress() + ":" + clientRpcAddress.port();
-    }
+
 }

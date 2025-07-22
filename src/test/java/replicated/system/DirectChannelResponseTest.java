@@ -53,11 +53,12 @@ class DirectChannelResponseTest {
         storage = new SimulatedStorage(new java.util.Random(42), 0, 0.0);
         
         // Setup replica - use empty peers list for single-node setup (peers should not include self)
-        replica = new QuorumReplica(ReplicaId.of(1, "test-replica") , replicaAddress, List.of(), messageBus, codec, storage);
+        ReplicaId replicaId = ReplicaId.of(1, "test-replica");
+        replica = new QuorumReplica(replicaId, replicaAddress, List.of(), messageBus, codec, storage, 60, List.of());
         messageBus.registerHandler(replicaAddress, replica);
         
         // Setup client
-        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddress));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddress), List.of(replicaId));
         
         // Setup simulation driver
         simulationDriver = new SimulationDriver(

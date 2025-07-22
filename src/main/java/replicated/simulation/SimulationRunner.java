@@ -8,12 +8,14 @@ import replicated.messaging.NetworkAddress;
 import replicated.network.SimulatedNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
 import replicated.network.id.ReplicaId;
+import replicated.replica.Replica;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * TigerBeetle-style SimulationRunner for testing distributed system robustness.
@@ -171,15 +173,25 @@ public class SimulationRunner {
         // Create storages and replicas
         this.storages = new ArrayList<>();
         this.replicas = new ArrayList<>();
-        
+
+        List<ReplicaId> replicaIds = new ArrayList<>();
+        for (int i = 0; i < nodeCount; i++) {
+            replicaIds.add(ReplicaId.of(i));
+        }
+
         for (int i = 0; i < nodeCount; i++) {
             NetworkAddress address = replicaAddresses.get(i);
             List<NetworkAddress> peers = new ArrayList<>(replicaAddresses);
             peers.remove(address); // Remove self from peers
+
+            List<ReplicaId> peerIds = new ArrayList<>(replicaIds);
+            ReplicaId replicaId = ReplicaId.of(i);
+            peerIds.remove(replicaId);
             
             SimulatedStorage storage = new SimulatedStorage(new Random(seed + 100 + i), 1, 0.0);
             QuorumReplica replica = new QuorumReplica(
-                ReplicaId.of(i), address, peers, messageBus, codec, storage, 50 // 50 tick timeout
+                    replicaId, address, peers, messageBus, codec, storage, 50, // 50 tick timeout
+                    peerIds
             );
             
             storages.add(storage);
@@ -188,7 +200,8 @@ public class SimulationRunner {
         }
         
         // Create client
-        this.quorumClient = new QuorumClient(messageBus, codec, replicaAddresses, 100); // 100 tick timeout
+        List<ReplicaId> bootstrapReplicaIds = replicas.stream().map(QuorumReplica::getReplicaId).collect(Collectors.toList());
+        this.quorumClient = new QuorumClient(messageBus, codec, replicaAddresses, 100, bootstrapReplicaIds); // 100 tick timeout
         
         // Create simulation driver
         this.driver = new SimulationDriver(

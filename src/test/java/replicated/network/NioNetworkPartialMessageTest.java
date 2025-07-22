@@ -1,12 +1,16 @@
 package replicated.network;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import replicated.TestUtils;
 import replicated.messaging.JsonMessageCodec;
 import replicated.messaging.Message;
 import replicated.messaging.MessageType;
 import replicated.messaging.NetworkAddress;
+import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -27,6 +31,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 public class NioNetworkPartialMessageTest {
 
     private final List<NioNetwork> resources = new ArrayList<>();
+    private NetworkAddress serverAddr;
+    private ReplicaId serverId = ReplicaId.of(1);
+    private Topology topology;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        serverAddr = TestUtils.randomAddress();
+        topology = new Topology(List.of(new ReplicaConfig(serverId, serverAddr)));
+    }
 
     @AfterEach
     void tearDown() {
@@ -48,7 +61,7 @@ public class NioNetworkPartialMessageTest {
     }
 
     private NioNetwork newNetwork(int maxInboundPerTick) {
-        NioNetwork n = new NioNetwork(new JsonMessageCodec(), maxInboundPerTick);
+        NioNetwork n = new NioNetwork(topology);
         resources.add(n);
         return n;
     }
@@ -65,12 +78,13 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleLengthHeaderSplitAcrossReads() throws Exception {
-        NioNetwork server = newNetwork(10);
+
+        NioNetwork server = serverNetwork();
+
         NioNetwork client = newNetwork(10);
 
-        NetworkAddress serverAddr = TestUtils.randomAddress();
 
-        server.bind(serverAddr);
+
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -128,17 +142,23 @@ public class NioNetworkPartialMessageTest {
         assertEquals(1, received.get(), "Message should be received after complete length header");
     }
 
+    private NioNetwork serverNetwork() {
+        NioNetwork server = newNetwork(10);
+        server.bind(serverAddr);
+        return server;
+    }
+
     /**
      * Test when multiple length headers are split across reads.
      */
     @Test
     public void shouldHandleMultipleLengthHeadersSplitAcrossReads() throws Exception {
-        NioNetwork server = newNetwork(10);
+
+        NioNetwork server = serverNetwork();
+
         NioNetwork client = newNetwork(10);
 
-        NetworkAddress serverAddr = TestUtils.randomAddress();
 
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -209,12 +229,9 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleMessagePayloadSplitAcrossReads() throws Exception {
-        NioNetwork server = newNetwork(10);
+        NioNetwork server = serverNetwork();
         NioNetwork client = newNetwork(10);
 
-        NetworkAddress serverAddr = TestUtils.randomAddress();
-
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -280,12 +297,8 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleMultiplePartialMessagesInSingleRead() throws Exception {
-        NioNetwork server = newNetwork(10);
+        NioNetwork server = serverNetwork();
         NioNetwork client = newNetwork(10);
-
-        NetworkAddress serverAddr = TestUtils.randomAddress();
-
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -360,12 +373,8 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleBufferCompactionAfterPartialReads() throws Exception {
-        NioNetwork server = newNetwork(10);
+        NioNetwork server = serverNetwork();
         NioNetwork client = newNetwork(10);
-
-        NetworkAddress serverAddr = TestUtils.randomAddress();
-
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -404,12 +413,8 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleSingleMessagePartialWrite() throws Exception {
-        NioNetwork server = newNetwork(10);
+        NioNetwork server = serverNetwork();
         NioNetwork client = newNetwork(10);
-
-        NetworkAddress serverAddr = TestUtils.randomAddress();
-
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -448,12 +453,8 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleInvalidLengthHeaders() throws Exception {
-        NioNetwork server = newNetwork(10);
+        NioNetwork server = serverNetwork();
         NioNetwork client = newNetwork(10);
-
-        NetworkAddress serverAddr = TestUtils.randomAddress();
-
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());
@@ -503,12 +504,8 @@ public class NioNetworkPartialMessageTest {
      */
     @Test
     public void shouldHandleZeroLengthMessages() throws Exception {
-        NioNetwork server = newNetwork(10);
+        NioNetwork server = serverNetwork();
         NioNetwork client = newNetwork(10);
-
-        NetworkAddress serverAddr = TestUtils.randomAddress();
-
-        server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
         server.registerMessageHandler((msg, ctx) -> received.incrementAndGet());

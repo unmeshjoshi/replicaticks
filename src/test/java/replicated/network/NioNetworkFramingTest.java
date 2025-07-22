@@ -4,13 +4,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import replicated.TestUtils;
 import replicated.messaging.*;
+import replicated.network.id.ReplicaId;
+import replicated.network.topology.ReplicaConfig;
+import replicated.network.topology.Topology;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,8 +34,8 @@ public class NioNetworkFramingTest {
         for (int i = 0; i < count; i++) n.tick();
     }
 
-    private NioNetwork newNetwork() {
-        NioNetwork n = new NioNetwork(new JsonMessageCodec());
+    private NioNetwork newNetwork(Topology topology) {
+        NioNetwork n = new NioNetwork(topology);
         resources.add(n);
         return n;
     }
@@ -50,10 +48,13 @@ public class NioNetworkFramingTest {
      */
     @Test
     public void shouldDecodeMultipleMessages() throws Exception {
-        NioNetwork server = newNetwork();
-        NioNetwork client = newNetwork();
-
         NetworkAddress serverAddr = TestUtils.randomAddress();
+        ReplicaId serverId = ReplicaId.of(1);
+
+        Topology topology = new Topology(List.of(new ReplicaConfig(serverId, serverAddr)));
+        NioNetwork server = newNetwork(topology);
+        NioNetwork client = newNetwork(topology);
+
         server.bind(serverAddr);
 
         AtomicInteger received = new AtomicInteger();
@@ -92,10 +93,16 @@ public class NioNetworkFramingTest {
     @Test
     public void shouldApplyAndReleaseBackpressure() throws Exception {
         // Create server with very slow processing (only 1 message per tick) and very low backpressure thresholds
-        NioNetwork server = new NioNetwork(new JsonMessageCodec(), 1, 2, 1);
-        NioNetwork client = newNetwork();
-
         NetworkAddress serverAddr = TestUtils.randomAddress();
+        Topology topology = new Topology(List.of(new ReplicaConfig(ReplicaId.of(1), serverAddr)));
+        NioNetwork server = new NioNetwork(topology, new JsonMessageCodec(),  NetworkConfig.builder()
+                .maxInboundPerTick(1)
+                .backpressureHighWatermark(2)
+                .backpressureLowWatermark(1)
+                .build(), new NetworkFaultConfig());
+
+        NioNetwork client = newNetwork(topology);
+
 
         // Register server
         server.bind(serverAddr);

@@ -4,6 +4,7 @@ import replicated.future.ListenableFuture;
 import replicated.messaging.*;
 import replicated.network.MessageContext;
 import replicated.network.id.ClientId;
+import replicated.network.id.ReplicaId;
 import replicated.storage.VersionedValue;
 
 import java.util.List;
@@ -27,16 +28,16 @@ public class QuorumClient implements MessageHandler {
      * @param messageCodec the codec for message and payload serialization
      * @param bootstrapReplicas initial list of replica addresses for cluster discovery
      */
-    public QuorumClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas) {
-        this(messageBus, messageCodec, bootstrapReplicas, 200);
+    public QuorumClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, List<ReplicaId> bootstrapReplicaIds) {
+        this(messageBus, messageCodec, bootstrapReplicas, 200, bootstrapReplicaIds);
     }
     
     /**
      * Full constructor with configurable timeout.
      */
-    public QuorumClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, int requestTimeoutTicks) {
+    public QuorumClient(MessageBus messageBus, MessageCodec messageCodec, List<NetworkAddress> bootstrapReplicas, int requestTimeoutTicks, List<ReplicaId> bootstrapReplicaIds) {
         // Create ClusterClient with quorum-specific prefix
-        this.clusterClient = new ClusterClient(messageBus, messageCodec, bootstrapReplicas, "quorum-client", requestTimeoutTicks);
+        this.clusterClient = new ClusterClient(messageBus, messageCodec, bootstrapReplicas, "quorum-client", requestTimeoutTicks, bootstrapReplicaIds);
 
         // Set this as the protocol handler for the ClusterClient
         this.clusterClient.setMessageHandler(this);
@@ -51,12 +52,6 @@ public class QuorumClient implements MessageHandler {
         
         // Set this as the protocol handler for the ClusterClient
         this.clusterClient.setMessageHandler(this);
-    }
-    
-    // Backward compatibility constructor (for tests)
-    public QuorumClient(MessageBus messageBus) {
-        // Create a single bootstrap replica for backward compatibility
-        this(messageBus, new JsonMessageCodec(), List.of(new NetworkAddress("127.0.0.1", 8080)));
     }
     
     /**

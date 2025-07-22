@@ -11,6 +11,7 @@ import replicated.network.MessageContext;
 import replicated.network.SimulatedNetwork;
 import replicated.algorithms.quorum.QuorumReplica;
 import replicated.network.id.ReplicaId;
+import replicated.replica.Replica;
 import replicated.simulation.SimulationDriver;
 import replicated.storage.SimulatedStorage;
 import replicated.storage.VersionedValue;
@@ -30,6 +31,7 @@ public class DirectChannelOrderTest {
     private MessageBus messageBus;
     private List<QuorumReplica> replicas;
     private NetworkAddress replicaAddr;
+    private ReplicaId replicaId;
     private SimulationDriver simulationDriver;
     private QuorumClient quorumClient;
 
@@ -41,11 +43,12 @@ public class DirectChannelOrderTest {
         
         // Register message bus directly with network (no multiplexer needed)
         network.registerMessageHandler(messageBus);
-        
+
+        replicaId = ReplicaId.of(1);
         replicaAddr = new NetworkAddress("10.0.0.1", 7000);
-        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddr));
+        quorumClient = new QuorumClient(messageBus, codec, List.of(replicaAddr), List.of(replicaId));
         SimulatedStorage storage = new SimulatedStorage(new Random());
-        QuorumReplica replica = new QuorumReplica(ReplicaId.of(1), replicaAddr, List.of(), messageBus, codec, storage);
+        QuorumReplica replica = new QuorumReplica(ReplicaId.of(1), replicaAddr, List.of(), messageBus, codec, storage, 60, List.of());
         messageBus.registerHandler(replicaAddr, replica);
         replicas = List.of(replica);
         

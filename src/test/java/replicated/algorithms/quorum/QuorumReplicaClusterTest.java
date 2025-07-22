@@ -38,7 +38,8 @@ class QuorumReplicaClusterTest {
     private List<NetworkAddress> replicaAddresses;
     private Random random;
     private SimulationDriver simulationDriver;
-    
+    private List<ReplicaId> replicaIds;
+
     @BeforeEach
     void setUp() {
         // Setup deterministic environment - use a fixed seed for each test to ensure isolation
@@ -49,7 +50,14 @@ class QuorumReplicaClusterTest {
         
         // Register message bus directly with network (no multiplexer needed)
         network.registerMessageHandler(messageBus);
-        
+
+        replicaIds = List.of(
+            ReplicaId.of(1),
+            ReplicaId.of(2),
+            ReplicaId.of(3),
+            ReplicaId.of(4),
+            ReplicaId.of(5));
+
         // Setup replica addresses
         replicaAddresses = List.of(
             new NetworkAddress("192.168.1.1", 8080),
@@ -63,26 +71,32 @@ class QuorumReplicaClusterTest {
         replicas = new ArrayList<>();
         List<Storage> storages = new ArrayList<>();
         for (int i = 0; i < replicaAddresses.size(); i++) {
+            ReplicaId replicaId = replicaIds.get(i);
             NetworkAddress address = replicaAddresses.get(i);
             List<NetworkAddress> peers = replicaAddresses.stream()
                 .filter(addr -> !addr.equals(address))
                 .toList();
+            List<ReplicaId> peerIds = replicaIds.stream()
+                .filter(id -> !id.equals(replicaId))
+                .toList();
+
             
             // Use a fixed seed for each replica to ensure test isolation
             Storage storage = new SimulatedStorage(new Random(42L + i));
             storages.add(storage);
-            QuorumReplica replica = new QuorumReplica(ReplicaId.of(i + 1), address, peers, messageBus, new JsonMessageCodec(), storage);
+            QuorumReplica replica = new QuorumReplica(replicaId, address, peers, messageBus, new JsonMessageCodec(), storage, 1000, peerIds);
             replicas.add(replica);
             
             // Register replica with message bus
-            messageBus.registerHandler(address, replica);
+//            messageBus.registerHandler(address, replica);
+            messageBus.registerHandler(replicaId, replica);
         }
         
         // Create clients (addresses will be auto-assigned)
         quorumClients = new ArrayList<>();
         MessageCodec clientCodec = new JsonMessageCodec();
         for (int i = 0; i < 2; i++) { // Create 2 clients
-            QuorumClient quorumClient = new QuorumClient(messageBus, clientCodec, replicaAddresses);
+            QuorumClient quorumClient = new QuorumClient(messageBus, clientCodec, replicaAddresses, replicaIds);
             quorumClients.add(quorumClient);
             // Client handler is auto-registered by MessageBus correlation routing
         }
